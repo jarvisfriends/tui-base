@@ -1,0 +1,21 @@
+{
+  "go.useLanguageServer": true,
+  "go.toolsManagement.autoUpdate": true,
+  "go.lintTool": "golangci-lint",
+  "go.lintFlags": ["--fast"],
+  "go.vetOnSave": "workspace",
+  "go.buildOnSave": "workspace",
+  "go.testFlags": ["-v"],
+  "go.testTimeout": "30s",
+  "go.coverOnSave": false,
+  "go.testEnvVars": {
+    "TERM": "xterm-256color"
+  },
+  "terminal.integrated.defaultProfile.windows": "Git Bash",
+  "terminal.integrated.profiles.windows": {
+    "Git Bash": {
+      "path": "C:\\Program Files\\Git\\bin\\bash.exe",
+      "args": ["--login", "-i"]
+    }
+  }
+}

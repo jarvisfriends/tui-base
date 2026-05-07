@@ -1,0 +1,80 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "go: build",
+            "type": "shell",
+            "command": "go build ./...",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$go"
+            ]
+        },
+        {
+            "label": "go: run TUI",
+            "type": "shell",
+            "command": "go run .",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "go: test",
+            "type": "shell",
+            "command": "go test ./... -v",
+            "group": "test",
+            "problemMatcher": []
+        },
+        {
+            "label": "go: test (race)",
+            "type": "shell",
+            "command": "go test -race ./... -v",
+            "problemMatcher": []
+        },
+        {
+            "label": "go: coverage",
+            "type": "shell",
+            "command": "bash tools/test_coverage.sh",
+            "problemMatcher": []
+        },
+        {
+            "label": "go: bench",
+            "type": "shell",
+            "command": "go test -bench . -benchmem ./...",
+            "problemMatcher": []
+        },
+        {
+            "label": "go: coverage open",
+            "type": "shell",
+            "command": "go tool cover -html=coverage.out -o coverage.html || true",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "go: profile",
+            "type": "shell",
+            "command": "bash tools/profile.sh",
+            "problemMatcher": []
+        },
+        {
+            "label": "go: fuzz",
+            "type": "shell",
+            "command": "bash tools/fuzz.sh",
+            "problemMatcher": []
+        },
+        {
+            "label": "go: fuzz (10s)",
+            "type": "shell",
+            "command": "go test ./... -run=^$ -fuzz=Fuzz -fuzztime=10s",
+            "problemMatcher": []
+        }
+    ]
+}

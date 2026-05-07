@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  verify:
+    name: Verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.26.x'
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Build
+        run: go build ./...
+      - name: Test (race)
+        run: go test -race ./... -v
+      - name: Vet
+        run: go vet ./...
+
+  coverage:
+    name: Coverage (ubuntu)
+    runs-on: ubuntu-latest
+    needs: verify
+    env:
+      COVERAGE_THRESHOLD: 80.0
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.26.x'
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Run tests
+        run: go test ./... -v
+      - name: Run coverage script
+        run: bash tools/test_coverage.sh
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage.out
+            coverage.txt
+      - name: Check coverage threshold
+        run: |
+          cov=$(cat coverage.txt)
+          echo "Coverage reported: $cov"
+          percent=$(echo "$cov" | tr -d '%')
+          awk -v p="$percent" -v t="${COVERAGE_THRESHOLD}" 'BEGIN { if (p+0 < t+0) { print "Coverage " p "% is below threshold " t "%"; exit 1 } else { print "Coverage " p "% meets threshold " t "%" } }'
+
