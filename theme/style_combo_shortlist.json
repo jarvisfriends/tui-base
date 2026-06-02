@@ -1,0 +1,118 @@
+{
+  "dark": [
+    {
+      "id": "brogrammer",
+      "display": "Brogrammer",
+      "pass_ratio": 1,
+      "pass_count": 14,
+      "total_count": 14
+    },
+    {
+      "id": "dimmed_monokai",
+      "display": "DimmedMonokai",
+      "pass_ratio": 1,
+      "pass_count": 14,
+      "total_count": 14
+    },
+    {
+      "id": "gruvbox_dark_hard",
+      "display": "GruvboxDarkHard",
+      "pass_ratio": 1,
+      "pass_count": 14,
+      "total_count": 14
+    },
+    {
+      "id": "guezwhoz",
+      "display": "Guezwhoz",
+      "pass_ratio": 1,
+      "pass_count": 14,
+      "total_count": 14
+    },
+    {
+      "id": "harper",
+      "display": "Harper",
+      "pass_ratio": 1,
+      "pass_count": 14,
+      "total_count": 14
+    },
+    {
+      "id": "hivacruz",
+      "display": "Hivacruz",
+      "pass_ratio": 1,
+      "pass_count": 14,
+      "total_count": 14
+    },
+    {
+      "id": "hopscotch",
+      "display": "Hopscotch",
+      "pass_ratio": 1,
+      "pass_count": 14,
+      "total_count": 14
+    },
+    {
+      "id": "hopscotch_256",
+      "display": "Hopscotch.256",
+      "pass_ratio": 1,
+      "pass_count": 14,
+      "total_count": 14
+    }
+  ],
+  "light": [
+    {
+      "id": "gruvbox_light",
+      "display": "Gruvbox Light",
+      "pass_ratio": 0.7857142857142857,
+      "pass_count": 11,
+      "total_count": 14
+    },
+    {
+      "id": "neobones_light",
+      "display": "neobones_light",
+      "pass_ratio": 0.7857142857142857,
+      "pass_count": 11,
+      "total_count": 14
+    },
+    {
+      "id": "vimbones",
+      "display": "vimbones",
+      "pass_ratio": 0.7857142857142857,
+      "pass_count": 11,
+      "total_count": 14
+    },
+    {
+      "id": "zenbones",
+      "display": "zenbones",
+      "pass_ratio": 0.7857142857142857,
+      "pass_count": 11,
+      "total_count": 14
+    },
+    {
+      "id": "zenbones_light",
+      "display": "zenbones_light",
+      "pass_ratio": 0.7857142857142857,
+      "pass_count": 11,
+      "total_count": 14
+    },
+    {
+      "id": "zenwritten_light",
+      "display": "zenwritten_light",
+      "pass_ratio": 0.7857142857142857,
+      "pass_count": 11,
+      "total_count": 14
+    },
+    {
+      "id": "piatto_light",
+      "display": "Piatto Light",
+      "pass_ratio": 0.7142857142857143,
+      "pass_count": 10,
+      "total_count": 14
+    },
+    {
+      "id": "rose_pine_dawn",
+      "display": "rose-pine-dawn",
+      "pass_ratio": 0.7142857142857143,
+      "pass_count": 10,
+      "total_count": 14
+    }
+  ]
+}

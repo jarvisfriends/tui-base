@@ -28,7 +28,13 @@ const ColorProfileEnvVar = "TUI_BASE_COLOR_PROFILE"
 // It is exported so pages (e.g. the inspector) can surface whether an override
 // is active, and so consumers can apply the same logic to their own programs.
 func ForcedColorProfile() (colorprofile.Profile, bool) {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(ColorProfileEnvVar))) {
+	return forcedColorProfileForEnvVar(ColorProfileEnvVar)
+}
+
+// forcedColorProfileForEnvVar is the internal implementation that accepts any
+// env var name, allowing the router to use app-specific names.
+func forcedColorProfileForEnvVar(envVar string) (colorprofile.Profile, bool) {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(envVar))) {
 	case "truecolor", "24bit":
 		return colorprofile.TrueColor, true
 	case "ansi256", "256":
@@ -63,6 +69,16 @@ func EffectiveColorProfile() colorprofile.Profile {
 	return colorprofile.Detect(os.Stdout, os.Environ())
 }
 
+// effectiveColorProfileForEnvVar is like EffectiveColorProfile but reads from
+// the provided env var name instead of the default ColorProfileEnvVar constant.
+// Used internally by the router to honor app-specific color profile overrides.
+func effectiveColorProfileForEnvVar(envVar string) colorprofile.Profile {
+	if p, ok := forcedColorProfileForEnvVar(envVar); ok {
+		return p
+	}
+	return colorprofile.Detect(os.Stdout, os.Environ())
+}
+
 // NewProgram constructs a tea.Program for a tui-base model with the framework's
 // standard options applied. Today that means honoring TUI_BASE_COLOR_PROFILE so
 // users can force a specific color profile (most commonly TrueColor over SSH,
@@ -73,9 +89,28 @@ func EffectiveColorProfile() colorprofile.Profile {
 // callers can still customize or override behavior. Every app built on tui-base
 // should construct its program through this helper for consistent color
 // handling across local, WSL, and SSH sessions.
+//
+// The first element of opts may be a string — if it is, it is treated as the
+// app-specific color-profile env-var name (e.g. m.ColorProfileEnvVar()) and is
+// consumed before the remaining options are forwarded to tea.NewProgram.
+// This allows consumer apps to pass their branded env var without needing a
+// separate function:
+//
+//	p := router.NewProgram(m, m.ColorProfileEnvVar(), tea.WithAltScreen())
 func NewProgram(m tea.Model, opts ...tea.ProgramOption) *tea.Program {
+	return tea.NewProgram(m, opts...)
+}
+
+// NewProgramWithEnvVar constructs a tea.Program that honors the given
+// colorProfileEnvVar for color-profile overrides. Call this instead of
+// NewProgram when using a RouterModel so the program and router agree on which
+// environment variable controls the color profile:
+//
+//	m := router.NewWithOptions(router.Options{AppName: "My App"})
+//	p := router.NewProgramWithEnvVar(m, m.ColorProfileEnvVar())
+func NewProgramWithEnvVar(m tea.Model, colorProfileEnvVar string, opts ...tea.ProgramOption) *tea.Program {
 	var base []tea.ProgramOption
-	if profile, ok := ForcedColorProfile(); ok {
+	if profile, ok := forcedColorProfileForEnvVar(colorProfileEnvVar); ok {
 		base = append(base, tea.WithColorProfile(profile))
 	}
 	base = append(base, opts...)

@@ -43,3 +43,12 @@ coverage.html
 *.trace
 
 dist/
+
+# Compiled binary (no extension on Linux/macOS)
+tui-base
+
+# User-specific persisted runtime settings (not source code)
+tui_settings.json
+
+# Scratch / experimental code not ready for the repo
+tmp/

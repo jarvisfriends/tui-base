@@ -1,0 +1,27 @@
+{
+	"folders": [
+		{
+			"name": "TUI Base",
+			"path": "."
+		},
+		{
+			"name": "A Settings",
+			"path": "../../amarcum/aSettings"
+		},
+		{
+			"path": "../dash"
+		}
+	],
+	"settings": {
+		"powershell.cwd": "tui-base",
+		"problems.exclude": {
+			"**/pkg/mod/**": true
+		},
+		"search.exclude": {
+			"**/pkg/mod/**": true
+		},
+		"files.exclude": {
+			"**/pkg/mod/**": true
+		}
+	}
+}

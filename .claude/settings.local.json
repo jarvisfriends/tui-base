@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"e:\\\\code\\\\home\\\\go\\\\src\\\\github.com\\\\jarvisfriends\\\\tui-base\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)",
+      "Bash(go doc *)",
+      "Bash(go mod *)",
+      "Bash(go get *)",
+      "Bash(go build *)",
+      "Bash(go test *)",
+      "Bash(cd /e/code/home/go/src/github.com/jarvisfriends/dash && grep -n \"w.*notify\\\\|e.*notify\\\\|i.*notify\\\\|SeverityWarning\\\\|SeverityError\\\\|SeverityInfo\\\\|sample\\\\|Sample\" creator/dashboard.go sources/collector.go 2>/dev/null | head -30)",
+      "Read(//e/e/code/home/go/src/github.com/jarvisfriends/dash/creator/**)",
+      "Bash(cd /e/code/home/go/src/github.com/jarvisfriends/tui-base && grep -n \"\\\\\"w\\\\\"\\\\|\\\\\"e\\\\\"\\\\|\\\\\"i\\\\\"\\\\|sample\\\\|Sample\\\\|TestNotif\\\\|testNotif\\\\|KeyW\\\\|KeyE\\\\|KeyI\" pages/debug/debug.go 2>/dev/null | head -30)",
+      "Read(//e/e/code/home/go/src/github.com/jarvisfriends/tui-base/pages/debug/**)",
+      "Bash(cd /e/code/home/go/src/github.com/jarvisfriends/tui-base && grep -rn \"\\\\\"w\\\\\"\\\\|\\\\\"e\\\\\"\\\\|\\\\\"i\\\\\"\\\\|sample\\\\|Sample notification\" keys/keys.go router/router.go 2>/dev/null | head -30)",
+      "Read(//e/e/code/home/go/src/github.com/jarvisfriends/tui-base/keys/**)",
+      "Bash(cd /e/code/home/go/src/github.com/jarvisfriends/dash && cat main.go)",
+      "Read(//e/e/code/home/go/src/github.com/jarvisfriends/dash/**)",
+      "Bash(cd /e/code/home/go/src/github.com/jarvisfriends/tui-base && grep -n \"Subtitle\\\\|OverlayBorder\" theme/theme.go | head -20)",
+      "Read(//e/e/code/home/go/src/github.com/jarvisfriends/tui-base/theme/**)"
+    ]
+  }
+}
