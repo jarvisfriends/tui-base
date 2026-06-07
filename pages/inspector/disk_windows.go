@@ -1,6 +1,6 @@
 //go:build windows
 
-package debug
+package inspector
 
 import "golang.org/x/sys/windows"
 

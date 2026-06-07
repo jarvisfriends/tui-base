@@ -1,4 +1,4 @@
-package debug
+package inspector
 
 // accessibility.go — filterable color-accessibility theme browser panel.
 // Implements tea.Model. Embedded in debug.Model; toggle with the 'a' key.

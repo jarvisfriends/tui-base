@@ -28,6 +28,28 @@ type BarModel struct {
 
 	sb          *UserNotificationOverlay
 	lastRegions []ClickRegion // regions from the last SetWidth render
+
+	// summaryProvider, when set, supplies the right-aligned status bar text
+	// (e.g. the inspector's compact runtime summary shown when the inspector is
+	// closed). It is evaluated on every render so the text stays current without
+	// manual refresh calls.
+	summaryProvider func() string
+}
+
+// SetSummaryProvider sets a callback that supplies the right-aligned status bar
+// text, evaluated on every render. Pass nil to clear it.
+func (b *BarModel) SetSummaryProvider(fn func() string) {
+	b.summaryProvider = fn
+	b.SetWidth(b.help.Width())
+}
+
+// summary returns the current right-aligned summary text, or "" when no
+// provider is set.
+func (b *BarModel) summary() string {
+	if b.summaryProvider == nil {
+		return ""
+	}
+	return b.summaryProvider()
 }
 
 // Regions returns the interactive click regions computed during the last
@@ -146,8 +168,9 @@ func (b *BarModel) SetWidth(width int) {
 	// those spaces stay on the status bar background, not the terminal default.
 	left = reapplyBg(left, c.Styles.StatusBase.GetBackground())
 
-	// Render the status line using the internal statusbar renderer.
-	statusLine, regions := b.sb.Render(width, left, "")
+	// Render the status line using the internal statusbar renderer. The right
+	// segment carries the optional summary (e.g. the inspector's runtime stats).
+	statusLine, regions := b.sb.Render(width, left, b.summary())
 
 	// Store regions so the router can access them without re-parsing ANSI output.
 	b.lastRegions = regions

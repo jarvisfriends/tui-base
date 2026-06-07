@@ -1,76 +1,57 @@
+// Package theme builds the application's visual styling by combining three
+// orthogonal axes that the end user can choose independently:
+//
+//   - color theme — any of the bubbletint palettes (the color source),
+//   - style preset — huh's built-in form structure (borders, prefixes,
+//     indicators); see [StylePreset] and BuildHuhStyles,
+//   - mode — light or dark,
+//
+// plus an optional accessibility pass that adjusts foreground colors for
+// contrast and color-vision deficiencies (see accessibility.go).
+//
+// Most consumers only need [Active] (the current palette), [HuhThemeFunc] (for
+// huh forms), and the [ColorAware] interface. The package keeps a small amount
+// of custom code: the semantic [AppStyle]/[Styles] mapping that lipgloss and huh
+// do not provide, and the CVD accessibility engine that has no library
+// equivalent. Everything structural is delegated to huh and lipgloss.
 package theme
 
 import (
 	"image/color"
-	"math"
-	"strconv"
 	"strings"
 	"sync"
 
-	"charm.land/bubbles/v2/help"
-	key "charm.land/bubbles/v2/key"
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 	tint "github.com/lrstanley/bubbletint/v2"
-	"github.com/lucasb-eyer/go-colorful"
 )
 
-// ColorPair represents a foreground/background color combination with a name.
-type ColorPair struct {
-	Name string
-	Fg   color.Color
-	Bg   color.Color
+// ColorAware is implemented by any component that accepts a shared color palette pointer.
+type ColorAware interface {
+	SetColors(c *AppStyle)
 }
-
-// cvdMatrices hold the transformation matrices for simulating color vision deficiencies
-var cvdMatrices = [...][3][3]float64{
-	{ // Protanopia (red blindness)
-		{0.56667, 0.43333, 0},
-		{0.55833, 0.44167, 0},
-		{0, 0.24167, 0.75833},
-	},
-	{ // Deuteranopia (green blindness)
-		{0.625, 0.375, 0},
-		{0.7, 0.3, 0},
-		{0, 0.3, 0.7},
-	},
-	{ // Tritanopia (blue-yellow blindness)
-		{0.95, 0.05, 0},
-		{0, 0.43333, 0.56667},
-		{0, 0.475, 0.525},
-	},
-}
-
-var (
-	huhThemeCacheMu sync.Mutex
-	huhThemeCacheID string
-	huhThemeCache   *huh.Styles
-
-	appStyleCacheMu sync.RWMutex
-	appStyleCache   = map[string]*AppStyle{}
-
-	themePrefsMu sync.RWMutex
-	themePrefs   = ThemePreferences{Mode: ThemeModeDark}
-)
 
 const (
 	ThemeModeDark  = "dark"
 	ThemeModeLight = "light"
 )
 
-// ThemePreferences controls global theme behavior applied by Active.
+// ThemePreferences controls global theme behavior applied by Active and
+// HuhThemeFunc. Mode selects light/dark, Style selects the huh structural
+// preset, and Accessibility toggles the CVD foreground adjustments.
 type ThemePreferences struct {
 	Mode          string
 	Accessibility bool
+	Style         StylePreset
 }
 
-// StyleCombo describes one concrete foreground/background pair used by the UI.
-// It is primarily used for diagnostics and temporary accessibility tests.
-type StyleCombo struct {
-	Name string
-	Fg   color.Color
-	Bg   color.Color
-}
+var (
+	appStyleCacheMu sync.RWMutex
+	appStyleCache   = map[string]*AppStyle{}
+
+	themePrefsMu sync.RWMutex
+	themePrefs   = ThemePreferences{Mode: ThemeModeDark, Style: DefaultStylePreset}
+)
 
 // AppStyle holds the semantic color palette for the application, derived from
 // the active bubbletint theme. Each field maps a UI role to a color.Color.
@@ -103,75 +84,12 @@ type AppStyle struct {
 	// Warning is used for warning / indicator cues (yellow slot).
 	Warning color.Color
 
-	HuhStyle        *huh.Styles //
-	Styles          *Styles     // pre-computed lipgloss styles for this palette
+	Styles          *Styles     // pre-computed lipgloss styles (app chrome) for this palette
+	HuhStyles       *huh.Styles // pre-computed huh form styles for this palette + current style preset
 	OrigTint        *tint.Tint  // the original tint this palette was derived from; used for debugging and testing
 	AccessibleTint  *tint.Tint  // a suggested tint with improved accessibility, if the original fails; used for debugging and testing
 	OrigPairs       []ColorPair // all color combinations from the original tint
 	AccessiblePairs []ColorPair // the same pairs but with colors adjusted for accessibility where needed
-}
-
-// Styles holds pre-computed lipgloss styles derived from a ThemeColors palette.
-// Styles are rebuilt when the theme changes or the terminal background is detected.
-type Styles struct {
-	Name string
-
-	Help help.Styles
-
-	Input  lipgloss.Style // TextInputStyles
-	Cursor lipgloss.Style // TextInputStyles.Cursor
-
-	// Pre-computed styles — use these instead of calling lipgloss.NewStyle() inline.
-	Title      lipgloss.Style
-	Subtitle   lipgloss.Style
-	RealHeader lipgloss.Style
-	TextOnBg   lipgloss.Style
-	BoldText   lipgloss.Style
-	Dim        lipgloss.Style
-
-	BoarderActive   lipgloss.Style
-	BoarderInactive lipgloss.Style
-
-	Item         lipgloss.Style
-	SelectedItem lipgloss.Style
-
-	Send lipgloss.Style
-	Wait lipgloss.Style
-
-	Online  lipgloss.Style //
-	Offline lipgloss.Style
-
-	FilterActive lipgloss.Style
-	FilterDim    lipgloss.Style
-
-	StatusBase    lipgloss.Style
-	StatusKey     lipgloss.Style
-	StatusKeyBold lipgloss.Style
-	StatusDesc    lipgloss.Style
-	StatusSep     lipgloss.Style
-
-	OverlayBorder lipgloss.Style
-	OverlayPanel  lipgloss.Style
-
-	NavTitle     lipgloss.Style
-	NavActive    lipgloss.Style
-	NavInactive  lipgloss.Style
-	NavContainer lipgloss.Style
-
-	TabInactive lipgloss.Style
-	TabHover    lipgloss.Style
-
-	SwatchDot lipgloss.Style
-	Row       lipgloss.Style
-
-	Success lipgloss.Style // tint.Green
-	Error   lipgloss.Style // tint.Red("Error")
-	Warning lipgloss.Style // tint.Yellow("Warning")
-
-	// Pre-rendered strings
-	SuccessMark string // "✓" in SuccessColor
-	ErrorMark   string // "✗" in ErrorColor
-	Gap         string // single space on PageBg
 }
 
 // col returns a color.Color from a *tint.Color, using fallback ANSI/hex string when nil.
@@ -182,194 +100,18 @@ func col(c *tint.Color, fallback string) color.Color {
 	return lipgloss.Color(fallback)
 }
 
-// colorPairsFromSimple generates color pairs from simple ANSI color codes.
-// Used as a fallback when no theme is available.
-func colorPairsFromSimple(fgCode, bgCode string) []ColorPair {
-	bg := lipgloss.Color(bgCode)
-	return []ColorPair{
-		{Name: "Black", Fg: lipgloss.Color("16"), Bg: bg},
-		{Name: "Red", Fg: lipgloss.Color("1"), Bg: bg},
-		{Name: "Green", Fg: lipgloss.Color("2"), Bg: bg},
-		{Name: "Yellow", Fg: lipgloss.Color("3"), Bg: bg},
-		{Name: "Blue", Fg: lipgloss.Color("4"), Bg: bg},
-		{Name: "Magenta", Fg: lipgloss.Color("5"), Bg: bg},
-		{Name: "Cyan", Fg: lipgloss.Color("6"), Bg: bg},
-		{Name: "White", Fg: lipgloss.Color("7"), Bg: bg},
-		{Name: "Bright Black", Fg: lipgloss.Color("240"), Bg: bg},
-		{Name: "Bright Red", Fg: lipgloss.Color("9"), Bg: bg},
-		{Name: "Bright Green", Fg: lipgloss.Color("10"), Bg: bg},
-		{Name: "Bright Yellow", Fg: lipgloss.Color("11"), Bg: bg},
-		{Name: "Bright Blue", Fg: lipgloss.Color("12"), Bg: bg},
-		{Name: "Bright Magenta", Fg: lipgloss.Color("13"), Bg: bg},
-		{Name: "Bright Cyan", Fg: lipgloss.Color("14"), Bg: bg},
-		{Name: "Bright White", Fg: lipgloss.Color("15"), Bg: bg},
+// borderColor resolves the divider/border color for a tint. It prefers the
+// theme's "black" slot and otherwise derives a visible border from the
+// background (lighter on dark themes, darker on light themes) using lipgloss.
+func borderColor(t *tint.Tint) color.Color {
+	if t.Black != nil {
+		return lipgloss.Color(t.Black.Hex())
 	}
-}
-
-// colorPairsFromTint generates color pairs from a bubbletint Tint.
-// If adjustForAccess is true, colors are adjusted to improve accessibility.
-func colorPairsFromTint(t *tint.Tint, adjustForAccess bool) []ColorPair {
-	if t == nil {
-		return colorPairsFromSimple("250", "235")
+	bg := col(t.Bg, "235")
+	if t.Dark {
+		return lipgloss.Lighten(bg, 0.12)
 	}
-
-	var pairs []ColorPair
-	if t.Bg != nil {
-		bg := lipgloss.Color(t.Bg.Hex())
-		pairs = append(pairs,
-			ColorPair{Name: "Black", Fg: col(t.Black, "16"), Bg: bg},
-			ColorPair{Name: "Red", Fg: col(t.Red, "1"), Bg: bg},
-			ColorPair{Name: "Green", Fg: col(t.Green, "2"), Bg: bg},
-			ColorPair{Name: "Yellow", Fg: col(t.Yellow, "3"), Bg: bg},
-			ColorPair{Name: "Blue", Fg: col(t.Blue, "4"), Bg: bg},
-			ColorPair{Name: "Purple", Fg: col(t.Purple, "5"), Bg: bg},
-			ColorPair{Name: "Cyan", Fg: col(t.Cyan, "6"), Bg: bg},
-			ColorPair{Name: "White", Fg: col(t.White, "7"), Bg: bg},
-			ColorPair{Name: "Bright Black", Fg: col(t.BrightBlack, "240"), Bg: bg},
-			ColorPair{Name: "Bright Red", Fg: col(t.BrightRed, "9"), Bg: bg},
-			ColorPair{Name: "Bright Green", Fg: col(t.BrightGreen, "10"), Bg: bg},
-			ColorPair{Name: "Bright Yellow", Fg: col(t.BrightYellow, "11"), Bg: bg},
-			ColorPair{Name: "Bright Blue", Fg: col(t.BrightBlue, "12"), Bg: bg},
-			ColorPair{Name: "Bright Purple", Fg: col(t.BrightPurple, "13"), Bg: bg},
-			ColorPair{Name: "Bright Cyan", Fg: col(t.BrightCyan, "14"), Bg: bg},
-			ColorPair{Name: "Bright White", Fg: col(t.BrightWhite, "15"), Bg: bg},
-		)
-	}
-	if t.SelectionBg != nil {
-		bg := lipgloss.Color(t.SelectionBg.Hex())
-		pairs = append(pairs,
-			ColorPair{Name: "Select Black", Fg: col(t.Black, "16"), Bg: bg},
-			ColorPair{Name: "Select Red", Fg: col(t.Red, "1"), Bg: bg},
-			ColorPair{Name: "Select Green", Fg: col(t.Green, "2"), Bg: bg},
-			ColorPair{Name: "Select Yellow", Fg: col(t.Yellow, "3"), Bg: bg},
-			ColorPair{Name: "Select Blue", Fg: col(t.Blue, "4"), Bg: bg},
-			ColorPair{Name: "Select Purple", Fg: col(t.Purple, "5"), Bg: bg},
-			ColorPair{Name: "Select Cyan", Fg: col(t.Cyan, "6"), Bg: bg},
-			ColorPair{Name: "Select White", Fg: col(t.White, "7"), Bg: bg},
-			ColorPair{Name: "Select Bright Black", Fg: col(t.BrightBlack, "240"), Bg: bg},
-			ColorPair{Name: "Select Bright Red", Fg: col(t.BrightRed, "9"), Bg: bg},
-			ColorPair{Name: "Select Bright Green", Fg: col(t.BrightGreen, "10"), Bg: bg},
-			ColorPair{Name: "Select Bright Yellow", Fg: col(t.BrightYellow, "11"), Bg: bg},
-			ColorPair{Name: "Select Bright Blue", Fg: col(t.BrightBlue, "12"), Bg: bg},
-			ColorPair{Name: "Select Bright Purple", Fg: col(t.BrightPurple, "13"), Bg: bg},
-			ColorPair{Name: "Select Bright Cyan", Fg: col(t.BrightCyan, "14"), Bg: bg},
-			ColorPair{Name: "Select Bright White", Fg: col(t.BrightWhite, "15"), Bg: bg},
-		)
-	}
-
-	if adjustForAccess {
-		for i, p := range pairs {
-			if adjusted := tryAdjustForAccess(p.Fg, p.Bg); adjusted != nil {
-				pairs[i].Fg = adjusted
-			}
-		}
-	}
-
-	return pairs
-}
-
-// CVD helpers for adjusting colors for accessibility
-func cvdLuminance(c colorful.Color) float64 {
-	lin := func(v float64) float64 {
-		if v <= 0.04045 {
-			return v / 12.92
-		}
-		return math.Pow((v+0.055)/1.055, 2.4)
-	}
-	return 0.2126*lin(c.R) + 0.7152*lin(c.G) + 0.0722*lin(c.B)
-}
-
-func cvdContrast(fg, bg colorful.Color) float64 {
-	lf, lb := cvdLuminance(fg), cvdLuminance(bg)
-	if lf < lb {
-		lf, lb = lb, lf
-	}
-	return (lf + 0.05) / (lb + 0.05)
-}
-
-func cvdApply(c colorful.Color, matrix [3][3]float64) colorful.Color {
-	return colorful.Color{
-		R: matrix[0][0]*c.R + matrix[0][1]*c.G + matrix[0][2]*c.B,
-		G: matrix[1][0]*c.R + matrix[1][1]*c.G + matrix[1][2]*c.B,
-		B: matrix[2][0]*c.R + matrix[2][1]*c.G + matrix[2][2]*c.B,
-	}.Clamped()
-}
-
-// tryAdjustForAccess attempts to make a foreground color more accessible against its background.
-// Returns the adjusted color.Color, or nil if adjustment is not needed or not possible.
-func tryAdjustForAccess(fgColor, bgColor color.Color) color.Color {
-	fgC, ok := colorful.MakeColor(fgColor)
-	if !ok {
-		return nil
-	}
-	bgC, ok := colorful.MakeColor(bgColor)
-	if !ok {
-		return nil
-	}
-
-	minContrast := 3.0
-	minCVDistance := 0.05
-	minCVContrast := 2.5
-
-	// Check if already accessible
-	normalContrast := cvdContrast(fgC, bgC)
-	if normalContrast < minContrast {
-		// Need adjustment
-		suggested := suggestAccessibleForeground(fgC, bgC, minContrast, minCVDistance, minCVContrast)
-		if suggested != nil && !almostEqualColor(*suggested, fgC) {
-			return lipgloss.Color((*suggested).Hex())
-		}
-	}
-
-	return nil
-}
-
-func suggestAccessibleForeground(fg, bg colorful.Color, minContrast, minCVDist, minCVContrast float64) *colorful.Color {
-	step := 0.02
-	targets := []colorful.Color{{R: 0, G: 0, B: 0}, {R: 1, G: 1, B: 1}}
-	bestPassing := colorful.Color{}
-	bestDist := math.MaxFloat64
-
-	for _, target := range targets {
-		for blend := 0.0; blend <= 1.0; blend += step {
-			candidate := fg.BlendLab(target, blend).Clamped()
-			if meetsAccessibilityThreshold(candidate, bg, minContrast, minCVDist, minCVContrast) {
-				dist := fg.DistanceCIEDE2000(candidate)
-				if dist < bestDist {
-					bestPassing = candidate
-					bestDist = dist
-				}
-			}
-		}
-	}
-
-	if bestDist < math.MaxFloat64 {
-		return &bestPassing
-	}
-	return nil
-}
-
-func meetsAccessibilityThreshold(fg, bg colorful.Color, minContrast, minCVDist, minCVContrast float64) bool {
-	if cvdContrast(fg, bg) < minContrast {
-		return false
-	}
-
-	for _, matrix := range cvdMatrices {
-		sfg := cvdApply(fg, matrix)
-		sbg := cvdApply(bg, matrix)
-		if sfg.DistanceCIEDE2000(sbg) < minCVDist {
-			return false
-		}
-		if cvdContrast(sfg, sbg) < minCVContrast {
-			return false
-		}
-	}
-	return true
-}
-
-func almostEqualColor(a, b colorful.Color) bool {
-	const eps = 1e-12
-	return math.Abs(a.R-b.R) < eps && math.Abs(a.G-b.G) < eps && math.Abs(a.B-b.B) < eps
+	return lipgloss.Darken(bg, 0.12)
 }
 
 // NormalizeMode returns the normalized theme mode value.
@@ -382,11 +124,12 @@ func NormalizeMode(mode string) string {
 	}
 }
 
-// SetThemePreferences updates global preferences used by Active.
-func SetThemePreferences(mode string, accessibility bool) {
+// SetThemePreferences updates global preferences used by Active and HuhThemeFunc.
+func SetThemePreferences(mode string, accessibility bool, style StylePreset) {
 	themePrefsMu.Lock()
 	themePrefs.Mode = NormalizeMode(mode)
 	themePrefs.Accessibility = accessibility
+	themePrefs.Style = NormalizePreset(string(style))
 	themePrefsMu.Unlock()
 }
 
@@ -443,33 +186,9 @@ func tintForMode(current *tint.Tint, mode string) *tint.Tint {
 	return current
 }
 
-func applyAccessibilityAdjustments(colors *AppStyle) {
-	if colors == nil {
-		return
-	}
-	adjust := func(fg *color.Color, bg color.Color) {
-		if fg == nil {
-			return
-		}
-		if adjusted := tryAdjustForAccess(*fg, bg); adjusted != nil {
-			*fg = adjusted
-		}
-	}
-
-	adjust(&colors.Fg, colors.Bg)
-	adjust(&colors.Muted, colors.Bg)
-	adjust(&colors.Border, colors.Bg)
-	adjust(&colors.Accent, colors.Bg)
-	adjust(&colors.SelectionFg, colors.SelectionBg)
-	adjust(&colors.StatusFg, colors.StatusBg)
-	adjust(&colors.Success, colors.Bg)
-	adjust(&colors.Error, colors.Bg)
-	adjust(&colors.Warning, colors.Bg)
-}
-
-// Active returns the current AppColors palette derived from the active bubbletint.
-// It is safe to call before the registry has been initialised; a built-in fallback
-// palette (matching the Dracula aesthetic) is returned in that case.
+// Active returns the current AppStyle palette derived from the active bubbletint.
+// It is safe to call before the registry has been initialised; a built-in
+// fallback palette (matching the Dracula aesthetic) is returned in that case.
 func Active() *AppStyle {
 	prefs := ThemePreferencesSnapshot()
 	var t *tint.Tint
@@ -478,22 +197,33 @@ func Active() *AppStyle {
 		t = tint.Current()
 	}()
 	t = tintForMode(t, prefs.Mode)
-	return FromTintWithOptions(t, prefs.Accessibility)
+	return fromTint(t, prefs.Accessibility, prefs.Style)
 }
 
-// FromTint maps a *tint.Tint onto the application's semantic AppColors.
+// FromTint maps a *tint.Tint onto the application's semantic AppStyle.
 // Every field has a hardcoded fallback that works in any 256-color terminal.
 func FromTint(t *tint.Tint) *AppStyle {
-	return FromTintWithOptions(t, false)
+	return fromTint(t, false, DefaultStylePreset)
 }
 
 // FromTintWithOptions maps a tint into AppStyle with optional accessibility
 // adjustments for semantic foreground/background pairs.
 func FromTintWithOptions(t *tint.Tint, accessibility bool) *AppStyle {
+	return fromTint(t, accessibility, DefaultStylePreset)
+}
+
+// fromTint builds (and caches) the full styling artifact for a tint: the
+// semantic palette, the app-chrome Styles (palette-derived, independent of the
+// form style preset), and the huh form Styles (which DO depend on the preset).
+// Caching by tint ID, preset, and accessibility means HuhThemeFunc can reuse the
+// precomputed huh styles instead of maintaining a second cache.
+func fromTint(t *tint.Tint, accessibility bool, preset StylePreset) *AppStyle {
+	preset = NormalizePreset(string(preset))
 	cacheKey := "fallback"
 	if t != nil && t.ID != "" {
 		cacheKey = t.ID
 	}
+	cacheKey += "|" + string(preset)
 	if accessibility {
 		cacheKey += "|access"
 	}
@@ -528,6 +258,7 @@ func FromTintWithOptions(t *tint.Tint, accessibility bool) *AppStyle {
 			colors.AccessiblePairs = colorPairsFromSimple("250", "235")
 		}
 		colors.Styles = BuildStyles(colors)
+		colors.HuhStyles = BuildHuhStyles(colors, preset, true)
 
 		appStyleCacheMu.Lock()
 		appStyleCache[cacheKey] = colors
@@ -551,7 +282,7 @@ func FromTintWithOptions(t *tint.Tint, accessibility bool) *AppStyle {
 		Fg:          col(t.Fg, "250"),
 		Bg:          col(t.Bg, "235"),
 		Muted:       col(t.BrightBlack, "240"),
-		Border:      col(t.Black, "238"),
+		Border:      borderColor(t),
 		Accent:      col(t.Purple, "205"),
 		SelectionBg: sel,
 		SelectionFg: col(t.BrightWhite, "255"),
@@ -571,258 +302,10 @@ func FromTintWithOptions(t *tint.Tint, accessibility bool) *AppStyle {
 		colors.AccessiblePairs = colorPairsFromTint(t, true)
 	}
 	colors.Styles = BuildStyles(colors)
+	colors.HuhStyles = BuildHuhStyles(colors, preset, t.Dark)
 
 	appStyleCacheMu.Lock()
 	appStyleCache[cacheKey] = colors
 	appStyleCacheMu.Unlock()
 	return colors
-}
-
-// AccessiblePairsFromTint returns accessibility-adjusted color pairs for a tint.
-// Use this in diagnostics UIs; avoid in hot render paths.
-func AccessiblePairsFromTint(t *tint.Tint) []ColorPair {
-	return colorPairsFromTint(t, true)
-}
-
-// StyleCombosFromAppStyle returns concrete fg/bg combinations from named styles.
-func StyleCombosFromAppStyle(c *AppStyle) []StyleCombo {
-	if c == nil || c.Styles == nil {
-		return nil
-	}
-	combos := []StyleCombo{
-		{Name: "Title", Fg: c.Styles.Title.GetForeground(), Bg: c.Styles.Title.GetBackground()},
-		{Name: "Subtitle", Fg: c.Styles.Subtitle.GetForeground(), Bg: c.Styles.Subtitle.GetBackground()},
-		{Name: "TextOnBg", Fg: c.Styles.TextOnBg.GetForeground(), Bg: c.Styles.TextOnBg.GetBackground()},
-		{Name: "Dim", Fg: c.Styles.Dim.GetForeground(), Bg: c.Styles.Dim.GetBackground()},
-		{Name: "SelectedItem", Fg: c.Styles.SelectedItem.GetForeground(), Bg: c.Styles.SelectedItem.GetBackground()},
-		{Name: "StatusBase", Fg: c.Styles.StatusBase.GetForeground(), Bg: c.Styles.StatusBase.GetBackground()},
-		{Name: "StatusKey", Fg: c.Styles.StatusKey.GetForeground(), Bg: c.Styles.StatusKey.GetBackground()},
-		{Name: "StatusDesc", Fg: c.Styles.StatusDesc.GetForeground(), Bg: c.Styles.StatusDesc.GetBackground()},
-		{Name: "NavActive", Fg: c.Styles.NavActive.GetForeground(), Bg: c.Styles.NavActive.GetBackground()},
-		{Name: "NavInactive", Fg: c.Styles.NavInactive.GetForeground(), Bg: c.Styles.NavInactive.GetBackground()},
-		{Name: "Send", Fg: c.Styles.Send.GetForeground(), Bg: c.Styles.Send.GetBackground()},
-		{Name: "Success", Fg: c.Styles.Success.GetForeground(), Bg: c.Styles.Success.GetBackground()},
-		{Name: "Error", Fg: c.Styles.Error.GetForeground(), Bg: c.Styles.Error.GetBackground()},
-		{Name: "Warning", Fg: c.Styles.Warning.GetForeground(), Bg: c.Styles.Warning.GetBackground()},
-	}
-	out := make([]StyleCombo, 0, len(combos))
-	for _, combo := range combos {
-		if combo.Fg != nil && combo.Bg != nil {
-			out = append(out, combo)
-		}
-	}
-	return out
-}
-
-// BuildStyles pre-computes commonly used lipgloss styles from one palette.
-func BuildStyles(c *AppStyle) *Styles {
-	name := "active"
-	if c.OrigTint != nil {
-		name = c.OrigTint.DisplayName
-	}
-
-	base := lipgloss.NewStyle().Background(c.Bg).Foreground(c.Fg)
-	statusBase := lipgloss.NewStyle().Background(c.StatusBg).Foreground(c.StatusFg)
-
-	return &Styles{
-		Name: name,
-
-		Input:  base,
-		Cursor: base.Foreground(c.Warning),
-
-		Title:      base.Bold(true).Foreground(c.Accent),
-		Subtitle:   base.Foreground(c.Muted),
-		RealHeader: base.Bold(true).Foreground(c.Accent),
-		TextOnBg:   base,
-		BoldText:   base.Bold(true),
-		Dim:        base.Faint(true),
-
-		BoarderActive:   base.BorderForeground(c.Accent),
-		BoarderInactive: base.BorderForeground(c.Border),
-
-		Item:         base.Foreground(c.Muted),
-		SelectedItem: base.Background(c.SelectionBg).Foreground(c.SelectionFg).Bold(true),
-
-		Send: base.Background(c.SelectionBg).Foreground(c.SelectionFg).Padding(0, 1),
-		Wait: base.Foreground(c.Muted),
-
-		Online:  base.Foreground(c.Success),
-		Offline: base.Foreground(c.Muted),
-
-		FilterActive: base.Foreground(c.Accent).Bold(true),
-		FilterDim:    base.Foreground(c.Muted),
-
-		StatusBase:    statusBase,
-		StatusKey:     statusBase.Foreground(c.Fg),
-		StatusKeyBold: statusBase.Foreground(c.Fg).Bold(true),
-		StatusDesc:    statusBase.Foreground(c.Muted),
-		StatusSep:     statusBase.Foreground(c.Muted),
-
-		OverlayBorder: base.Border(lipgloss.RoundedBorder()).BorderForeground(c.Accent),
-		OverlayPanel:  base,
-
-		NavTitle:     base.Bold(true).Foreground(c.Accent),
-		NavActive:    base.Background(c.SelectionBg).Foreground(c.SelectionFg).Bold(true),
-		NavInactive:  base.Foreground(c.Muted),
-		NavContainer: base.BorderForeground(c.Border),
-
-		TabInactive: base.BorderForeground(c.Accent),
-		TabHover:    base.BorderForeground(c.Muted).Background(c.Border),
-
-		SwatchDot: base,
-		Row:       base,
-
-		Success: base.Foreground(c.Success),
-		Error:   base.Foreground(c.Error),
-		Warning: base.Foreground(c.Warning),
-
-		SuccessMark: base.Foreground(c.Success).Render("✓"),
-		ErrorMark:   base.Foreground(c.Error).Render("✗"),
-		Gap:         base.Render(" "),
-		Help: help.Styles{
-			Ellipsis:       statusBase.Foreground(c.Muted),
-			ShortKey:       statusBase.Foreground(c.Accent),
-			ShortDesc:      statusBase.Foreground(c.Fg),
-			ShortSeparator: statusBase.Foreground(c.Muted),
-			FullKey:        statusBase.Foreground(c.Accent),
-			FullDesc:       statusBase.Foreground(c.Fg),
-			FullSeparator:  statusBase.Foreground(c.Muted),
-		},
-	}
-}
-
-// BuildHuhStyles maps the active app palette onto huh styles.
-func BuildHuhStyles(c *AppStyle) *huh.Styles {
-	t := huh.ThemeBase(false)
-
-	t.Focused.Base = t.Focused.Base.BorderForeground(c.Accent)
-	t.Focused.Card = t.Focused.Base
-	t.Focused.Title = t.Focused.Title.Foreground(c.Accent).Bold(true)
-	t.Focused.NoteTitle = t.Focused.NoteTitle.Foreground(c.Accent).Bold(true)
-	t.Focused.Description = t.Focused.Description.Foreground(c.Muted)
-	t.Focused.ErrorIndicator = t.Focused.ErrorIndicator.Foreground(c.Error)
-	t.Focused.ErrorMessage = t.Focused.ErrorMessage.Foreground(c.Error)
-	t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(c.Warning)
-	t.Focused.NextIndicator = t.Focused.NextIndicator.Foreground(c.Warning)
-	t.Focused.PrevIndicator = t.Focused.PrevIndicator.Foreground(c.Warning)
-	t.Focused.Option = t.Focused.Option.Foreground(c.Fg)
-	t.Focused.SelectedOption = t.Focused.SelectedOption.Foreground(c.Success)
-	t.Focused.SelectedPrefix = t.Focused.SelectedPrefix.Foreground(c.Success)
-	t.Focused.UnselectedOption = t.Focused.UnselectedOption.Foreground(c.Fg)
-	t.Focused.UnselectedPrefix = t.Focused.UnselectedPrefix.Foreground(c.Muted)
-	t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(c.Bg).Background(c.Accent).Bold(true)
-	t.Focused.BlurredButton = t.Focused.BlurredButton.Foreground(c.Fg).Background(c.Border)
-	t.Focused.TextInput.Cursor = t.Focused.TextInput.Cursor.Foreground(c.Warning)
-	t.Focused.TextInput.Placeholder = t.Focused.TextInput.Placeholder.Foreground(c.Muted)
-	t.Focused.TextInput.Prompt = t.Focused.TextInput.Prompt.Foreground(c.Warning)
-
-	t.Blurred = t.Focused
-	t.Blurred.Base = t.Focused.Base.BorderStyle(lipgloss.HiddenBorder())
-	t.Blurred.Card = t.Blurred.Base
-	t.Blurred.NextIndicator = c.Styles.TextOnBg
-	t.Blurred.PrevIndicator = c.Styles.TextOnBg
-	t.Blurred.Title = t.Focused.Title.Foreground(c.Muted).Bold(false)
-	t.Blurred.Description = c.Styles.Dim
-	t.Blurred.SelectedOption = t.Focused.SelectedOption.Foreground(c.Muted)
-	t.Blurred.SelectedPrefix = t.Focused.SelectedPrefix.Foreground(c.Muted)
-
-	t.Group.Title = t.Focused.Title
-	t.Group.Description = t.Focused.Description
-	return t
-}
-
-// HuhThemeFunc returns a ThemeFunc that always maps from the latest Active palette.
-func HuhThemeFunc() huh.ThemeFunc {
-	return func(_ bool) *huh.Styles {
-		active := Active()
-		id := "fallback"
-		if active.OrigTint != nil {
-			id = active.OrigTint.ID
-		}
-		if ThemePreferencesSnapshot().Accessibility {
-			id += "|access"
-		}
-
-		huhThemeCacheMu.Lock()
-		defer huhThemeCacheMu.Unlock()
-
-		if huhThemeCache != nil && huhThemeCacheID == id {
-			copy := *huhThemeCache
-			return &copy
-		}
-
-		huhThemeCache = BuildHuhStyles(active)
-		huhThemeCacheID = id
-		copy := *huhThemeCache
-		return &copy
-	}
-}
-
-// BoxStyle returns a rounded-border box style using the current theme colors.
-func BoxStyle() lipgloss.Style {
-	c := Active()
-	return c.Styles.OverlayBorder.
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(c.Muted).
-		Padding(1, 2)
-}
-
-// BoxTitleStyle returns a bold title style using the current accent color.
-func BoxTitleStyle() lipgloss.Style {
-	return Active().Styles.Title
-}
-
-// SubtleStyle returns a dimmed text style for secondary / hint content.
-func SubtleStyle() lipgloss.Style {
-	return Active().Styles.Subtitle
-}
-
-// RenderStatusBar composes a left-aligned help string and a right-aligned
-// status string into a single styled bar of the given width. If width <= 0
-// the function will return a simple un-padded rendering.
-func RenderStatusBar(width int, left string, right string) string {
-	return RenderStatusBarStyled(width, left, right, -1)
-}
-
-// RenderStatusBarStyled renders the status bar. When colorIndex >= 0 it
-// overrides the foreground with that ANSI index (0-255), which is useful for
-// fade-in/out animations. Pass -1 to use the theme's StatusFg color.
-func RenderStatusBarStyled(width int, left string, right string, colorIndex int) string {
-	c := Active()
-	fg := c.StatusFg
-	if colorIndex >= 0 {
-		fg = lipgloss.Color(strconv.Itoa(colorIndex))
-	}
-	s := c.Styles.StatusBase.Foreground(fg)
-
-	if width <= 0 {
-		return s.Render(left + " " + right)
-	}
-
-	left = strings.TrimSpace(left)
-	right = strings.TrimSpace(right)
-	lw := lipgloss.Width(left)
-	rw := lipgloss.Width(right)
-
-	// Ensure at least one space between the two sides.
-	gap := max(width-lw-rw, 1)
-	filler := strings.Repeat(" ", gap)
-	return s.Render(left + filler + right)
-}
-
-// CommonKeyMap provides a small set of common key bindings used across views.
-type CommonKeyMap struct {
-	Up           key.Binding
-	Down         key.Binding
-	Quit         key.Binding
-	ToggleDetail key.Binding
-}
-
-func DefaultKeys() CommonKeyMap {
-	return CommonKeyMap{
-		Up:           key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
-		Down:         key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-		Quit:         key.NewBinding(key.WithKeys("q", "esc"), key.WithHelp("q/esc", "quit")),
-		ToggleDetail: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "toggle details")),
-	}
 }

@@ -39,8 +39,17 @@ type navDelegate struct {
 	itemWidth    int // text-render width (terminal columns)
 }
 
-func (d navDelegate) Height() int                             { return 1 }
-func (d navDelegate) Spacing() int                            { return 1 }
+// navItemHeight and navItemSpacing define the list delegate's row geometry: one
+// rendered row per item plus a blank spacing row between items. handleMouse uses
+// the resulting stride to map a click row back to an item index.
+const (
+	navItemHeight  = 1
+	navItemSpacing = 1
+	navItemStride  = navItemHeight + navItemSpacing // rows occupied per list item
+)
+
+func (d navDelegate) Height() int                             { return navItemHeight }
+func (d navDelegate) Spacing() int                            { return navItemSpacing }
 func (d navDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 
 func (d navDelegate) Render(w io.Writer, _ list.Model, index int, item list.Item) {
@@ -422,23 +431,27 @@ func (m *Sidebar) handleMouse(mm tea.MouseMsg, height int) tea.Cmd {
 		)
 	}
 
-	// Rows 1..numMain are the list items (1 row per item, immediately after header).
+	// List items render below the header, one item every navItemStride rows (one
+	// row for the item plus a blank spacing row between items). Map the click row
+	// back to an item index; clicks on a spacing row fall through to focus.
 	listY := me.Y - 1
 	numMain := m.numMainItems()
-	if listY >= 0 && listY < numMain {
-		idx := listY
-		// Adjust for any pages that appear at/after settingsIdx in the full slice.
-		if m.settingsIdx >= 0 && idx >= m.settingsIdx {
-			idx++
-		}
-		if idx >= 0 && idx < len(m.Pages) {
-			m.ActiveIndex = idx
-			m.syncListCursor()
-			capturedIdx := idx
-			return tea.Batch(
-				func() tea.Msg { return NavFocusMsg{Focused: true} },
-				func() tea.Msg { return SelectedMsg{PageIndex: capturedIdx} },
-			)
+	if listY >= 0 && listY%navItemStride == 0 {
+		idx := listY / navItemStride
+		if idx < numMain {
+			// Adjust for any pages that appear at/after settingsIdx in the full slice.
+			if m.settingsIdx >= 0 && idx >= m.settingsIdx {
+				idx++
+			}
+			if idx >= 0 && idx < len(m.Pages) {
+				m.ActiveIndex = idx
+				m.syncListCursor()
+				capturedIdx := idx
+				return tea.Batch(
+					func() tea.Msg { return NavFocusMsg{Focused: true} },
+					func() tea.Msg { return SelectedMsg{PageIndex: capturedIdx} },
+				)
+			}
 		}
 	}
 
@@ -451,6 +464,9 @@ func (m *Sidebar) handleMouse(mm tea.MouseMsg, height int) tea.Cmd {
 
 func (m *Sidebar) Width() int  { return m.width }
 func (m *Sidebar) Height() int { return m.height }
+
+// Dock reports that the sidebar occupies the left edge.
+func (m *Sidebar) Dock() Side { return DockLeft }
 
 func (m *Sidebar) GetPages() []Page { return m.Pages }
 

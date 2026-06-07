@@ -39,7 +39,7 @@ func TestLogRotation(t *testing.T) {
 	_ = SetLevel("DEBUG")
 	SetMaxLogBytes(200) // tiny cap forces rotation within a few lines
 
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		Infof("rotation filler line number %d aaaaaaaaaaaaaaaaaaaa", i)
 	}
 
@@ -73,7 +73,7 @@ func TestLogRotationDisabled(t *testing.T) {
 	_ = SetLevel("DEBUG")
 	SetMaxLogBytes(0) // disabled
 
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		Infof("no-rotation filler line number %d aaaaaaaaaaaaaaaaaaaa", i)
 	}
 

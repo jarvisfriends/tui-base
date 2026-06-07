@@ -9,15 +9,15 @@ import (
 type AppKeyMap struct {
 	viewport.KeyMap
 	Quit           key.Binding // Quit the application
-	Tab            key.Binding // Next page
-	ShiftTab       key.Binding // Previous page
-	OpenSettings   key.Binding // Jump directly to the Settings page
+	Tab            key.Binding // Next tab
+	ShiftTab       key.Binding // Previous tab
+	OpenSettings   key.Binding // Jump directly to the Settings tab
 	ToggleNav      key.Binding // Toggle Nav view
 	ToggleStatus   key.Binding // Toggle Help view
 	ToggleFullHelp key.Binding // Toggle Full Help view
 	Select         key.Binding // Select the current choice (e.g. in a menu or list)
-	Top            key.Binding // Scroll to the top of a list or page
-	Bottom         key.Binding // Scroll to the bottom of a list or page
+	Top            key.Binding // Scroll to the top of a list or tab
+	Bottom         key.Binding // Scroll to the bottom of a list or tab
 	Dismiss        key.Binding // Dismiss a modal or notification
 	DismissAll     key.Binding // Dismiss all notifications in the history panel
 	Debug          key.Binding
@@ -65,11 +65,11 @@ func DefaultKeyMap() *AppKeyMap {
 		),
 		Tab: key.NewBinding(
 			key.WithKeys("tab"),
-			key.WithHelp("tab", "next page"),
+			key.WithHelp("tab", "next tab"),
 		),
 		ShiftTab: key.NewBinding(
 			key.WithKeys("shift+tab"),
-			key.WithHelp("shift+tab", "prev page"),
+			key.WithHelp("shift+tab", "prev tab"),
 		),
 		OpenSettings: key.NewBinding(
 			key.WithKeys("ctrl+,"),

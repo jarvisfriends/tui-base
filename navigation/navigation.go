@@ -10,16 +10,38 @@ type Page struct {
 	Title string
 }
 
+// Side indicates where a navigation component docks relative to the page content.
+type Side int
+
+const (
+	// DockLeft reserves columns on the left (e.g. a sidebar); the page renders
+	// to its right via JoinHorizontal.
+	DockLeft Side = iota
+	// DockTop reserves rows at the top (e.g. a tab bar); the page renders below
+	// it via JoinVertical.
+	DockTop
+)
+
 type Navigator interface {
 	Init() tea.Cmd
 	Update(msg tea.Msg) (tea.Model, tea.Cmd)
 	View() tea.View
 	Width() int
 	Height() int
+	// Dock reports which edge the navigator occupies, letting the router lay it
+	// out and route input without type-asserting concrete navigator types.
+	Dock() Side
 	GetPages() []Page
 	SetPages([]Page)
 	SetActiveIndex(int)
 	GetActiveIndex() int
+}
+
+// Focusable is implemented by navigators that support keyboard focus (the
+// sidebar). Navigators with no focus concept (tabs) omit it; the router uses a
+// capability check rather than a concrete-type assertion to drive focus.
+type Focusable interface {
+	SetFocused(bool)
 }
 
 // SelectedMsg is emitted when a navigation item is selected (via click or key).

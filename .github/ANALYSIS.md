@@ -1,14 +1,61 @@
 # Deep Analysis — tui-base
 
-> Generated: 2026-05-13. Keep updated as the project evolves.
+> Updated: 2026-06-07. Keep updated as the project evolves.
 
 ---
 
 ## Goal recap
 
-Build a bubbletea v2 framework that any downstream app can import and get:
-navigation, status bar, help, settings (per-app-name scoped), layouts, color themes,
-notifications, and a debug view — for free. Consumer only writes `tea.Model` pages.
+Build a bubbletea v2 framework that any downstream app (dash, aSettings,
+verify_setup, …) can import and get navigation, status bar, help, settings
+(per-app-name scoped), layouts, color themes, notifications, and a debug
+inspector — for free. Consumers only write `tea.Model` pages.
+
+---
+
+## Recent work (2026-06)
+
+### Theme system — four orthogonal axes
+The `theme` package was redesigned so styling is four independent axes the end
+user controls: **color tint** (any bubbletint palette) × **style preset** (huh's
+built-in structure) × **mode** (light/dark) × **accessibility** (CVD engine).
+
+- `BuildHuhStyles(c, preset, isDark)` takes *structure* from a huh built-in theme
+  (`presets.go`) and overlays *colors* from the active tint — fixing a latent bug
+  where `huh.ThemeBase(false)` ignored mode.
+- New user-selectable **Form Style** setting (`style_preset`), live-previewed.
+- Single build pipeline + single cache: `fromTint` builds palette + chrome
+  `Styles` + `HuhStyles` together, cached by `tintID|preset|access`. The separate
+  huh cache was removed; `AppStyle.HuhStyles` holds the precomputed styles.
+- `theme.go` (834 → ~310 lines) split into `presets.go`, `huh.go`, `styles.go`,
+  `accessibility.go` (CVD engine isolated), `status.go`. Dropped 13 dead `Styles`
+  fields; used lipgloss `Darken`/`Lighten` for derived border/hover colors.
+- **No new dependencies** (glamour and `compat.AdaptiveColor` were evaluated and
+  rejected — the latter blocks on a terminal query at init and ignores the
+  explicit Mode setting).
+
+### Router — unified overlay system
+The four floating overlays (toast, notification history, inspector, info modal)
+were each hardcoded in three methods (Update key intercept, View compositing,
+OnMouse hit-test). They now share one Z-ordered `[]Overlay` driven by three
+generic loops (`router/overlay.go`):
+
+- `Overlay` interface (`Name/Z/Visible/Render(layoutContext)/Bounds`) + opt-in
+  capability interfaces `KeyConsumer`, `MouseConsumer`, `OutsideCloser`. A passive
+  overlay (toast) implements only `Overlay` and is never modal.
+- `Rect{X,Y,W,H}` + `Contains` replaced the two `[4]int` bounds caches; each
+  overlay owns its bounds. Adding an overlay = implement + append (no edits to
+  Update/View/OnMouse).
+- `Navigator.Dock() Side` + `Focusable` capability removed all
+  `*navigation.Sidebar` / `*navigation.Tabs` type switches; `cyclePage(delta)` and
+  `debugEnabled()` helpers de-duplicated Tab/Shift+Tab and the env checks.
+- `router.go`: 1392 → ~1150 lines.
+
+### Status bar — inspector summary fix
+`InspectorModel.StatusLineSummary()` (compact runtime stats) was computed but
+never plumbed to the status bar (right segment was hardcoded `""`). Added
+`BarModel.SetSummaryProvider`, wired in the router to show the summary only while
+the inspector is closed, with a regression test that fails without the fix.
 
 ---
 
@@ -16,167 +63,73 @@ notifications, and a debug view — for free. Consumer only writes `tea.Model` p
 
 ### What's solid
 
-| Area | Status | Notes |
-|---|---|---|
-| Charm v2 imports | ✅ | No v1 transitive deps; all `charm.land/…/v2` |
-| Shared color pointer | ✅ | Mutated in-place on `ThemeMsg`; zero re-wiring |
-| Navigation (sidebar + tabs) | ✅ | Keyboard + mouse; `NavStyleMsg` toggles live |
-| Settings page | ✅ | Overview + single-field huh overlay; `CapturesKeys` gates globals |
-| Settings persistence | ✅ | JSON to `tui_settings.json`; round-trips cleanly |
-| Color theming (bubbletint) | ✅ | Live preview; `ThemeMsg` propagates everywhere |
-| Debug / Inspector page | ✅ | Message log, dedup+count, mouse highlight, runtime stats |
-| Notification manager | ✅ | Goroutine-safe; severity + TTL + JSON persistence |
-| Toast overlay | ✅ | Canvas compositing; auto-dismiss via `expireMsg` |
-| Logger | ✅ | File-backed; subscriber fan-out to inspector; runtime level |
-| Router | ✅ | Resize, mouse routing, key capture gating, `tea.View` |
-| Test coverage (core) | ✅ | Router (9 files), nav (5), debug (4), notifications (7 tests) |
+| Area | Notes |
+|---|---|
+| Charm v2 imports | All `charm.land/…/v2`; no v1 transitive deps |
+| Navigation (sidebar + tabs) | Keyboard + mouse; `Dock()`-driven layout; `NavStyleMsg` live |
+| Settings page | Overview + single-field huh overlay; `CapturesKeys` gates globals; async save |
+| Settings persistence | JSON to per-app config dir; round-trips cleanly |
+| Theming | tint × huh preset × mode × accessibility; live preview; `ThemeMsg` propagates |
+| Inspector | Message log (dedup+count), runtime stats, status-bar summary; Ctrl+D overlay |
+| Notifications | Goroutine-safe; severity + TTL + JSON persistence; runtime-applied settings |
+| Overlays | Unified `Overlay` stack (toast/history/inspector/info) via compositor |
+| Dark/light auto-detect | `tea.BackgroundColorMsg` handler flips mode live |
+| Logger | File-backed; subscriber fan-out to inspector; runtime level |
+| Page registration | `RegisteredPage` + `ExtraPages` + `ReplaceAppPagesMsg`; no router edits |
+| Per-page keymaps → status bar | `updatePageKeys` + `bubbles/help` |
+| Test coverage (core) | Router, nav, inspector, notifications, theme (incl. preset tests) |
 
-### What's stubbed / incomplete
+### Still open
 
 | Ref | Item | Impact |
 |---|---|---|
-| SB-5 / NF-4 | `UserNotificationOverlay.View()` returns `"TODO"` | History panel visually broken |
-| NF-5 | `NotificationsEnabled`/`NotificationsPersist` saved but not applied at runtime | Settings rows are cosmetic |
-| I-4 | Inspector uses `MaxHeight` clipping instead of `bubbles/viewport` | No scroll; old entries lost |
-| I-5 / O-2 | Inspector only accessible as a nav page; Ctrl+D overlay not built | Requires leaving current page |
-| A-1 | No page registration API | Consumers must hand-edit router internals |
-| A-2 | No message bus | Pages can't talk without growing the router switch |
-| A-3 | No per-page `help.KeyMap` → status bar wiring | Key hints are global-only |
-| T-3 | `tea.BackgroundColorMsg` not handled | Dark/light auto-detect missing |
-| S-13 | `SaveToFile` is synchronous | Risk of blocking `Update` when file writes slow |
-| S-14 | No keyboard shortcut to open Settings | Users must navigate manually |
-| N-5 | Sidebar not migrated to `bubbles/list` | ~200 lines of custom scroll code |
-| SB-6 | `bubbles/help` not wired to status bar | Manual key hint string construction |
-| keyboard.log | Opened (not written) on every keypress in router | Dead artifact; fix now |
-| `keys.Debug` | Defined, exported, shown in help — never matched in router | Dead binding |
-| `common.KnownFocusable` | No imports anywhere | Dead code; delete or wire |
-
-### Test gaps
-
-| Package | Tests | Priority |
-|---|---|---|
-| `logging/` | ❌ | High — goroutine-safe globals with multiple code paths |
-| `pages/settings/` | Thin (1 smoke test) | High — most complex page |
-| `theme/` | ❌ | Medium — `Active()` fallback paths |
-| `keys/` | ❌ | Low |
-| `config/` | ❌ | Low — pure data types |
-| `common/` | ❌ | Low (but delete it if unused) |
+| Module name | `github.com/jarvisfriends/tui-base` (local-only, no remote) | Intentional today; rename for public import |
+| Maintainability | Duplicated page boilerplate, hand-rolled scroll/hit-test (see below) | Tracked as Tiers 1–5 |
 
 ---
 
-## Framework gap analysis
+## Maintainability path forward (Tiers 1–5)
 
-These are the things that must change before this can be imported as a framework by another repo.
+The framework is feature-complete enough; the next investment is **removing
+self-maintained code by leaning on the charm v2 libraries already in the tree**
+and de-duplicating cross-repo patterns. Prioritized:
 
-### 1. Module name
+### Tier 1 — Shared page scaffolding ✅ DONE (2026-06)
+Added embeddable `page.Base` (`tui-base/page`) exposing `Colors()` (nil-safe),
+`Width()`, `Height()`, `SetColors` (satisfies `theme.ColorAware`), `SetSize`.
+Migrated home, inspector/debug, dash dashboard, and aSettings paths/aliases/
+spelling, verify_setup health — deleting the byte-identical boilerplate. Pages
+that need side effects override `SetColors`/`SetSize` and call `m.Base.*` first.
+`page/page_test.go` covers the fallback/size/ColorAware behavior.
 
-`module github.com/jarvisfriends/tui-base` in `go.mod` is not importable by other repos. Needs a real path like
-`github.com/amarcum/tui-base` (or similar vanity path).
+### Tier 2 — Replace hand-rolled list scrolling with `bubbles` (already a dep)
+`pages/settings/settings.go` has ~80 lines of manual `scrollTop` /
+`ensureCursorVisible` / `visibleItemRange`; inspector has manual `tabScrollY`.
+`charm.land/bubbles/v2/list` / `viewport` (already imported) own cursor + scroll +
+clipping. Add tests asserting the same selection/scroll behavior.
 
-### 2. Page registration API (A-1)
+### Tier 3 — Unify mouse hit-testing geometry ✅ DONE (2026-06)
+Added `tui-base/geom` with `Rect{X,Y,W,H}` + `Contains`/`Empty`/`CenteredIn`.
+Router `Rect` now aliases `geom.Rect`; settings `overlayX/Y/W/H` and dash
+`CellGeometry` (embeds `geom.Rect`) + dash overlay rect all use it with
+`Contains`/`CenteredIn` via the v2 `tea.View` OnMouse callback. Status
+`ClickRegion` (a 1-D named horizontal span, not a rectangle) intentionally
+stays separate. `geom/geom_test.go` covers edges/empty/centering.
+> **bubblezone** has a `v2.0.0` tag but misbehaves with the lipgloss
+> canvas/compositor we use for overlays — and v2's idiom is the `tea.View`
+> OnMouse callback with explicit rects anyway — so the in-house `geom.Rect` is
+> the right path, not the library.
 
-Consumers cannot add pages without modifying `router/router.go`. A simple API:
+### Tier 4 — `lipgloss/v2/table` & `/list` for static rendering (no new dep)
+Inspector section/dependency views and dash `display.go` hand-align columns with
+width math (fragile with emoji, per layout-guidelines). `lipgloss/v2/table`
+renders aligned/bordered tables declaratively. Add golden/width tests.
 
-```go
-// router.RegisterPage registers a page before the program starts.
-func (m *RouterModel) RegisterPage(id, title string, page tea.Model)
-```
-
-Pages then self-register in `init()` or at `main()` time. The router's `Init`
-builds nav items from the registry instead of hard-coded slices.
-
-### 3. Per-app settings namespace
-
-`tui_settings.json` is hardcoded. Framework users need:
-
-```go
-// Each app calls this before router.New().
-router.SetAppName("my-dashboard")   // → ~/.config/my-dashboard/settings.json
-```
-
-The settings file path and notification persistence dir should both derive from this.
-
-### 4. Per-page keymaps → status bar (A-3)
-
-Pages should implement an optional interface:
-
-```go
-type KeyMapper interface {
-    KeyMap() help.KeyMap
-}
-```
-
-The router checks the active page for this interface and forwards it to the status
-bar's `bubbles/help` model (SB-6). This gives free short/long help toggle for each page.
-
-### 5. Layout abstraction
-
-The current layout is hardcoded in `router.go`: `nav | content + statusbar`.
-A framework should let the consumer choose a layout preset or inject one. Even a
-simple enum (`LayoutSidebar`, `LayoutTabs`, `LayoutFull`) passed to `router.New()`
-would cover 90% of use cases.
-
-### 6. Message bus (A-2)
-
-As more pages are added, the router's `Update` switch will accumulate cases for
-every cross-page message. A typed pub-sub bus scoped to the router would decouple
-pages. Simplest form: a topic-keyed map of subscriber functions, all called inside
-the router's `Update`. No external dependency needed.
-
-### 7. Ctrl+D inspector overlay (I-5)
-
-The inspector should be available from **any** page via Ctrl+D. This is the most
-important DX feature for framework consumers debugging their own pages.
-
----
-
-## Comparable projects (ecosystem check)
-
-| Project | Lang / Base | What it covers | Gap vs tui-base |
-|---|---|---|---|
-| **Orvyn** ([halsten-dev/orvyn](https://github.com/halsten-dev/orvyn)) | Go / BubbleTea v1 | Layout engine, widget system, focus manager, dialog | v1 only; no theme registry, settings, notifications, logging, inspector |
-| **teacup** ([mistakenelf/teacup](https://github.com/mistakenelf/teacup)) | Go / BubbleTea v1 | Status bar, file tree, markdown/code bubbles, help | v1 only; component lib, no router/settings/themes/notifications |
-| **Charm soft-serve** (in this workspace) | Go / BubbleTea v2 | SSH git server with full TUI | App-specific; not a reusable framework |
-
-**Conclusion:** No public bubbletea v2 framework exists with this feature set.
-tui-base is the right thing to build. The two closest projects target v1 and cover
-only parts of what we need.
-
----
-
-## Recommended priority order
-
-### P0 — Must fix before sharing with anyone
-
-1. **Remove `keyboard.log` artifact** in `router.go` (vestigial; opens file on every keypress).
-2. **Fix dead `keys.Debug` binding** — either handle it or remove it.
-3. **Delete `common.KnownFocusable`** — unused dead code.
-4. **Implement `UserNotificationOverlay.View()`** — currently returns a `"TODO"` string visible in the UI.
-
-### P1 — Framework readiness
-
-5. **Rename module** to a real import path.
-6. **Page registration API** (`router.RegisterPage`).
-7. **Per-app settings namespace** (`router.SetAppName`).
-8. **Ctrl+D inspector overlay** (I-5) — the single biggest DX win.
-9. **Wire `bubbles/help` to status bar** (SB-6) + per-page `KeyMapper` interface (A-3).
-
-### P2 — Polish and robustness
-
-10. **`bubbles/viewport` in inspector** (I-4) — replaces `MaxHeight` clipping.
-11. **Notification keyboard navigation** (NF-4) — history panel is visible but not navigable.
-12. **Apply notification settings at runtime** (NF-5).
-13. **Dark/light auto-detect** via `tea.BackgroundColorMsg` (T-3).
-14. **Async `SaveToFile`** (S-13).
-15. **Sidebar → `bubbles/list`** (N-5).
-
-### P3 — Nice-to-have
-
-16. Message bus (A-2).
-17. Log rotation / slog migration (L-5, L-6).
-18. Custom theme YAML (T-4).
-19. Command palette (O-5).
-20. Extract packages: `bubbleinspector`, `bubblestatus`, `bubblelog` (see ROADMAP Extraction Candidates).
+### Tier 5 — Decompose dash `dashboard.go` god-object (927 lines)
+Mixes a 4-mode state machine (View/Edit/Preset/Detail), overlay forms, widget
+grid, mouse routing, and focus movement. Split into mode handlers + an overlay
+manager (mirroring the router's `Overlay` pattern). Pure structure; add tests for
+mode transitions and focus movement to lock behavior before/after.
 
 ---
 
@@ -184,22 +137,26 @@ only parts of what we need.
 
 ```
 my-dashboard/
-    main.go          ← router.SetAppName("my-dashboard"); router.New(); tea.NewProgram
+    main.go     ← router.NewWithRegisteredPages(...); router.NewProgram(m).Run()
     pages/
-        inventory/   ← registers itself with router.RegisterPage("inventory", "Inventory", inventory.New())
-        metrics/     ← same pattern
+        inventory/  ← tea.Model page; embeds tui-base BasePage (Tier 1)
+        metrics/    ← same pattern
 ```
 
-The consumer never touches `router/router.go` — only calls the public API.
-Settings, navigation, status bar, theme, and notifications all "just work".
-The only thing consumers write is their page `tea.Model` and optionally a
+Consumers never touch `router/router.go` — only the public API. Settings,
+navigation, status bar, theme, overlays, and notifications all "just work". The
+only thing consumers write is their page `tea.Model` and optionally a
 `config.Section` for custom settings rows.
 
 ---
 
-## Quick wins you can ship today
+## Comparable projects (ecosystem check)
 
-- Remove the `keyboard.log` open-on-keypress line in `router.go`  (5 min, zero risk)
-- Delete `common/focusable.go` (5 min, zero risk — no imports)
-- Wire `keys.Debug` to open the Inspector page (15 min)
-- Add `logging/` tests (1 hr — highest risk untested package)
+| Project | Base | Gap vs tui-base |
+|---|---|---|
+| Orvyn (halsten-dev/orvyn) | BubbleTea v1 | v1 only; no theme registry, settings, notifications, logging, inspector |
+| teacup (mistakenelf/teacup) | BubbleTea v1 | v1 only; component lib, no router/settings/themes |
+| Charm soft-serve | BubbleTea v2 | App-specific; not a reusable framework |
+
+**Conclusion:** No public bubbletea v2 framework exists with this feature set;
+tui-base remains the right thing to build.

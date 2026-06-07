@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/jarvisfriends/tui-base/config"
 	"github.com/jarvisfriends/tui-base/logging"
+	"github.com/jarvisfriends/tui-base/overlay"
 	"github.com/jarvisfriends/tui-base/theme"
 
 	"charm.land/bubbles/v2/key"
@@ -41,11 +41,6 @@ func settingsFilePath() string {
 	return filepath.Join(configDir, defaultSettingsFile)
 }
 
-// headerLines is the number of rendered lines above the first item row in the
-// overview: 1 (top padding) + 1 (title) + 1 (blank separator) = 3.
-const headerLines = 3
-const footerLines = 3
-
 // NavStyleMsg is emitted when the user selects a different navigation style.
 type NavStyleMsg struct{ Style string }
 
@@ -53,6 +48,7 @@ type NavStyleMsg struct{ Style string }
 type ThemeMsg struct {
 	ID               string
 	Mode             string
+	Style            string
 	Accessibility    bool
 	ApplyPreferences bool
 }
@@ -66,6 +62,7 @@ type NotificationsSettingsMsg struct {
 
 // settingItem describes one row in the compact overview and how to edit it.
 type settingItem struct {
+	category  string
 	title     string
 	value     func() string    // returns current display value for the overview row
 	buildForm func() *huh.Form // builds a single-field overlay form for this setting
@@ -73,11 +70,47 @@ type settingItem struct {
 	apply     func() error     // optional callback after submit
 }
 
+type settingsCategory struct {
+	title      string
+	itemIdxSet []int
+}
+
+type overviewEntry struct {
+	header    string
+	itemIndex int
+	isHeader  bool
+}
+
+type overviewLayout struct {
+	entries      []overviewEntry
+	columns      int
+	rowsPerCol   int
+	gap          int
+	colWidth     int
+	listTopY     int
+	cursorEntry  int
+	visibleCount int
+}
+
 type Keys struct {
 	Up      key.Binding
 	Down    key.Binding
 	Select  key.Binding
 	Dismiss key.Binding
+}
+
+func (k *Keys) ShortHelp() []key.Binding {
+	if k == nil {
+		return nil
+	}
+	return []key.Binding{k.Up, k.Down, k.Select}
+}
+
+func (k *Keys) FullHelp() [][]key.Binding {
+	if k == nil {
+		return nil
+	}
+	return [][]key.Binding{{k.Up, k.Down}, {k.Select}}
 }
 
 func DefaultKeys() *Keys {
@@ -101,14 +134,14 @@ func DefaultKeys() *Keys {
 	}
 }
 
-// Model is the settings page. It has two modes:
+// SettingsModel is the settings page. It has two modes:
 //
 //   - Overview: a compact list showing every setting on one line with its current
 //     value. Up/Down moves the cursor; Enter or click opens an edit overlay.
 //
 //   - Editing: a centred huh form (one field) is composited over the overview using
 //     the lipgloss Compositor. Submitting or aborting the form returns to overview.
-type Model struct {
+type SettingsModel struct {
 	width, height int
 	colors        *theme.AppStyle
 
@@ -116,6 +149,7 @@ type Model struct {
 	NavStyle             string `json:"nav_style"`
 	ColorThemeID         string `json:"theme_id"`
 	ThemeMode            string `json:"theme_mode"`
+	StylePreset          string `json:"style_preset"`
 	AccessibilityColors  bool   `json:"accessibility_colors"`
 	LogOutput            string `json:"log_output"`
 	LogPath              string `json:"log_path"`
@@ -130,6 +164,7 @@ type Model struct {
 
 	extraSections []config.Section
 	items         []settingItem
+	categories    []settingsCategory
 
 	// loadedFromFile reports whether a persisted settings file was found and
 	// read at startup. When false, the router applies first-run defaults (e.g.
@@ -138,27 +173,26 @@ type Model struct {
 
 	// Overview state.
 	cursor int
-	// scrollTop is the first visible item in the overview list.
+	// scrollTop is the first visible overview entry in the flattened
+	// category + item list used by the responsive overview layout.
 	scrollTop int
 
-	// Overlay state.
-	editing   bool
-	editForm  *huh.Form
-	editIndex int
-
-	// Overlay geometry cached by View() so OnMouse can hit-test click coordinates.
-	overlayX, overlayY, overlayW, overlayH int
+	// editOverlay manages the centered huh form shown when the user opens a
+	// setting for editing. FormOverlayHost handles sizing, compositing, and
+	// outside-click bounds — no manual geom.Rect or compositor calls needed.
+	editOverlay overlay.FormOverlayHost
+	editIndex   int
 
 	keys *Keys
 }
 
 // LoadedFromFile reports whether a persisted settings file was found and read
 // at startup. The router uses this to detect a first run (and persist defaults).
-func (m *Model) LoadedFromFile() bool { return m.loadedFromFile }
+func (m *SettingsModel) LoadedFromFile() bool { return m.loadedFromFile }
 
 // Save persists the current settings synchronously to the configured path.
 // Use this for one-off saves (e.g. writing first-run defaults at startup).
-func (m *Model) Save() error {
+func (m *SettingsModel) Save() error {
 	if err := m.SaveToFile(settingsFilePath()); err != nil {
 		return err
 	}
@@ -167,9 +201,9 @@ func (m *Model) Save() error {
 }
 
 // SetColors stores a shared AppColors pointer.
-func (m *Model) SetColors(c *theme.AppStyle) { m.colors = c }
+func (m *SettingsModel) SetColors(c *theme.AppStyle) { m.colors = c }
 
-func (m *Model) resolveColors() *theme.AppStyle {
+func (m *SettingsModel) resolveColors() *theme.AppStyle {
 	if m.colors != nil {
 		return m.colors
 	}
@@ -178,11 +212,12 @@ func (m *Model) resolveColors() *theme.AppStyle {
 
 // New creates a settings model. Pass extra config.Sections contributed by
 // Configurable components; they appear after the built-in rows.
-func New(extraSections ...config.Section) *Model {
-	m := &Model{
+func New(extraSections ...config.Section) *SettingsModel {
+	m := &SettingsModel{
 		NavStyle:             "sidebar",
 		ColorThemeID:         "dracula_plus",
 		ThemeMode:            theme.ThemeModeDark,
+		StylePreset:          string(theme.DefaultStylePreset),
 		AccessibilityColors:  false,
 		LogOutput:            "temp",
 		LogPath:              "",
@@ -196,7 +231,12 @@ func New(extraSections ...config.Section) *Model {
 		m.loadedFromFile = true
 	} else {
 		// First run (no persisted settings): default to tabs navigation, which
-		// is friendlier than the sidebar for a brand-new app.
+		// is friendlier than the sidebar for a brand-new app. Theme mode defaults
+		// to dark; the router's BackgroundColorMsg handler detects the terminal
+		// background at startup and flips to light live when appropriate. We do
+		// NOT query the terminal here: a synchronous query in New() blocks on
+		// stdin in non-interactive contexts (tests, pipes) and can race the
+		// program's own background query.
 		m.NavStyle = "tabs"
 	}
 
@@ -205,8 +245,9 @@ func New(extraSections ...config.Section) *Model {
 		m.ThemeMode = theme.ThemeModeDark
 	}
 	m.ThemeMode = theme.NormalizeMode(m.ThemeMode)
+	m.StylePreset = string(theme.NormalizePreset(m.StylePreset))
 	m.ColorThemeID = theme.ResolveTintIDForMode(m.ColorThemeID, m.ThemeMode)
-	theme.SetThemePreferences(m.ThemeMode, m.AccessibilityColors)
+	theme.SetThemePreferences(m.ThemeMode, m.AccessibilityColors, theme.StylePreset(m.StylePreset))
 	if m.ColorThemeID != "" {
 		tint.SetTintID(m.ColorThemeID) //nolint:errcheck
 	}
@@ -217,7 +258,23 @@ func New(extraSections ...config.Section) *Model {
 
 // buildItems constructs the settingItem slice. Call this once in New() and
 // again after LoadFromFile (pointer addresses stay stable; only values change).
-func (m *Model) buildItems() {
+func (m *SettingsModel) buildItems() {
+	m.categories = nil
+	m.items = nil
+
+	addItem := func(category string, item settingItem) {
+		item.category = category
+		idx := len(m.items)
+		m.items = append(m.items, item)
+		for i := range m.categories {
+			if m.categories[i].title == category {
+				m.categories[i].itemIdxSet = append(m.categories[i].itemIdxSet, idx)
+				return
+			}
+		}
+		m.categories = append(m.categories, settingsCategory{title: category, itemIdxSet: []int{idx}})
+	}
+
 	// sync intermediate strings from persisted bools
 	if m.NotificationsEnabled {
 		m.notifEnabledStr = "true"
@@ -235,6 +292,7 @@ func (m *Model) buildItems() {
 		m.accessibilityStr = "false"
 	}
 	m.ThemeMode = theme.NormalizeMode(m.ThemeMode)
+	m.StylePreset = string(theme.NormalizePreset(m.StylePreset))
 	m.ColorThemeID = theme.ResolveTintIDForMode(m.ColorThemeID, m.ThemeMode)
 	navOpts := []huh.Option[string]{
 		huh.NewOption("Sidebar \u2013 vertical panel on the left", "sidebar"),
@@ -243,6 +301,10 @@ func (m *Model) buildItems() {
 	modeOpts := []huh.Option[string]{
 		huh.NewOption("Dark", theme.ThemeModeDark),
 		huh.NewOption("Light", theme.ThemeModeLight),
+	}
+	styleOpts := make([]huh.Option[string], 0, len(theme.StylePresets()))
+	for _, p := range theme.StylePresets() {
+		styleOpts = append(styleOpts, huh.NewOption(p.DisplayName(), string(p)))
 	}
 	accessibilityOpts := []huh.Option[string]{
 		huh.NewOption("Off", "false"),
@@ -260,166 +322,189 @@ func (m *Model) buildItems() {
 		huh.NewOption("Error (errors only)", "ERROR"),
 	}
 
-	m.items = []settingItem{
-		{
-			title: "Navigation Style",
-			value: func() string { return labelFor(m.NavStyle, navOpts) },
-			buildForm: func() *huh.Form {
-				return huh.NewForm(huh.NewGroup(
-					huh.NewSelect[string]().
-						Title("Navigation Style").
-						Description("How the navigation chrome is displayed").
-						Options(navOpts...).
-						Value(&m.NavStyle),
-				).WithTheme(theme.HuhThemeFunc()))
-			},
-		},
-		{
-			title: "Log Destination",
-			value: func() string { return labelFor(m.LogOutput, logOpts) },
-			buildForm: func() *huh.Form {
-				return huh.NewForm(huh.NewGroup(
-					huh.NewSelect[string]().
-						Title("Log Destination").
-						Description("Where runtime logs are written").
-						Options(logOpts...).
-						Value(&m.LogOutput),
-				).WithTheme(theme.HuhThemeFunc()))
-			},
-		},
-		{
-			title:     "Log Path",
-			leftTrunc: true,
-			value: func() string {
-				if m.LogPath == "" {
-					return "(system temp)"
-				}
-				return m.LogPath
-			},
-			buildForm: func() *huh.Form {
-				return huh.NewForm(huh.NewGroup(
-					huh.NewFilePicker().
-						Title("Log Path").
-						Description("Directory or file  \u00b7  ignored when destination is Temporary").
-						DirAllowed(true).
-						FileAllowed(true).
-						Value(&m.LogPath),
-				).WithTheme(theme.HuhThemeFunc()))
-			},
-		},
-		{
-			title: "Log Level",
-			value: func() string { return labelFor(m.LogLevel, levelOpts) },
-			buildForm: func() *huh.Form {
-				return huh.NewForm(huh.NewGroup(
-					huh.NewSelect[string]().
-						Title("Log Level").
-						Description("Minimum severity recorded to file and shown in inspector").
-						Options(levelOpts...).
-						Value(&m.LogLevel),
-				).WithTheme(theme.HuhThemeFunc()))
-			},
-		},
-		{
-			title: "Theme Mode",
-			value: func() string { return labelFor(m.ThemeMode, modeOpts) },
-			buildForm: func() *huh.Form {
-				return huh.NewForm(huh.NewGroup(
-					huh.NewSelect[string]().
-						Title("Theme Mode").
-						Description("Choose between dark and light themes for the theme picker").
-						Options(modeOpts...).
-						Value(&m.ThemeMode),
-				).WithTheme(theme.HuhThemeFunc()))
-			},
-		},
-		{
-			title: "Color Theme",
-			value: func() string { return tintDisplayName(m.ColorThemeID) },
-			buildForm: func() *huh.Form {
-				return huh.NewForm(huh.NewGroup(
-					huh.NewSelect[string]().
-						Title("Color Theme").
-						Description("Up/Down to browse \u2014 applied immediately as you scroll").
-						Options(buildThemeOptions(m.ThemeMode)...).
-						Height(14).
-						Value(&m.ColorThemeID),
-				).WithTheme(theme.HuhThemeFunc()))
-			},
-		},
-		{
-			title: "Accessibility Colors",
-			value: func() string {
-				if m.AccessibilityColors {
-					return "On"
-				}
-				return "Off"
-			},
-			buildForm: func() *huh.Form {
-				return huh.NewForm(huh.NewGroup(
-					huh.NewSelect[string]().
-						Title("Accessibility Colors").
-						Description("Apply accessibility adjustments to foreground colors app-wide").
-						Options(accessibilityOpts...).
-						Value(&m.accessibilityStr),
-				).WithTheme(theme.HuhThemeFunc()))
-			},
-		},
-		{
-			title: "Bell Notifications",
-			value: func() string {
-				if m.NotificationsEnabled {
-					return "Enabled 🔔"
-				}
-				return "Disabled 🔕"
-			},
-			buildForm: func() *huh.Form {
-				notifOpts := []huh.Option[string]{
-					huh.NewOption("Enabled", "true"),
-					huh.NewOption("Disabled", "false"),
-				}
-				return huh.NewForm(huh.NewGroup(
-					huh.NewSelect[string]().
-						Title("Bell Notifications").
-						Description("Show toast pop-ups for info, warnings, and errors").
-						Options(notifOpts...).
-						Value(&m.notifEnabledStr),
-				).WithTheme(theme.HuhThemeFunc()))
-			},
-		},
-		{
-			title: "Notification Persistence",
-			value: func() string {
-				if m.NotificationsPersist {
-					return "On"
-				}
-				return "Off"
-			},
-			buildForm: func() *huh.Form {
-				persistOpts := []huh.Option[string]{
-					huh.NewOption("Off (session only)", "false"),
-					huh.NewOption("On (saved to disk)", "true"),
-				}
-				return huh.NewForm(huh.NewGroup(
-					huh.NewSelect[string]().
-						Title("Notification Persistence").
-						Description("Store notifications in config dir across restarts").
-						Options(persistOpts...).
-						Value(&m.notifPersistStr),
-				).WithTheme(theme.HuhThemeFunc()))
-			},
-		},
-	}
-
 	for _, sec := range m.extraSections {
+		cat := sec.Title
+		if cat == "" {
+			cat = "Other"
+		}
 		for _, def := range sec.Fields {
-			m.items = append(m.items, m.itemFromDef(def))
+			addItem(cat, m.itemFromDef(def))
 		}
 	}
+
+	addItem("Navigation", settingItem{
+		title: "Navigation Style",
+		value: func() string { return labelFor(m.NavStyle, navOpts) },
+		buildForm: func() *huh.Form {
+			return huh.NewForm(huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Navigation Style").
+					Description("How the navigation chrome is displayed").
+					Options(navOpts...).
+					Value(&m.NavStyle),
+			).WithTheme(theme.HuhThemeFunc()))
+		},
+	})
+	addItem("Logging", settingItem{
+		title: "Log Destination",
+		value: func() string { return labelFor(m.LogOutput, logOpts) },
+		buildForm: func() *huh.Form {
+			return huh.NewForm(huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Log Destination").
+					Description("Where runtime logs are written").
+					Options(logOpts...).
+					Value(&m.LogOutput),
+			).WithTheme(theme.HuhThemeFunc()))
+		},
+	},
+	)
+	addItem("Logging", settingItem{
+		title:     "Log Path",
+		leftTrunc: true,
+		value: func() string {
+			if m.LogPath == "" {
+				return "(system temp)"
+			}
+			return m.LogPath
+		},
+		buildForm: func() *huh.Form {
+			return huh.NewForm(huh.NewGroup(
+				huh.NewFilePicker().
+					Title("Log Path").
+					Description("Directory or file  \u00b7  ignored when destination is Temporary").
+					DirAllowed(true).
+					FileAllowed(true).
+					Value(&m.LogPath),
+			).WithTheme(theme.HuhThemeFunc()))
+		},
+	})
+	addItem("Logging", settingItem{
+		title: "Log Level",
+		value: func() string { return labelFor(m.LogLevel, levelOpts) },
+		buildForm: func() *huh.Form {
+			return huh.NewForm(huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Log Level").
+					Description("Minimum severity recorded to file and shown in inspector").
+					Options(levelOpts...).
+					Value(&m.LogLevel),
+			).WithTheme(theme.HuhThemeFunc()))
+		},
+	},
+	)
+	addItem("Appearance", settingItem{
+		title: "Theme Mode",
+		value: func() string { return labelFor(m.ThemeMode, modeOpts) },
+		buildForm: func() *huh.Form {
+			return huh.NewForm(huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Theme Mode").
+					Description("Choose between dark and light themes for the theme picker").
+					Options(modeOpts...).
+					Value(&m.ThemeMode),
+			).WithTheme(theme.HuhThemeFunc()))
+		},
+	},
+	)
+	addItem("Appearance", settingItem{
+		title: "Color Theme",
+		value: func() string { return tintDisplayName(m.ColorThemeID) },
+		buildForm: func() *huh.Form {
+			return huh.NewForm(huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Color Theme").
+					Description("Up/Down to browse \u2014 applied immediately as you scroll").
+					Options(buildThemeOptions(m.ThemeMode)...).
+					Height(14).
+					Value(&m.ColorThemeID),
+			).WithTheme(theme.HuhThemeFunc()))
+		},
+	},
+	)
+	addItem("Appearance", settingItem{
+		title: "Form Style",
+		value: func() string { return labelFor(m.StylePreset, styleOpts) },
+		buildForm: func() *huh.Form {
+			return huh.NewForm(huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Form Style").
+					Description("Border, prefix, and indicator style for forms — colors come from the Color Theme").
+					Options(styleOpts...).
+					Value(&m.StylePreset),
+			).WithTheme(theme.HuhThemeFunc()))
+		},
+	},
+	)
+	addItem("Appearance", settingItem{
+		title: "Accessibility Colors",
+		value: func() string {
+			if m.AccessibilityColors {
+				return "On"
+			}
+			return "Off"
+		},
+		buildForm: func() *huh.Form {
+			return huh.NewForm(huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Accessibility Colors").
+					Description("Apply accessibility adjustments to foreground colors app-wide").
+					Options(accessibilityOpts...).
+					Value(&m.accessibilityStr),
+			).WithTheme(theme.HuhThemeFunc()))
+		},
+	},
+	)
+	addItem("Notifications", settingItem{
+		title: "Bell Notifications",
+		value: func() string {
+			if m.NotificationsEnabled {
+				return "Enabled 🔔"
+			}
+			return "Disabled 🔕"
+		},
+		buildForm: func() *huh.Form {
+			notifOpts := []huh.Option[string]{
+				huh.NewOption("Enabled", "true"),
+				huh.NewOption("Disabled", "false"),
+			}
+			return huh.NewForm(huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Bell Notifications").
+					Description("Show toast pop-ups for info, warnings, and errors").
+					Options(notifOpts...).
+					Value(&m.notifEnabledStr),
+			).WithTheme(theme.HuhThemeFunc()))
+		},
+	},
+	)
+	addItem("Notifications", settingItem{
+		title: "Notification Persistence",
+		value: func() string {
+			if m.NotificationsPersist {
+				return "On"
+			}
+			return "Off"
+		},
+		buildForm: func() *huh.Form {
+			persistOpts := []huh.Option[string]{
+				huh.NewOption("Off (session only)", "false"),
+				huh.NewOption("On (saved to disk)", "true"),
+			}
+			return huh.NewForm(huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Notification Persistence").
+					Description("Store notifications in config dir across restarts").
+					Options(persistOpts...).
+					Value(&m.notifPersistStr),
+			).WithTheme(theme.HuhThemeFunc()))
+		},
+	},
+	)
 }
 
 // itemFromDef builds a settingItem from a config.FieldDef for extra sections.
-func (m *Model) itemFromDef(def config.FieldDef) settingItem {
+func (m *SettingsModel) itemFromDef(def config.FieldDef) settingItem {
 	return settingItem{
 		title:     def.Title,
 		leftTrunc: def.Kind == config.FieldFilePicker,
@@ -450,7 +535,7 @@ func (m *Model) itemFromDef(def config.FieldDef) settingItem {
 }
 
 // huhFieldFromDef creates a huh.Field from a config.FieldDef.
-func (m *Model) huhFieldFromDef(def config.FieldDef) huh.Field {
+func (m *SettingsModel) huhFieldFromDef(def config.FieldDef) huh.Field {
 	switch def.Kind {
 	case config.FieldSelect:
 		s := huh.NewSelect[string]().
@@ -487,43 +572,57 @@ func (m *Model) huhFieldFromDef(def config.FieldDef) huh.Field {
 
 // CapturesKeys returns true while an edit overlay is open so the router hands
 // all keystrokes directly to the form.
-func (m *Model) CapturesKeys() bool { return m.editing }
+func (m *SettingsModel) CapturesKeys() bool { return m.editOverlay.IsOpen() }
 
-func (m *Model) Init() tea.Cmd { return nil }
+// ShortHelp implements help.KeyMap for the status bar.
+func (m *SettingsModel) ShortHelp() []key.Binding {
+	if m == nil || m.keys == nil {
+		return nil
+	}
+	if m.editOverlay.IsOpen() {
+		return []key.Binding{m.keys.Dismiss, m.keys.Select}
+	}
+	return m.keys.ShortHelp()
+}
 
-func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+// FullHelp implements help.KeyMap for the status bar.
+func (m *SettingsModel) FullHelp() [][]key.Binding {
+	if m == nil || m.keys == nil {
+		return nil
+	}
+	if m.editOverlay.IsOpen() {
+		return [][]key.Binding{{m.keys.Dismiss, m.keys.Select}}
+	}
+	return m.keys.FullHelp()
+}
+
+func (m *SettingsModel) Init() tea.Cmd { return nil }
+
+func (m *SettingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if wMsg, ok := msg.(tea.WindowSizeMsg); ok {
 		m.width, m.height = wMsg.Width, wMsg.Height
-		// Resize the active overlay form immediately so the compositor never
-		// tries to paint a form that is wider than the terminal.
-		if m.editing && m.editForm != nil {
-			m.editForm.WithWidth(max(30, min(m.width-14, 120)))
-		}
+		m.editOverlay.OnResize(m.width, m.height)
 	}
 	if m.width == 0 {
 		return m, nil
 	}
-	if m.editing {
+	if m.editOverlay.IsOpen() {
 		return m.updateEditing(msg)
 	}
 	return m.updateOverview(msg)
 }
 
-func (m *Model) updateOverview(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *SettingsModel) updateOverview(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch keyMsg := msg.(type) {
 		case tea.KeyPressMsg:
 			switch {
 			case key.Matches(keyMsg, m.keys.Up):
-				if m.cursor > 0 {
-					m.cursor--
-				}
+				m.cursor = max(m.cursor-1, 0)
 				m.ensureCursorVisible()
 			case key.Matches(keyMsg, m.keys.Down):
-				if m.cursor < len(m.items)-1 {
-					m.cursor++
-				}
+				m.cursor = min(m.cursor+1, max(len(m.items)-1, 0))
 				m.ensureCursorVisible()
 			case key.Matches(keyMsg, m.keys.Select):
 				return m, m.startEdit()
@@ -531,20 +630,16 @@ func (m *Model) updateOverview(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.MouseWheelMsg:
 		if msg.Mouse().Button == tea.MouseWheelUp {
-			if m.cursor > 0 {
-				m.cursor--
-			}
+			m.cursor = max(m.cursor-1, 0)
 		} else {
-			if m.cursor < len(m.items)-1 {
-				m.cursor++
-			}
+			m.cursor = min(m.cursor+1, max(len(m.items)-1, 0))
 		}
 		m.ensureCursorVisible()
 	}
 	return m, nil
 }
 
-func (m *Model) startEdit() tea.Cmd {
+func (m *SettingsModel) startEdit() tea.Cmd {
 	if m.cursor < 0 || m.cursor >= len(m.items) {
 		return nil
 	}
@@ -553,33 +648,27 @@ func (m *Model) startEdit() tea.Cmd {
 	if f == nil {
 		return nil
 	}
-	// Use as much horizontal space as available so option labels don't wrap.
-	// The border+padding box around the form adds 6 cols (1+1 border, 2+2 pad),
-	// so leave at least a 4-col gutter on each side: form width = w-14.
-	// Cap at 120 and floor at 30 for narrow terminals.
-	formW := max(30, min(m.width-14, 120))
-	m.editForm = f.WithWidth(formW)
-	m.editing = true
-	return m.editForm.Init()
+	return m.editOverlay.Open(f, m.width, m.height)
 }
 
 // abortEdit reverts to the last persisted state and closes the overlay.
-func (m *Model) abortEdit() tea.Cmd {
+func (m *SettingsModel) abortEdit() tea.Cmd {
+	m.editOverlay.Close()
 	_ = m.LoadFromFile(settingsFilePath())
 	m.buildItems()
 	m.ThemeMode = theme.NormalizeMode(m.ThemeMode)
+	m.StylePreset = string(theme.NormalizePreset(m.StylePreset))
 	m.ColorThemeID = theme.ResolveTintIDForMode(m.ColorThemeID, m.ThemeMode)
 	id := m.ColorThemeID
 	mode := m.ThemeMode
+	style := m.StylePreset
 	accessibility := m.AccessibilityColors
-	m.editing = false
-	m.editForm = nil
 	return func() tea.Msg {
-		return ThemeMsg{ID: id, Mode: mode, Accessibility: accessibility, ApplyPreferences: true}
+		return ThemeMsg{ID: id, Mode: mode, Style: style, Accessibility: accessibility, ApplyPreferences: true}
 	}
 }
 
-func (m *Model) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Esc closes the overlay and reverts any unsaved/live-preview changes.
 	if km, ok := msg.(tea.KeyMsg); ok && key.Matches(km, m.keys.Dismiss) {
 		return m, m.abortEdit()
@@ -587,11 +676,12 @@ func (m *Model) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	prevTheme := m.ColorThemeID
 	prevThemeMode := m.ThemeMode
+	prevStyle := m.StylePreset
 	prevAccessibility := m.AccessibilityColors
 	prevLevel := m.LogLevel
 	prevNav := m.NavStyle
 
-	_, cmd := m.editForm.Update(msg)
+	state, cmd := m.editOverlay.Update(msg)
 	var cmds []tea.Cmd
 	if cmd != nil {
 		cmds = append(cmds, cmd)
@@ -599,15 +689,17 @@ func (m *Model) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	m.AccessibilityColors = m.accessibilityStr == "true"
 	m.ThemeMode = theme.NormalizeMode(m.ThemeMode)
+	m.StylePreset = string(theme.NormalizePreset(m.StylePreset))
 	m.ColorThemeID = theme.ResolveTintIDForMode(m.ColorThemeID, m.ThemeMode)
 
 	// Live theme preview: fires while editing theme-related options.
-	if m.ColorThemeID != prevTheme || m.ThemeMode != prevThemeMode || m.AccessibilityColors != prevAccessibility {
+	if m.ColorThemeID != prevTheme || m.ThemeMode != prevThemeMode || m.StylePreset != prevStyle || m.AccessibilityColors != prevAccessibility {
 		id := m.ColorThemeID
 		mode := m.ThemeMode
+		style := m.StylePreset
 		accessibility := m.AccessibilityColors
 		cmds = append(cmds, func() tea.Msg {
-			return ThemeMsg{ID: id, Mode: mode, Accessibility: accessibility, ApplyPreferences: true}
+			return ThemeMsg{ID: id, Mode: mode, Style: style, Accessibility: accessibility, ApplyPreferences: true}
 		})
 	}
 	if m.LogLevel != prevLevel {
@@ -618,7 +710,7 @@ func (m *Model) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, func() tea.Msg { return NavStyleMsg{Style: nav} })
 	}
 
-	switch m.editForm.State {
+	switch state {
 	case huh.StateCompleted:
 		if m.editIndex >= 0 && m.editIndex < len(m.items) {
 			if apply := m.items[m.editIndex].apply; apply != nil {
@@ -650,8 +742,7 @@ func (m *Model) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 			logging.Errorf("Settings: failed to initialise logging: %v", err)
 		}
 		_ = logging.SetLevel(m.LogLevel)
-		m.editing = false
-		m.editForm = nil
+		m.editOverlay.Close()
 
 	case huh.StateAborted:
 		// huh's own abort key (ctrl+c inside the form) — same revert path.
@@ -661,33 +752,10 @@ func (m *Model) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m *Model) View() tea.View {
+func (m *SettingsModel) View() tea.View {
 	c := m.resolveColors()
 	overview := m.renderOverview()
-
-	var content string
-	if m.editing && m.editForm != nil {
-		// Wrap the form in a rounded border box and composite it centred over
-		// the overview using the lipgloss layer compositor.
-		formBox := c.Styles.OverlayBorder.
-			Border(lipgloss.RoundedBorder()).
-			Padding(1, 2).
-			Render(m.editForm.View())
-
-		overlayW, overlayH := lipgloss.Size(formBox)
-		overlayX := max(0, (m.width-overlayW)/2)
-		overlayY := max(0, (m.height-overlayH)/2)
-
-		// Cache geometry so OnMouse can hit-test clicks against the overlay.
-		m.overlayX, m.overlayY = overlayX, overlayY
-		m.overlayW, m.overlayH = overlayW, overlayH
-
-		base := lipgloss.NewLayer(overview)
-		overlay := lipgloss.NewLayer(formBox).X(overlayX).Y(overlayY).Z(1)
-		content = lipgloss.NewCompositor(base, overlay).Render()
-	} else {
-		content = overview
-	}
+	content := m.editOverlay.Composite(overview, c.Styles.OverlayBorder)
 
 	v := tea.NewView(content)
 	v.BackgroundColor = c.Styles.TextOnBg.GetBackground()
@@ -703,18 +771,40 @@ func (m *Model) View() tea.View {
 		if !ok {
 			return nil
 		}
-		if m.editing {
+		if m.editOverlay.IsOpen() {
 			// Click outside the overlay aborts and returns to overview.
-			inside := click.X >= m.overlayX && click.X < m.overlayX+m.overlayW &&
-				click.Y >= m.overlayY && click.Y < m.overlayY+m.overlayH
-			if !inside {
+			if m.editOverlay.IsOutsideClick(click.X, click.Y) {
 				return m.abortEdit()
 			}
 			return nil
 		}
-		idx := m.scrollTop + click.Y - headerLines
-		if idx >= 0 && idx < len(m.items) {
-			m.cursor = idx
+		layout := m.overviewLayout()
+		if click.Y < layout.listTopY || click.Y >= layout.listTopY+layout.rowsPerCol {
+			return nil
+		}
+		relY := click.Y - layout.listTopY
+		cellW := layout.colWidth + layout.gap
+		if cellW <= 0 {
+			return nil
+		}
+		col := click.X / cellW
+		if col < 0 || col >= layout.columns {
+			return nil
+		}
+		if (click.X % cellW) >= layout.colWidth {
+			return nil
+		}
+		visibleIdx := col*layout.rowsPerCol + relY
+		entryIdx := m.scrollTop + visibleIdx
+		if entryIdx < 0 || entryIdx >= len(layout.entries) {
+			return nil
+		}
+		entry := layout.entries[entryIdx]
+		if entry.isHeader {
+			return nil
+		}
+		m.cursor = entry.itemIndex
+		if m.cursor >= 0 && m.cursor < len(m.items) {
 			m.ensureCursorVisible()
 			return m.startEdit()
 		}
@@ -725,106 +815,189 @@ func (m *Model) View() tea.View {
 }
 
 // renderOverview renders the compact one-line-per-setting list.
-func (m *Model) renderOverview() string {
+func (m *SettingsModel) renderOverview() string {
 	c := m.resolveColors()
+	layout := m.overviewLayout()
 
-	// Padding(1,2) consumes 2+2 cols of total width.
-	innerW := max(m.width-4, 20)
-	labelW := min(28, innerW/2)
-	// 3 = 2 cols for cursor prefix "▶ "/"  " + 1 col separator between label and value.
-	valueW := max(innerW-labelW-3, 1)
+	labelW := min(24, max(12, layout.colWidth/2))
+	valueW := max(layout.colWidth-labelW-3, 1)
 
 	normalLabel := c.Styles.TextOnBg.Width(labelW)
 	normalValue := c.Styles.Subtitle.Width(valueW)
 	cursorLabel := c.Styles.Title.Width(labelW)
 	cursorValue := c.Styles.TextOnBg.Width(valueW)
-	cursorBg := c.Styles.Row.Background(c.Styles.TabHover.GetBackground()).Width(innerW)
+	cursorBg := c.Styles.Row.Background(c.Styles.TabHover.GetBackground()).Width(layout.colWidth)
+	headerStyle := c.Styles.Subtitle.Bold(true).Width(layout.colWidth)
+	emptyRow := lipgloss.NewStyle().Width(layout.colWidth).Render("")
 	titleStyle := c.Styles.Title
-	helpStyle := c.Styles.Dim
 
-	lines := make([]string, 0, 3+len(m.items)+2)
+	lines := make([]string, 0, 4)
 	lines = append(lines, titleStyle.Render("Settings"))
 	lines = append(lines, "") // blank separator — part of headerLines
 
 	m.ensureCursorVisible()
-	start, end := m.visibleItemRange()
-	for i := start; i < end; i++ {
-		item := m.items[i]
-		lbl := truncate(item.title, labelW)
-		var val string
-		if item.leftTrunc {
-			val = truncateLeft(item.value(), valueW)
-		} else {
-			val = truncate(item.value(), valueW)
+	layout = m.overviewLayout()
+	visible := layout.visibleEntries(m.scrollTop)
+	cols := make([]string, 0, layout.columns)
+	for col := 0; col < layout.columns; col++ {
+		colLines := make([]string, 0, layout.rowsPerCol)
+		for row := 0; row < layout.rowsPerCol; row++ {
+			i := col*layout.rowsPerCol + row
+			if i >= len(visible) {
+				colLines = append(colLines, emptyRow)
+				continue
+			}
+			entry := visible[i]
+			if entry.isHeader {
+				colLines = append(colLines, headerStyle.Render(entry.header))
+				continue
+			}
+			item := m.items[entry.itemIndex]
+			lbl := truncate(item.title, labelW)
+			var val string
+			if item.leftTrunc {
+				val = truncateLeft(item.value(), valueW)
+			} else {
+				val = truncate(item.value(), valueW)
+			}
+			if entry.itemIndex == m.cursor {
+				rowText := "▶ " + cursorLabel.Render(lbl) + " " + cursorValue.Render(val)
+				colLines = append(colLines, cursorBg.Render(rowText))
+				continue
+			}
+			colLines = append(colLines, "  "+normalLabel.Render(lbl)+" "+normalValue.Render(val))
 		}
-		if i == m.cursor {
-			row := "▶ " + cursorLabel.Render(lbl) + " " + cursorValue.Render(val)
-			lines = append(lines, cursorBg.Render(row))
+		cols = append(cols, lipgloss.JoinVertical(lipgloss.Top, colLines...))
+	}
+	if len(cols) > 0 {
+		if layout.gap > 0 && len(cols) > 1 {
+			withGap := make([]string, 0, len(cols)*2-1)
+			gapBlock := lipgloss.NewStyle().Width(layout.gap).Render("")
+			for i, col := range cols {
+				if i > 0 {
+					withGap = append(withGap, gapBlock)
+				}
+				withGap = append(withGap, col)
+			}
+			lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Top, withGap...))
 		} else {
-			lines = append(lines, "  "+normalLabel.Render(lbl)+" "+normalValue.Render(val))
+			lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Top, cols...))
 		}
 	}
-
-	lines = append(lines, "")
-	lines = append(lines, helpStyle.Render("\u2191\u2193 navigate  enter edit"))
 
 	return c.Styles.TextOnBg.
 		Width(m.width).
 		Height(m.height).
-		Padding(1, 2).
-		Render(strings.Join(lines, "\n"))
+		Padding(1, 0).
+		Render(lipgloss.JoinVertical(lipgloss.Top, lines...))
 }
 
-func (m *Model) visibleItemRange() (int, int) {
-	innerH := max(m.height-2, 1) // account for top/bottom padding in renderOverview style
-	viewHeight := max(innerH-headerLines-footerLines, 1)
-	start := m.scrollTop
-	if start < 0 {
-		start = 0
-	}
-	if start > len(m.items) {
-		start = len(m.items)
-	}
-	end := start + viewHeight
-	if end > len(m.items) {
-		end = len(m.items)
-	}
-	return start, end
-}
-
-func (m *Model) ensureCursorVisible() {
+func (m *SettingsModel) ensureCursorVisible() {
 	if len(m.items) == 0 {
 		m.cursor = 0
 		m.scrollTop = 0
 		return
 	}
-	if m.cursor < 0 {
-		m.cursor = 0
+	m.cursor = max(m.cursor, 0)
+	m.cursor = min(m.cursor, len(m.items)-1)
+	layout := m.overviewLayout()
+	if layout.visibleCount <= 0 {
+		m.scrollTop = 0
+		return
 	}
-	if m.cursor >= len(m.items) {
-		m.cursor = len(m.items) - 1
+	cursorEntry := layout.cursorEntry
+	m.scrollTop = max(m.scrollTop, 0)
+	maxStart := max(len(layout.entries)-layout.visibleCount, 0)
+	m.scrollTop = min(cursorEntry, min(m.scrollTop, maxStart))
+	if cursorEntry >= m.scrollTop+layout.visibleCount {
+		m.scrollTop = cursorEntry - layout.visibleCount + 1
 	}
+	m.scrollTop = max(m.scrollTop, 0)
+	m.scrollTop = min(m.scrollTop, maxStart)
+}
+
+func (m *SettingsModel) overviewLayout() overviewLayout {
+	entries := m.flattenedOverviewEntries()
+	cursorEntry := 0
+	for i, e := range entries {
+		if !e.isHeader && e.itemIndex == m.cursor {
+			cursorEntry = i
+			break
+		}
+	}
+
+	innerW := max(m.width-4, 20)
 	innerH := max(m.height-2, 1)
-	viewHeight := max(innerH-headerLines-footerLines, 1)
-	if m.scrollTop < 0 {
-		m.scrollTop = 0
+	listTopY := 3 // top padding + title + blank separator
+	listHeight := max(innerH-2, 1)
+
+	gap := 2
+	colPref := m.preferredColumnWidth()
+	columns := 1
+	maxCols := min(3, len(entries))
+	for c := 2; c <= maxCols; c++ {
+		needed := c*colPref + (c-1)*gap
+		if needed <= innerW {
+			columns = c
+		}
 	}
-	maxStart := max(len(m.items)-viewHeight, 0)
-	if m.scrollTop > maxStart {
-		m.scrollTop = maxStart
+	colWidth := max((innerW-(columns-1)*gap)/columns, 20)
+	visibleCount := max(listHeight*columns, 1)
+
+	return overviewLayout{
+		entries:      entries,
+		columns:      columns,
+		rowsPerCol:   listHeight,
+		gap:          gap,
+		colWidth:     colWidth,
+		listTopY:     listTopY,
+		cursorEntry:  cursorEntry,
+		visibleCount: visibleCount,
 	}
-	if m.cursor < m.scrollTop {
-		m.scrollTop = m.cursor
+}
+
+func (l overviewLayout) visibleEntries(scrollTop int) []overviewEntry {
+	if len(l.entries) == 0 {
+		return nil
 	}
-	if m.cursor >= m.scrollTop+viewHeight {
-		m.scrollTop = m.cursor - viewHeight + 1
+	start := min(max(scrollTop, 0), len(l.entries))
+	end := min(start+l.visibleCount, len(l.entries))
+	if start >= end {
+		return nil
 	}
-	if m.scrollTop < 0 {
-		m.scrollTop = 0
+	return l.entries[start:end]
+}
+
+func (m *SettingsModel) flattenedOverviewEntries() []overviewEntry {
+	if len(m.categories) == 0 {
+		return nil
 	}
-	if m.scrollTop > maxStart {
-		m.scrollTop = maxStart
+	entries := make([]overviewEntry, 0, len(m.items)+len(m.categories))
+	for _, cat := range m.categories {
+		if len(cat.itemIdxSet) == 0 {
+			continue
+		}
+		entries = append(entries, overviewEntry{header: cat.title, isHeader: true})
+		for _, idx := range cat.itemIdxSet {
+			entries = append(entries, overviewEntry{itemIndex: idx})
+		}
 	}
+	return entries
+}
+
+func (m *SettingsModel) preferredColumnWidth() int {
+	maxLabel := 0
+	maxValue := 0
+	for _, item := range m.items {
+		maxLabel = max(maxLabel, lipgloss.Width(item.title))
+		if item.title == "Log Path" {
+			continue
+		}
+		maxValue = max(maxValue, lipgloss.Width(item.value()))
+	}
+	labelW := min(max(maxLabel, 12), 28)
+	valueW := min(max(maxValue, 12), 40)
+	return labelW + valueW + 3 // cursor prefix + separator
 }
 
 // SettingsSavedMsg is emitted after an async settings save completes. Err is
@@ -838,7 +1011,7 @@ type SettingsSavedMsg struct {
 // saveCmd returns a tea.Cmd that persists the current settings to disk off the
 // UID goroutine. It snapshots the JSON synchronously (cheap, and guarantees a
 // consistent view) and performs only the file write in the background.
-func (m *Model) saveCmd() tea.Cmd {
+func (m *SettingsModel) saveCmd() tea.Cmd {
 	path := settingsFilePath()
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
@@ -858,7 +1031,7 @@ func (m *Model) saveCmd() tea.Cmd {
 // SaveToFile writes settings to the given filename as JSON, synchronously.
 // Prefer the async path (saveCmd) inside Update; this remains for callers that
 // need a blocking save (tests, explicit export).
-func (m *Model) SaveToFile(filename string) error {
+func (m *SettingsModel) SaveToFile(filename string) error {
 	if dir := filepath.Dir(filename); dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
@@ -875,7 +1048,7 @@ func (m *Model) SaveToFile(filename string) error {
 }
 
 // LoadFromFile loads settings from the given filename if it exists.
-func (m *Model) LoadFromFile(filename string) error {
+func (m *SettingsModel) LoadFromFile(filename string) error {
 	b, err := os.ReadFile(filename)
 	if err != nil {
 		return err

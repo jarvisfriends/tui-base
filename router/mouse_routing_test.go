@@ -3,7 +3,7 @@ package router
 import (
 	"testing"
 
-	"github.com/jarvisfriends/tui-base/pages/debug"
+	"github.com/jarvisfriends/tui-base/pages/inspector"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -74,7 +74,7 @@ func TestMouseRoutingBoundaries(t *testing.T) {
 	found := false
 	for _, m := range msgs {
 		switch mm := m.(type) {
-		case debug.MouseHighlightMsg:
+		case inspector.MouseHighlightMsg:
 			found = true
 			if mm.Child != "content" {
 				t.Fatalf("expected child=content, got=%s", mm.Child)
@@ -100,9 +100,9 @@ func TestMouseRoutingBoundaries(t *testing.T) {
 	found = false
 	for _, m := range msgs {
 		switch mm := m.(type) {
-		case debug.MouseHighlightMsg:
+		case inspector.MouseHighlightMsg:
 			found = true
-			if mm.Child != "content" {
+		if mm.Child != "content" {
 				t.Fatalf("expected child=content, got=%s", mm.Child)
 			}
 			if mm.OffX != navWidth || mm.OffY != 3 {
@@ -121,7 +121,7 @@ func TestMouseRoutingBoundaries(t *testing.T) {
 	found = false
 	for _, m := range msgs {
 		switch mm := m.(type) {
-		case debug.MouseHighlightMsg:
+		case inspector.MouseHighlightMsg:
 			found = true
 			if mm.Child != "status" {
 				t.Fatalf("expected child=status, got=%s", mm.Child)

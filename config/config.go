@@ -11,7 +11,11 @@
 //     through every field in every section with no custom pane-switch code.
 package config
 
-import huh "charm.land/huh/v2"
+import (
+	"fmt"
+
+	huh "charm.land/huh/v2"
+)
 
 // FieldKind selects the huh widget type for a configurable field.
 type FieldKind int
@@ -76,4 +80,83 @@ type Section struct {
 // settings.New so they appear after the built-in sections.
 type Configurable interface {
 	ConfigSection() Section
+}
+
+// ── Field constructor helpers ─────────────────────────────────────────────
+//
+// These reduce the per-field boilerplate in consumer apps. Each function
+// returns a FieldDef pre-configured for the most common patterns.
+
+// BoolField returns a FieldSelect FieldDef with Enabled/Disabled options bound
+// to a *string field that holds "true" or "false". The apply callback is called
+// when the user submits the form; pass nil to skip the callback.
+func BoolField(key, title, description string, value *string, apply func(string) error) FieldDef {
+	return FieldDef{
+		Key:         key,
+		Title:       title,
+		Description: description,
+		Kind:        FieldSelect,
+		Options: []huh.Option[string]{
+			huh.NewOption("Enabled", "true"),
+			huh.NewOption("Disabled", "false"),
+		},
+		Value: value,
+		Validate: func(v string) error {
+			if v == "true" || v == "false" {
+				return nil
+			}
+			return fmt.Errorf("value must be true or false")
+		},
+		Apply: apply,
+	}
+}
+
+// YesNoField is like BoolField but shows "Yes" / "No" instead of
+// "Enabled" / "Disabled".
+func YesNoField(key, title, description string, value *string, apply func(string) error) FieldDef {
+	return FieldDef{
+		Key:         key,
+		Title:       title,
+		Description: description,
+		Kind:        FieldSelect,
+		Options: []huh.Option[string]{
+			huh.NewOption("Yes", "true"),
+			huh.NewOption("No", "false"),
+		},
+		Value: value,
+		Validate: func(v string) error {
+			if v == "true" || v == "false" {
+				return nil
+			}
+			return fmt.Errorf("value must be Yes or No")
+		},
+		Apply: apply,
+	}
+}
+
+// EnumField returns a FieldSelect FieldDef with arbitrary label/value pairs.
+func EnumField(key, title, description string, options []huh.Option[string], value *string, apply func(string) error) FieldDef {
+	return FieldDef{
+		Key:         key,
+		Title:       title,
+		Description: description,
+		Kind:        FieldSelect,
+		Options:     options,
+		Value:       value,
+		Apply:       apply,
+	}
+}
+
+// TextField returns a FieldText FieldDef bound to a *string field with an
+// optional validation function.
+func TextField(key, title, description string, value *string, validate func(string) error, apply func(string) error) FieldDef {
+	return FieldDef{
+		Key:         key,
+		Title:       title,
+		Description: description,
+		Kind:        FieldText,
+		Value:       value,
+		Validate:    validate,
+		Apply:       apply,
+	}
 }

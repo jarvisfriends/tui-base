@@ -1,66 +1,80 @@
 package home
 
 import (
-	"github.com/jarvisfriends/tui-base/theme"
+	"github.com/jarvisfriends/tui-base/page"
 
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
 
-type Model struct {
-	width  int
-	height int
-	colors *theme.AppStyle
+const welcomeText = "Welcome to the V2 Terminal Hub\n\nUse Tab to switch pages.\nCtrl+B to toggle sidebar.\nCtrl+H to toggle full help."
+
+type HomePageModel struct {
+	page.Base
+
+	// vp scrolls the welcome content. On a normal terminal the content fits and
+	// the viewport is a no-op; on a very small terminal it scrolls (mouse wheel
+	// and up/down/PgUp/PgDn) instead of clipping.
+	vp viewport.Model
+	// lastContent guards SetContent so we only reset the viewport (and its scroll
+	// position) when the rendered content actually changes — not every frame.
+	lastContent string
 }
 
-// SetColors stores a shared AppColors pointer so the router can update the
-// theme in one place and this model sees the change immediately.
-func (m *Model) SetColors(c *theme.AppStyle) { m.colors = c }
+func New() *HomePageModel {
+	return &HomePageModel{vp: viewport.New()}
+}
 
-// resolveColors returns the current palette from the shared pointer, falling
-// back to theme.Active() when no pointer has been set (e.g. in tests).
-func (m *Model) resolveColors() *theme.AppStyle {
-	if m.colors != nil {
-		return m.colors
+func (m *HomePageModel) Init() tea.Cmd { return nil }
+
+func (m *HomePageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if ws, ok := msg.(tea.WindowSizeMsg); ok {
+		m.SetSize(ws.Width, ws.Height)
+		m.vp.SetWidth(ws.Width)
+		m.vp.SetHeight(ws.Height)
+		m.syncContent()
+		return m, nil
 	}
-	return theme.Active()
+	// Forward everything else (keys, mouse wheel) to the viewport so it scrolls.
+	var cmd tea.Cmd
+	m.vp, cmd = m.vp.Update(msg)
+	return m, cmd
 }
 
-func New() *Model {
-	return &Model{}
-}
-
-func (m *Model) Init() tea.Cmd {
-	return nil
-}
-
-func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.WindowSizeMsg); ok {
-		m.width = msg.Width
-		m.height = msg.Height
-	}
-	return m, nil
-}
-
-func (m *Model) View() tea.View {
-	c := m.resolveColors()
-	bg := c.Styles.TextOnBg.GetBackground()
-
-	// Clamp box width to terminal: border uses 2 + padding uses 4 = 6 cols overhead.
-	// Ensure inner content gets at least 1 column even at very narrow widths.
-	availW := max(m.width, 10)
-	style := c.Styles.Success.
+// content renders the centered welcome box, padded to at least the viewport
+// height so it stays vertically centered when it fits and scrolls when it does not.
+func (m *HomePageModel) content() string {
+	c := m.Colors()
+	availW := max(m.Width(), 10)
+	box := c.Styles.Success.
 		Bold(true).
 		Padding(1, 2).
 		Border(lipgloss.RoundedBorder()).
-		MaxWidth(availW)
+		MaxWidth(availW).
+		Render(welcomeText)
 
-	content := "Welcome to the V2 Terminal Hub\n\nUse Tab to switch pages.\nCtrl+B to toggle sidebar.\nCtrl+H to toggle full help."
-	box := style.Render(content)
+	h := max(m.Height(), lipgloss.Height(box))
+	fill := lipgloss.NewStyle().Background(c.Styles.TextOnBg.GetBackground())
+	return lipgloss.Place(m.Width(), h, lipgloss.Center, lipgloss.Center, box,
+		lipgloss.WithWhitespaceStyle(fill))
+}
 
-	placed := lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
-	v := tea.NewView(placed)
-	v.BackgroundColor = bg
+// syncContent updates the viewport content only when it has changed, preserving
+// the scroll position across unrelated re-renders (e.g. live theme ticks).
+func (m *HomePageModel) syncContent() {
+	s := m.content()
+	if s != m.lastContent {
+		m.vp.SetContent(s)
+		m.lastContent = s
+	}
+}
+
+func (m *HomePageModel) View() tea.View {
+	c := m.Colors()
+	m.syncContent()
+	v := tea.NewView(m.vp.View())
+	v.BackgroundColor = c.Styles.TextOnBg.GetBackground()
 	v.ForegroundColor = c.Styles.TextOnBg.GetForeground()
 	v.AltScreen = true
 	return v

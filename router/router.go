@@ -14,8 +14,8 @@ import (
 	log "github.com/jarvisfriends/tui-base/logging"
 	"github.com/jarvisfriends/tui-base/navigation"
 	"github.com/jarvisfriends/tui-base/notifications"
-	"github.com/jarvisfriends/tui-base/pages/debug"
 	"github.com/jarvisfriends/tui-base/pages/home"
+	"github.com/jarvisfriends/tui-base/pages/inspector"
 	"github.com/jarvisfriends/tui-base/pages/settings"
 	"github.com/jarvisfriends/tui-base/status"
 	"github.com/jarvisfriends/tui-base/theme"
@@ -106,18 +106,18 @@ type RouterModel struct {
 	// appEnvPrefix is the SCREAMING_SNAKE_CASE env-var prefix derived from the
 	// app name (e.g. "TUI Base" → "TUI_BASE"). Used to derive env var names
 	// so consumer apps get branded env vars instead of the framework defaults.
-	appEnvPrefix        string
-	colorProfileEnvVar  string
-	debugEnvVar         string
+	appEnvPrefix       string
+	colorProfileEnvVar string
+	debugEnvVar        string
 
 	pages []tea.Model
 
 	// inspector is a dedicated debug model that receives all messages for
 	// logging/stats and is rendered as an overlay (Ctrl+D).
-	inspector *debug.Model
+	inspector *inspector.InspectorModel
 	// settingsPage is kept as a stable pointer so app-page replacement can
 	// preserve the settings model and its internal state.
-	settingsPage *settings.Model
+	settingsPage *settings.SettingsModel
 	// homePage is used when no app pages are supplied.
 	homePage tea.Model
 
@@ -127,14 +127,11 @@ type RouterModel struct {
 	// infoModal is the centered full-screen dependency/version info overlay.
 	infoModal *status.InfoModal
 
-	// historyOverlayBounds caches [x, y, w, h] of the last-rendered notification
-	// history panel so the OnMouse handler can detect outside clicks without
-	// re-parsing ANSI output.
-	historyOverlayBounds [4]int
-
-	// inspectorOverlayBounds caches [x, y, w, h] of the last-rendered
-	// inspector overlay for hit-testing in OnMouse.
-	inspectorOverlayBounds [4]int
+	// overlays is the Z-ordered stack of floating overlays (toast, notification
+	// history, inspector, info modal). The router drives them through generic
+	// loops in View/Update/OnMouse rather than a hardcoded block per overlay.
+	// Stored ascending by Z; iterate in reverse for top-down input priority.
+	overlays []Overlay
 
 	// colors is a shared AppColors pointer. All child components hold this
 	// pointer so updating *colors here propagates immediately on the next render.
@@ -210,7 +207,7 @@ func NewWithOptions(opts Options) *RouterModel {
 			log.Warnf("could not write initial settings file: %v", err)
 		}
 	}
-	theme.SetThemePreferences(settingsModel.ThemeMode, settingsModel.AccessibilityColors)
+	theme.SetThemePreferences(settingsModel.ThemeMode, settingsModel.AccessibilityColors, theme.StylePreset(settingsModel.StylePreset))
 	settingsModel.ColorThemeID = theme.ResolveTintIDForMode(settingsModel.ColorThemeID, settingsModel.ThemeMode)
 	if settingsModel.ColorThemeID != "" {
 		tint.SetTintID(settingsModel.ColorThemeID) //nolint:errcheck
@@ -265,7 +262,7 @@ func NewWithOptions(opts Options) *RouterModel {
 	}
 	// create a single inspector instance and keep a pointer to it so we can
 	// forward messages to it even when it's not the active page.
-	m.inspector = debug.New()
+	m.inspector = inspector.New()
 
 	// Derive env-var names from the app name so consumers get branded vars
 	// (e.g. "My App" → MY_APP_COLOR_PROFILE, MY_APP_DEBUG) instead of the
@@ -312,14 +309,19 @@ func NewWithOptions(opts Options) *RouterModel {
 	if opts.AppVersion != "" {
 		m.infoModal.SetVersion(opts.AppVersion)
 	}
+	m.buildOverlays()
+	// Surface the inspector's compact runtime summary in the status bar's right
+	// segment, but only while the inspector overlay is closed (when open, the
+	// full inspector is already on screen). Evaluated on every status render.
+	m.status.SetSummaryProvider(func() string {
+		if m.inspector != nil && !m.inspector.IsVisible() {
+			return m.inspector.StatusLineSummary()
+		}
+		return ""
+	})
 	m.applyColors()
 	m.updatePageKeys()
 	return m
-}
-
-// ColorAware is implemented by any component that accepts a shared color palette pointer.
-type ColorAware interface {
-	SetColors(c *theme.AppStyle)
 }
 
 // updatePageKeys checks whether the active page implements navigation.PageKeyProvider
@@ -340,25 +342,25 @@ func (m *RouterModel) updatePageKeys() {
 }
 
 // applyColors distributes the router's shared colors pointer to all child
-// components that implement colorAware. Call this after construction and
+// components that implement theme.ColorAware. Call this after construction and
 // whenever the nav component is replaced.
 func (m *RouterModel) applyColors() {
 	if m.nav != nil {
-		if ca, ok := m.nav.(ColorAware); ok {
+		if ca, ok := m.nav.(theme.ColorAware); ok {
 			ca.SetColors(m.colors)
 		}
 	}
 	for _, p := range m.pages {
-		if ca, ok := p.(ColorAware); ok {
+		if ca, ok := p.(theme.ColorAware); ok {
 			ca.SetColors(m.colors)
 		}
 	}
 	if m.inspector != nil {
-		if ca, ok := any(m.inspector).(ColorAware); ok {
+		if ca, ok := any(m.inspector).(theme.ColorAware); ok {
 			ca.SetColors(m.colors)
 		}
 	}
-	if ca, ok := any(m.status).(ColorAware); ok {
+	if ca, ok := any(m.status).(theme.ColorAware); ok {
 		ca.SetColors(m.colors)
 	}
 }
@@ -463,7 +465,14 @@ func (m *RouterModel) Init() tea.Cmd {
 func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Forward to active components
 	var cmds []tea.Cmd
-	if m.inspector != nil {
+	// The inspector receives non-key messages for its message log and runtime
+	// stats even when closed. Key messages are NOT forwarded here: when the
+	// inspector overlay is open the overlay key handler (overlayHandleKey) routes
+	// keys to it explicitly, and when it is closed it must not act on its own
+	// keybindings (e.g. test-toast keys) at all. Forwarding keys here would both
+	// double-dispatch while open and fire inspector shortcuts while closed.
+	_, isKeyMsg := msg.(tea.KeyMsg)
+	if m.inspector != nil && !isKeyMsg {
 		_, cmd := m.inspector.Update(msg)
 		if cmd != nil {
 			cmds = append(cmds, cmd)
@@ -522,7 +531,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.nav.SetActiveIndex(0)
 			}
 			// Wire the shared colors pointer to the new nav component.
-			if ca, ok := m.nav.(ColorAware); ok {
+			if ca, ok := m.nav.(theme.ColorAware); ok {
 				ca.SetColors(m.colors)
 			}
 		}
@@ -557,7 +566,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the detected background, color profile, and dark/light result.
 		if m.inspector != nil {
 			prof := colorprofile.Detect(os.Stdout, os.Environ())
-			diagMsg := debug.TermDiagMsg{
+			diagMsg := inspector.TermDiagMsg{
 				DetectedBg: msg.Color,
 				BgIsDark:   msg.IsDark(),
 				Profile:    prof,
@@ -569,7 +578,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		prefs := theme.ThemePreferencesSnapshot()
 		if prefs.Mode != mode {
-			theme.SetThemePreferences(mode, prefs.Accessibility)
+			theme.SetThemePreferences(mode, prefs.Accessibility, prefs.Style)
 			resolvedID := theme.ResolveTintIDForMode("", mode)
 			tint.SetTintID(resolvedID) //nolint:errcheck
 			newColors := theme.Active()
@@ -589,11 +598,11 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Apply the selected tint globally and refresh the shared colors pointer.
 		// All child components hold *m.colors so they see the new palette on the
 		// next render without any additional wiring.
-		if os.Getenv(m.debugEnvVar) == "1" {
+		if m.debugEnabled() {
 			log.Debugf("Router.Update: received ThemeMsg id=%s router size=%dx%d", msg.ID, m.width, m.height)
 		}
 		if msg.ApplyPreferences {
-			theme.SetThemePreferences(msg.Mode, msg.Accessibility)
+			theme.SetThemePreferences(msg.Mode, msg.Accessibility, theme.StylePreset(msg.Style))
 		}
 		resolvedID := msg.ID
 		if msg.ApplyPreferences {
@@ -607,7 +616,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			*m.colors = *newColors
 		}
 		m.applyColors()
-		if os.Getenv(m.debugEnvVar) == "1" {
+		if m.debugEnabled() {
 			log.Debugf("Router.Update: applied theme id=%s", msg.ID)
 		}
 		// Force a resize pass so children receive the correct content dimensions
@@ -618,67 +627,11 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch keyMsg := msg.(type) {
 		case tea.KeyPressMsg:
-			// Inspector overlay intercepts keys when open.
-			if m.inspector.IsVisible() {
-				switch {
-				case key.Matches(keyMsg, m.keys.Debug), key.Matches(keyMsg, m.keys.Dismiss):
-					m.inspector.ToggleVisible()
-					m.inspectorOverlayBounds = [4]int{}
-					return m, m.handleResizeCmd()
-				default:
-					if m.inspector != nil {
-						_, cmd := m.inspector.Update(msg)
-						return m, tea.Batch(cmd, m.handleResizeCmd())
-					}
-					return m, nil
-				}
-			}
-
-			// Info modal intercepts all keys when open.
-			if m.infoModal.IsVisible() {
-				if _, cmd := m.infoModal.Update(msg); cmd != nil {
-					return m, cmd
-				}
-				return m, m.handleResizeCmd() // consume all other keys
-			}
-
-			// Notification history panel intercepts all keys when open.
-			if m.status.IsHistoryVisible() {
-				notifCount := 0
-				if m.notifMgr != nil {
-					notifCount = len(m.notifMgr.Active())
-				}
-				switch {
-				case key.Matches(keyMsg, m.keys.Quit):
-					m.status.CloseHistory()
-					return m, m.handleResizeCmd()
-				case key.Matches(keyMsg, m.keys.Up):
-					m.status.NotifHistoryCursorUp()
-					return m, m.handleResizeCmd()
-				case key.Matches(keyMsg, m.keys.Down):
-					m.status.NotifHistoryCursorDown(notifCount)
-					return m, m.handleResizeCmd()
-				case key.Matches(keyMsg, m.keys.Select):
-					cursor := m.status.HistoryCursor()
-					if m.notifMgr != nil {
-						active := m.notifMgr.Active()
-						if cursor >= 0 && cursor < len(active) {
-							m.notifMgr.Dismiss(active[cursor].ID)
-						}
-					}
-					return m, m.handleResizeCmd()
-				case key.Matches(keyMsg, m.keys.DismissAll):
-					if m.notifMgr != nil {
-						m.notifMgr.DismissAll(nil)
-					}
-					return m, m.handleResizeCmd()
-				case key.Matches(keyMsg, m.keys.Dismiss):
-					if m.notifMgr != nil {
-						m.notifMgr.DismissAll(nil)
-					}
-					return m, m.handleResizeCmd()
-				}
-				return m, nil // consume all other keys
+			// A visible modal overlay (inspector, info modal, history panel)
+			// intercepts all keys. The topmost visible KeyConsumer wins; passive
+			// overlays (the toast) are not KeyConsumers and never block keys.
+			if cmd, ok := m.overlayHandleKey(keyMsg); ok {
+				return m, cmd
 			}
 
 			// Layout-toggle shortcuts are always active, even when a form has focus.
@@ -692,16 +645,12 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else if !m.sidebarFocused {
 					// Visible, unfocused → focus it so keyboard can navigate.
 					m.sidebarFocused = true
-					if sb, ok := m.nav.(*navigation.Sidebar); ok {
-						sb.SetFocused(true)
-					}
+					m.setNavFocused(true)
 				} else {
 					// Visible and focused → hide it and drop focus.
 					m.navigationVisible = false
 					m.sidebarFocused = false
-					if sb, ok := m.nav.(*navigation.Sidebar); ok {
-						sb.SetFocused(false)
-					}
+					m.setNavFocused(false)
 				}
 				return m, m.handleResizeCmd()
 			case key.Matches(keyMsg, m.keys.ToggleFullHelp):
@@ -716,10 +665,9 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.status.ToggleVisible()
 				return m, m.handleResizeCmd()
 			case key.Matches(keyMsg, m.keys.Debug):
+				// Only reached when the inspector is not already visible (a visible
+				// inspector consumes keys via overlayHandleKey above), so this opens it.
 				m.inspector.ToggleVisible()
-				if !m.inspector.IsVisible() {
-					m.inspectorOverlayBounds = [4]int{}
-				}
 				return m, m.handleResizeCmd()
 			}
 			// When the active page has captured keyboard focus, bypass global
@@ -727,52 +675,9 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !activeCapturesKeys {
 				switch {
 				case key.Matches(keyMsg, m.keys.Tab):
-					// Cycle forward through pages regardless of nav implementation.
-					pages := []navigation.Page{}
-					if m.nav != nil {
-						pages = m.nav.GetPages()
-					}
-					if len(pages) == 0 {
-						return m, nil
-					}
-					cur := 0
-					if m.nav != nil {
-						cur = m.nav.GetActiveIndex()
-					}
-					next := (cur + 1) % len(pages)
-					if m.nav != nil {
-						m.nav.SetActiveIndex(next)
-					}
-					// Tab always moves focus back to the page content area.
-					m.sidebarFocused = false
-					if sb, ok := m.nav.(*navigation.Sidebar); ok {
-						sb.SetFocused(false)
-					}
-					m.updatePageKeys()
-					return m, m.handleResizeCmd()
+					return m, m.cyclePage(1)
 				case key.Matches(keyMsg, m.keys.ShiftTab):
-					pages := []navigation.Page{}
-					if m.nav != nil {
-						pages = m.nav.GetPages()
-					}
-					if len(pages) == 0 {
-						return m, nil
-					}
-					cur := 0
-					if m.nav != nil {
-						cur = m.nav.GetActiveIndex()
-					}
-					prev := (cur - 1 + len(pages)) % len(pages)
-					if m.nav != nil {
-						m.nav.SetActiveIndex(prev)
-					}
-					// ShiftTab always moves focus back to the page content area.
-					m.sidebarFocused = false
-					if sb, ok := m.nav.(*navigation.Sidebar); ok {
-						sb.SetFocused(false)
-					}
-					m.updatePageKeys()
-					return m, m.handleResizeCmd()
+					return m, m.cyclePage(-1)
 				}
 			}
 		}
@@ -802,6 +707,10 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.handleResizeCmd()
 		}
 		m.nav.SetActiveIndex(msg.PageIndex)
+		// After selecting a page, return keyboard focus to content so per-page
+		// controls (like table up/down navigation) work immediately.
+		m.sidebarFocused = false
+		m.setNavFocused(false)
 		// Update status bar key hints to reflect the newly active page.
 		m.updatePageKeys()
 		// Schedule a resize for children but continue to forward the
@@ -901,6 +810,24 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// navReservedWidth returns the columns a visible left-docked sidebar reserves
+// (0 for tabs or when navigation is hidden). Overlays use it to avoid covering
+// the sidebar.
+// setNavFocused applies keyboard focus to the active nav when it supports focus
+// (the sidebar). Navigators without a focus concept (tabs) are left unchanged.
+func (m *RouterModel) setNavFocused(focused bool) {
+	if f, ok := m.nav.(navigation.Focusable); ok {
+		f.SetFocused(focused)
+	}
+}
+
+func (m *RouterModel) navReservedWidth() int {
+	if m.navigationVisible && m.nav != nil && m.nav.Dock() == navigation.DockLeft {
+		return m.nav.Width()
+	}
+	return 0
+}
+
 func (m *RouterModel) inspectorOverlayOuterSize() (int, int) {
 	w := min(max(m.width-6, 40), m.width)
 	h := min(max(m.height-4, 12), m.height)
@@ -910,6 +837,33 @@ func (m *RouterModel) inspectorOverlayOuterSize() (int, int) {
 func (m *RouterModel) inspectorOverlayInnerSize() (int, int) {
 	ow, oh := m.inspectorOverlayOuterSize()
 	return max(ow-2, 1), max(oh-2, 1)
+}
+
+// cyclePage advances the active page by delta (wrapping in both directions),
+// moves keyboard focus back to the page content, and refreshes status-bar key
+// hints. Used by Tab (delta=+1) and Shift+Tab (delta=-1).
+func (m *RouterModel) cyclePage(delta int) tea.Cmd {
+	var pages []navigation.Page
+	if m.nav != nil {
+		pages = m.nav.GetPages()
+	}
+	if len(pages) == 0 {
+		return nil
+	}
+	cur := m.nav.GetActiveIndex()
+	next := ((cur+delta)%len(pages) + len(pages)) % len(pages)
+	m.nav.SetActiveIndex(next)
+	m.sidebarFocused = false
+	m.setNavFocused(false)
+	m.updatePageKeys()
+	return m.handleResizeCmd()
+}
+
+// debugEnabled reports whether verbose router debug logging is active. The env
+// var is read live (not cached) so it can be toggled at runtime, as documented
+// on DebugEnvVar.
+func (m *RouterModel) debugEnabled() bool {
+	return os.Getenv(m.debugEnvVar) == "1"
 }
 
 func (m *RouterModel) GetActivePage() tea.Model {
@@ -929,28 +883,25 @@ func (m *RouterModel) handleResizeCmd() tea.Cmd {
 	cmds = append(cmds, cmd)
 	removeHeight := m.status.Height() // status bar knows if its active and what its height is
 	removeWidth := 0
-	if os.Getenv(m.debugEnvVar) == "1" {
+	if m.debugEnabled() {
 		log.Debugf("handleResizeCmd: router size=%dx%d statusHeight=%d", m.width, m.height, removeHeight)
 	}
 	if m.navigationVisible && m.nav != nil {
 		// Let the active nav compute its preferred size based on the full terminal width and available height.
 		_, cmd := m.nav.Update(tea.WindowSizeMsg{Width: m.width - removeWidth, Height: m.height - removeHeight})
 		cmds = append(cmds, cmd)
-		switch m.nav.(type) {
-		case *navigation.Sidebar:
+		// A left-docked nav (sidebar) reserves width; a top-docked nav (tabs)
+		// reserves height. Driven by Dock() so a new nav style needs no router change.
+		if m.nav.Dock() == navigation.DockLeft {
 			removeWidth += m.nav.Width()
-		case *navigation.Tabs:
-			// tabs expect full width and provide a nav height
-			removeHeight += m.nav.Height()
-		default:
-			removeWidth += m.nav.Width()
+		} else {
 			removeHeight += m.nav.Height()
 		}
-		if os.Getenv(m.debugEnvVar) == "1" {
+		if m.debugEnabled() {
 			log.Debugf("handleResizeCmd: after nav type=%T removeWidth=%d removeHeight=%d", m.nav, removeWidth, removeHeight)
 		}
 	}
-	if os.Getenv(m.debugEnvVar) == "1" {
+	if m.debugEnabled() {
 		log.Debugf("handleResizeCmd: active page will get size=%dx%d", m.width-removeWidth, m.height-removeHeight)
 	}
 	_, cmd = m.GetActivePage().Update(tea.WindowSizeMsg{Width: m.width - removeWidth, Height: m.height - removeHeight})
@@ -989,14 +940,10 @@ func (m *RouterModel) View() tea.View {
 
 	var layout string
 	if navView.Content != "" {
-		switch m.nav.(type) {
-		case *navigation.Sidebar:
+		if m.nav.Dock() == navigation.DockLeft {
 			layout = lipgloss.JoinHorizontal(lipgloss.Top, navView.Content, activePageView.Content)
-		case *navigation.Tabs:
-			// render tabs above content
-			layout = lipgloss.JoinVertical(lipgloss.Left, navView.Content, activePageView.Content)
-		default:
-			// render unknown nav above content
+		} else {
+			// top-docked nav (tabs) renders above the content
 			layout = lipgloss.JoinVertical(lipgloss.Left, navView.Content, activePageView.Content)
 		}
 	} else {
@@ -1028,110 +975,12 @@ func (m *RouterModel) View() tea.View {
 		contentStr = lipgloss.JoinVertical(lipgloss.Left, layout, statusContent)
 	}
 
-	// Canvas-based notification history panel overlay: composited in the
-	// bottom-right corner, just above the status bar. Mutually exclusive with
-	// the toast. Height is capped so the nav and most content stay visible.
-	if m.status.IsHistoryVisible() {
-		// Determine nav width so the panel never overlaps the sidebar.
-		navW := 0
-		if m.navigationVisible && m.nav != nil {
-			if sb, ok := m.nav.(*navigation.Sidebar); ok {
-				navW = sb.Width()
-			}
-		}
-		// Cap height to ~1/3 of the content area (max 12 rows) so nav and
-		// content remain clearly visible behind the panel.
-		contentH := m.height - statusHeight
-		maxPanelH := max(min(contentH/3, 12), 4)
-		// Limit width to the space available to the right of the nav sidebar.
-		maxPanelW := m.width - navW
-		panelStr := m.status.RenderHistoryOverlay(maxPanelW, maxPanelH)
-		if panelStr != "" {
-			pw, ph := lipgloss.Size(panelStr)
-			// Align to bottom-right above the status bar, right of any nav sidebar.
-			panelX := max(m.width-pw, navW)
-			panelY := max(m.height-statusHeight-ph, 0)
-			m.historyOverlayBounds = [4]int{panelX, panelY, pw, ph}
-			// Use NewCompositor (not NewCanvas) so the base content is overlaid
-			// directly — no blank grid that would erase the nav sidebar or status bar.
-			contentStr = lipgloss.NewCompositor(
-				lipgloss.NewLayer(contentStr),
-				lipgloss.NewLayer(panelStr).X(panelX).Y(panelY).Z(1),
-			).Render()
-		}
-	} else {
-		m.historyOverlayBounds = [4]int{}
-	}
-
-	// Canvas-based toast overlay: show the most-recent active notification
-	// in the lower-right corner when the history panel is not open.
-	if m.notifMgr != nil && !m.status.IsHistoryVisible() {
-		active := m.notifMgr.Active()
-		if len(active) > 0 {
-			toast := active[0]
-			borderColor := lipgloss.Color(notifications.ColorForSeverity(toast.Severity))
-			toastStyle := m.colors.Styles.OverlayBorder.
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(borderColor).
-				Background(m.colors.Styles.TextOnBg.GetBackground()).
-				Foreground(m.colors.Styles.TextOnBg.GetForeground()).
-				Padding(0, 1)
-			msg := toast.Content
-			if len([]rune(msg)) > 40 {
-				msg = string([]rune(msg)[:39]) + "…"
-			}
-			toastStr := toastStyle.Render(msg)
-			tw, th := lipgloss.Size(toastStr)
-			toastX := max(m.width-tw, 0)
-			toastY := max(m.height-statusHeight-th, 0)
-			// Use NewCompositor (not NewCanvas) so the base content is overlaid
-			// directly — no blank grid that would erase the nav sidebar or status bar.
-			contentStr = lipgloss.NewCompositor(
-				lipgloss.NewLayer(contentStr),
-				lipgloss.NewLayer(toastStr).X(toastX).Y(toastY).Z(1),
-			).Render()
-		}
-	}
-
-	if m.inspector.IsVisible() {
-		ow, oh := m.inspectorOverlayOuterSize()
-		ox := max((m.width-ow)/2, 0)
-		oy := max((m.height-oh)/2, 0)
-		iw, ih := m.inspectorOverlayInnerSize()
-		_, _ = m.inspector.Update(tea.WindowSizeMsg{Width: iw, Height: ih})
-		inspectorStr := m.inspector.View().Content
-		panel := m.colors.Styles.OverlayBorder.
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(m.colors.Styles.SelectedItem.GetForeground()).
-			Background(m.colors.Styles.TextOnBg.GetBackground()).
-			Foreground(m.colors.Styles.TextOnBg.GetForeground()).
-			Width(ow).
-			MaxHeight(oh).
-			Height(oh).
-			Render(inspectorStr)
-		m.inspectorOverlayBounds = [4]int{ox, oy, ow, oh}
-		contentStr = lipgloss.NewCompositor(
-			lipgloss.NewLayer(contentStr),
-			lipgloss.NewLayer(panel).X(ox).Y(oy).Z(2),
-		).Render()
-	} else {
-		m.inspectorOverlayBounds = [4]int{}
-	}
-
-	// Info modal: centered full-screen overlay. Shown on top of everything,
-	// including the toast. Built on its own canvas so all background rows are
-	// painted (no transparent holes in the base content).
-	if m.infoModal.IsVisible() {
-		modalStr := m.infoModal.View()
-		if modalStr.Content != "" {
-			bx, by, _, _ := m.infoModal.Bounds()
-			contentStr = lipgloss.NewCompositor(lipgloss.NewLayer(contentStr),
-				lipgloss.NewLayer(modalStr.Content).
-					X(max(0, bx)).
-					Y(max(0, by)).Z(1)).Render()
-
-		}
-	}
+	// Composite every visible overlay (toast, history panel, inspector, info
+	// modal) bottom-up by Z. Each overlay owns its placement and bounds; the
+	// router no longer special-cases them here. NewCompositor (not NewCanvas)
+	// overlays directly onto the source so the nav sidebar and status bar behind
+	// the overlay are never blanked.
+	contentStr = m.renderOverlays(contentStr, statusHeight)
 
 	// Bubble Tea emits BackgroundColor/ForegroundColor as OSC sequences that the
 	// color-profile writer passes through UNCHANGED (it only downsamples SGR).
@@ -1152,98 +1001,12 @@ func (m *RouterModel) View() tea.View {
 	// child's OnMouse handler. Bubble Tea only calls the top-level view's
 	// OnMouse, so we must route manually here.
 	v.OnMouse = func(mm tea.MouseMsg) tea.Cmd {
-		// Inspector overlay intercept: click outside closes; inside routes to
-		// the inspector child view (wheel/drag/click handling).
-		if m.inspector.IsVisible() {
-			bx, by, bw, bh := m.inspectorOverlayBounds[0], m.inspectorOverlayBounds[1], m.inspectorOverlayBounds[2], m.inspectorOverlayBounds[3]
-			me := mm.Mouse()
-			inside := me.X >= bx && me.X < bx+bw && me.Y >= by && me.Y < by+bh
-			if rel, ok := mm.(tea.MouseReleaseMsg); ok && !inside {
-				_ = rel
-				m.inspector.ToggleVisible()
-				m.inspectorOverlayBounds = [4]int{}
-				return m.handleResizeCmd()
-			}
-			if inside {
-				iv := m.inspector.View()
-				if iv.OnMouse != nil {
-					offX, offY := bx+1, by+1
-					nm := tea.Mouse{X: me.X - offX, Y: me.Y - offY, Button: me.Button, Mod: me.Mod}
-					switch mm.(type) {
-					case tea.MouseClickMsg:
-						return iv.OnMouse(tea.MouseClickMsg(nm))
-					case tea.MouseReleaseMsg:
-						return iv.OnMouse(tea.MouseReleaseMsg(nm))
-					case tea.MouseMotionMsg:
-						return iv.OnMouse(tea.MouseMotionMsg(nm))
-					case tea.MouseWheelMsg:
-						return iv.OnMouse(tea.MouseWheelMsg(nm))
-					}
-				}
-				return nil
-			}
-			return nil
-		}
-
-		// Notification history panel intercept: when the panel is open, clicks
-		// outside it close the panel; wheel events inside scroll the list.
-		if m.status.IsHistoryVisible() {
-			switch ev := mm.(type) {
-			case tea.MouseReleaseMsg:
-				me := ev.Mouse()
-				bx, by, bw, bh := m.historyOverlayBounds[0], m.historyOverlayBounds[1], m.historyOverlayBounds[2], m.historyOverlayBounds[3]
-				if me.X < bx || me.X >= bx+bw || me.Y < by || me.Y >= by+bh {
-					return tea.Batch(
-						m.status.ToggleNotifications(),
-						m.handleResizeCmd(),
-					)
-				}
-				// Inside panel — let status bar's own handler process it.
-				return nil
-			case tea.MouseWheelMsg:
-				me := ev.Mouse()
-				bx, by, bw, bh := m.historyOverlayBounds[0], m.historyOverlayBounds[1], m.historyOverlayBounds[2], m.historyOverlayBounds[3]
-				if me.X >= bx && me.X < bx+bw && me.Y >= by && me.Y < by+bh {
-					if me.Button == tea.MouseWheelUp {
-						m.status.NotifHistoryCursorUp()
-					} else {
-						count := 0
-						if m.notifMgr != nil {
-							count = len(m.notifMgr.Active())
-						}
-						m.status.NotifHistoryCursorDown(count)
-					}
-					return m.handleResizeCmd()
-				}
-				return nil
-			}
-			return nil
-		}
-
-		// Info modal intercept: when the modal is open, only mouse events
-		// inside its bounding box are passed through (as scroll commands);
-		// a release outside the box sends CloseInfoModalMsg.
-		if m.infoModal.IsVisible() {
-			switch ev := mm.(type) {
-			case tea.MouseReleaseMsg:
-				me := ev.Mouse()
-				bx, by, bw, bh := m.infoModal.Bounds()
-				if me.X < bx || me.X >= bx+bw || me.Y < by || me.Y >= by+bh {
-					// Click was outside the modal — close it.
-					return func() tea.Msg { return status.CloseInfoModalMsg{} }
-				}
-				// Inside the modal — consume without routing to children.
-				return nil
-			case tea.MouseWheelMsg:
-				me := ev.Mouse()
-				bx, by, bw, bh := m.infoModal.Bounds()
-				if me.X >= bx && me.X < bx+bw && me.Y >= by && me.Y < by+bh {
-					up := me.Button == tea.MouseWheelUp
-					return func() tea.Msg { return status.InfoModalScrollMsg{Up: up} }
-				}
-				return nil
-			}
-			return nil // block all other mouse events from children
+		// A visible modal overlay intercepts the mouse: events inside its bounds
+		// route to the overlay, a release outside closes it, and everything else
+		// is consumed. Passive overlays (the toast) are transparent and fall
+		// through to the page routing below.
+		if cmd, ok := m.overlayHandleMouse(mm); ok {
+			return cmd
 		}
 
 		// helper to route a mouse message into a child view with offsets.
@@ -1269,7 +1032,7 @@ func (m *RouterModel) View() tea.View {
 					}
 				}
 				return tea.Batch(childCmd, func() tea.Msg {
-					return debug.MouseHighlightMsg{GlobalX: mEvent.X, GlobalY: mEvent.Y, Child: childName, OffX: offX, OffY: offY}
+					return inspector.MouseHighlightMsg{GlobalX: mEvent.X, GlobalY: mEvent.Y, Child: childName, OffX: offX, OffY: offY}
 				})
 			default:
 				return nil
@@ -1281,37 +1044,28 @@ func (m *RouterModel) View() tea.View {
 
 		// route based on nav layout
 		if m.navigationVisible && m.nav != nil {
-			switch nav := m.nav.(type) {
-			case *navigation.Sidebar:
-				navW := nav.Width()
-				// click in main layout area
-				mmPos := mm.Mouse()
+			mmPos := mm.Mouse()
+			if m.nav.Dock() == navigation.DockLeft {
+				navW := m.nav.Width()
 				if mmPos.Y < mainHeight {
 					if mmPos.X < navW {
 						return route(navView, 0, 0, "sidebar")
 					}
-					// Content area click: release sidebar focus so the border
+					// Content area click: release nav keyboard focus so the border
 					// and highlight reset immediately on the next render.
 					if m.sidebarFocused {
 						m.sidebarFocused = false
-						nav.SetFocused(false)
+						m.setNavFocused(false)
 					}
 					return route(activePageView, navW, 0, "content")
 				}
-			case *navigation.Tabs:
-				navH := nav.Height()
-				mmPos := mm.Mouse()
+			} else {
+				navH := m.nav.Height()
 				if mmPos.Y < navH {
 					return route(navView, 0, 0, "tabs")
 				}
 				if mmPos.Y < mainHeight {
 					return route(activePageView, 0, navH, "content")
-				}
-			default:
-				// unknown nav layout: route everything in main area to active page
-				mmPos := mm.Mouse()
-				if mmPos.Y < mainHeight {
-					return route(activePageView, 0, 0, "content")
 				}
 			}
 		} else {

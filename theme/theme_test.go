@@ -327,7 +327,7 @@ func TestDefaultStyleComboAccessibilityReport(t *testing.T) {
 			return
 		}
 		limit := min(8, len(scores))
-		for i := 0; i < limit; i++ {
+		for i := range limit {
 			s := scores[i]
 			t.Logf("mode=%s rank=%d theme=%s (%s) score=%d/%d ratio=%.2f", s.mode, i+1, s.display, s.id, s.passCount, s.totalCount, s.passRatio)
 		}

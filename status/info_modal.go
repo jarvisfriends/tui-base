@@ -315,7 +315,7 @@ func (m *InfoModal) View() (content tea.View) {
 	if m.vp.TotalLineCount() > m.vp.VisibleLineCount() {
 		scrollBadge = fmt.Sprintf("  %d%%", int(m.vp.ScrollPercent()*100))
 	}
-	footerText := "↑/↓/j/k · PgUp/PgDn · g/G  •  Esc or click outside to close" + scrollBadge
+	footerText := "↑/↓ • PgUp/PgDn • Esc or click outside to close" + scrollBadge
 	footerLine := lipgloss.PlaceHorizontal(vpW, lipgloss.Center, mutedStyle.Render(footerText))
 
 	inner := lipgloss.JoinVertical(lipgloss.Left,
