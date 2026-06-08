@@ -25,7 +25,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	tint "github.com/lrstanley/bubbletint/v2"
 )
 
 // DefaultAppName is the fallback application name used when Options.AppName is empty.
@@ -210,7 +209,7 @@ func NewWithOptions(opts Options) *RouterModel {
 	theme.SetThemePreferences(settingsModel.ThemeMode, settingsModel.AccessibilityColors, theme.StylePreset(settingsModel.StylePreset))
 	settingsModel.ColorThemeID = theme.ResolveTintIDForMode(settingsModel.ColorThemeID, settingsModel.ThemeMode)
 	if settingsModel.ColorThemeID != "" {
-		tint.SetTintID(settingsModel.ColorThemeID) //nolint:errcheck
+		_ = theme.SetCurrentTint(settingsModel.ColorThemeID)
 	}
 	// initialize logging from settings (writes to temp dir by default)
 	if _, err := log.InitFromSettings(settingsModel.LogOutput, settingsModel.LogPath); err != nil {
@@ -580,7 +579,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if prefs.Mode != mode {
 			theme.SetThemePreferences(mode, prefs.Accessibility, prefs.Style)
 			resolvedID := theme.ResolveTintIDForMode("", mode)
-			tint.SetTintID(resolvedID) //nolint:errcheck
+			_ = theme.SetCurrentTint(resolvedID)
 			newColors := theme.Active()
 			if m.colors == nil {
 				m.colors = newColors
@@ -608,7 +607,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.ApplyPreferences {
 			resolvedID = theme.ResolveTintIDForMode(msg.ID, msg.Mode)
 		}
-		tint.SetTintID(resolvedID) //nolint:errcheck
+		_ = theme.SetCurrentTint(resolvedID)
 		newColors := theme.Active()
 		if m.colors == nil {
 			m.colors = newColors
@@ -888,8 +887,8 @@ func (m *RouterModel) handleResizeCmd() tea.Cmd {
 	}
 	if m.navigationVisible && m.nav != nil {
 		// Let the active nav compute its preferred size based on the full terminal width and available height.
-		_, cmd := m.nav.Update(tea.WindowSizeMsg{Width: m.width - removeWidth, Height: m.height - removeHeight})
-		cmds = append(cmds, cmd)
+		_, navCmd := m.nav.Update(tea.WindowSizeMsg{Width: m.width - removeWidth, Height: m.height - removeHeight})
+		cmds = append(cmds, navCmd)
 		// A left-docked nav (sidebar) reserves width; a top-docked nav (tabs)
 		// reserves height. Driven by Dock() so a new nav style needs no router change.
 		if m.nav.Dock() == navigation.DockLeft {

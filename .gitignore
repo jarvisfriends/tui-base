@@ -26,7 +26,7 @@ go.work.sum
 
 # Editor/IDE
 .idea/
-.vscode/
+# .vscode/
 
 .history
 coverage.txt
@@ -52,3 +52,4 @@ tui_settings.json
 
 # Scratch / experimental code not ready for the repo
 tmp/
+*.code-workspace

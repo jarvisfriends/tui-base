@@ -31,9 +31,6 @@ func TestDefaultKeyMapImplementsHelpKeyMap(t *testing.T) {
 	t.Parallel()
 
 	var bindings help.KeyMap = DefaultKeyMap()
-	if bindings == nil {
-		t.Fatal("expected DefaultKeyMap to satisfy help.KeyMap")
-	}
 	if len(bindings.ShortHelp()) == 0 {
 		t.Fatal("help.KeyMap.ShortHelp() returned no bindings")
 	}

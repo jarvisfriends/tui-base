@@ -523,7 +523,7 @@ filesystem paths so the filename / most-recent-segment stays visible.
 | `navigation.Tabs` | Horizontal tab bar with mouse click routing | Similar to `bubbles/tabs` if/when it ships; watch charm releases. Currently custom — extraction viable as `bubbletabs`. |
 | `theme/` + `AppColors` | Semantic color mapping over bubbletint | Thin adapter; not worth standalone extraction unless we decouple from bubbletint entirely. |
 | `logging/` | File-backed runtime logger with subscriber/fan-out | Useful as a standalone `bubblelog` package. Could grow a ring-buffer, level histogram, and export interface. |
-| `pages/debug` (`Model`) | In-app message inspector with mouse highlight | Prime candidate for standalone `bubbleinspector` library. Dependency: only `bubbletea/v2` and `lipgloss/v2`. |
+| `pages/inspector` (`Model`) | In-app message inspector with mouse highlight | Prime candidate for standalone `bubbleinspector` library. Dependency: only `bubbletea/v2` and `lipgloss/v2`. |
 | `status/` | Themed status bar with click regions | Close to `bubbles/statusbar` if it existed; currently custom. Extraction viable. Remove hard-coded notification seed before extracting. |
 
 ---
@@ -533,6 +533,6 @@ filesystem paths so the filename / most-recent-segment stays visible.
 | Charm library | Current custom code | Recommendation |
 |---|---|---|
 | `charm.land/bubbles/v2` — `list` | `navigation.Sidebar` item rendering | Migrate nav items to a `list.Model` with a custom delegate; removes ~200 lines of manual key/mouse handling. |
-| `charm.land/bubbles/v2` — `viewport` | `pages/debug` scroll area | Replace the `MaxHeight` clipping with a `viewport.Model`; gives free scrolling, search, and keyboard navigation. |
+| `charm.land/bubbles/v2` — `viewport` | `pages/inspector` scroll area | Replace the `MaxHeight` clipping with a `viewport.Model`; gives free scrolling, search, and keyboard navigation. |
 | `charm.land/bubbles/v2` — `filepicker` | `huh.FilePicker` in settings | `huh.FilePicker` wraps `bubbles/filepicker` — already in use; correct approach. |
 | `charm.land/bubbles/v2` — `help` | `status_bar.go` key hint rendering | Already using `key.Binding` correctly; wire into a `help.Model` for automatic short/full toggle rendering. |

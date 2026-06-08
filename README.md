@@ -2,7 +2,9 @@
 
 A structured, production-minded foundation for building large Charm v2 terminal applications in Go.
 
-This project is designed for engineers who want more than a demo app: predictable architecture, consistent theme behavior, keyboard and mouse interaction patterns, and debug tooling that helps you understand message flow while you build.
+This project is designed for engineers who want more than a demo app: predictable architecture,
+consistent theme behavior, keyboard and mouse interaction patterns, and debug tooling that helps
+you understand message flow while you build.
 
 ## Why This Exists
 
@@ -12,7 +14,7 @@ Building a large TUI gets hard when app state, routing, styling, and diagnostics
 - Router-first composition for multi-page apps.
 - Shared live theme pointer propagated across components.
 - Status and notification primitives for global UX.
-- Inspector/debug workflows for observing runtime behavior.
+- Inspector workflows for observing runtime behavior.
 - Test- and benchmark-friendly package boundaries.
 
 ## Current Capabilities
@@ -38,7 +40,7 @@ The following milestone capabilities are already implemented:
 - `main.go`: entrypoint and app bootstrap.
 - `router/`: root model and message routing.
 - `navigation/`: Sidebar and Tabs components.
-- `pages/`: page models (`home`, `settings`, `debug`).
+- `pages/`: page models (`home`, `settings`, `inspector`).
 - `status/`: status bar and notification overlays.
 - `theme/`: app style model and style helpers.
 - `notifications/`: notification manager and persistence.
@@ -60,9 +62,39 @@ The roadmap now tracks only open work. See [.github/ROADMAP.md](.github/ROADMAP.
 
 ## Local Development
 
+### Prerequisites
+
+Install these once to match the full CI gate locally:
+
+```bash
+# Go (1.26+) — https://go.dev/dl/
+
+# golangci-lint
+curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+
+# shellcheck
+brew install shellcheck          # macOS/Linux via Homebrew
+# or: apt-get install shellcheck
+
+# markdownlint-cli2
+npm install -g markdownlint-cli2
+
+# actionlint
+brew install actionlint          # macOS/Linux
+# or: go install github.com/rhysd/actionlint/cmd/actionlint@latest
+
+# govulncheck
+go install golang.org/x/vuln/cmd/govulncheck@latest
+```
+
 - Build baseline:
   - `go build -o tui_base_test_build.exe . && rm tui_base_test_build.exe`
 - Run tests:
   - `go test ./... -v`
-
-VS Code-specific workflow notes remain in [README-VSCode.md](README-VSCode.md).
+- Run race tests:
+  - `go test -race ./... -v`
+- Run lint:
+  - `GOOS=windows GOARCH=amd64 golangci-lint run ./...`
+  - `GOOS=linux GOARCH=amd64 golangci-lint run ./...`
+- Run full local verification (hook-equivalent):
+  - `bash tools/local_verify.sh`

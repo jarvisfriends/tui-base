@@ -10,9 +10,12 @@ We are using Go 1.26+ with all the latest language features. Ensure that any cod
 
 1. Build baseline: `go build -o tui_base_test_build.exe . && rm tui_base_test_build.exe`
 2. Run tests: `go test ./... -v`
-3. All TUI code lives in the root package and under `navigation/`, `pages/`, `router/`, `status/`, `theme/`, `logging/`, `keys/`.
-4. Check [`.github/ROADMAP.md`](ROADMAP.md) for current tasks and status.
-5. Check [`.github/CHARM_ECOSYSTEM.md`](CHARM_ECOSYSTEM.md) for established patterns before writing any UI code.
+3. Run race tests: `go test -race ./... -v`
+4. Run lint: `golangci-lint run ./...`
+5. Run local verify script: `bash tools/local_verify.sh`
+6. All TUI code lives in the root package and under `navigation/`, `pages/`, `router/`, `status/`, `theme/`, `logging/`, `keys/`.
+7. Check [`.github/ROADMAP.md`](ROADMAP.md) for current tasks and status.
+8. Check [`.github/CHARM_ECOSYSTEM.md`](CHARM_ECOSYSTEM.md) for established patterns before writing any UI code.
 
 ---
 
@@ -22,8 +25,8 @@ We are using Go 1.26+ with all the latest language features. Ensure that any cod
 2. **Minimal footprint.** Runs alongside mission-critical software. CPU/RAM must stay flat.
 3. **Consistent navigation.** Every element: keyboard-only, mouse-only, and mixed. Arrows navigate, Enter/Space confirm, Esc cancel.
 4. **Themed everything.** All colors from the active theme via `theme/theme.go` → `AppColors`. No hardcoded colors anywhere.
-5. **Observable internals.** Inspector (debug page) always receives all messages; Ctrl+D overlay is planned to make it available from any page.
-6. **TDD.** Every feature gets tests. Every bug fix gets a regression test. Run `go test ./... -v` before and after every change.
+5. **Observable internals.** Inspector page always receives all messages; Ctrl+D overlay is planned to make it available from any page.
+6. **TDD.** Every feature gets tests. Every bug fix gets a regression test. Run `go test ./... -v`, `go test -race ./... -v`, and `golangci-lint run ./...` before and after every change.
 7. **Less code = easier to maintain.** Always prefer an existing Charm v2 library over a custom implementation. Flag any component that is growing toward something Charm already ships.
 
 ---
@@ -36,7 +39,7 @@ router/              — root model; owns nav, pages, status, colors; dispatches
 navigation/          — Navigator interface + Sidebar and Tabs implementations
 pages/
   home/              — placeholder home page
-  debug/             — inspector: message log + mouse highlight (candidate: bubbleinspector)
+  inspector/         — inspector: message log + mouse highlight (candidate: bubbleinspector)
   settings/          — three-pane settings: Layout | Log | Theme
 keys/                — AppKeyMap with all global key bindings
 status/              — themed status bar with click regions (candidate: bubblestatus)

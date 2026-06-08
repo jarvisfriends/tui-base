@@ -17,6 +17,7 @@
 package theme
 
 import (
+	"fmt"
 	"image/color"
 	"strings"
 	"sync"
@@ -51,7 +52,27 @@ var (
 
 	themePrefsMu sync.RWMutex
 	themePrefs   = ThemePreferences{Mode: ThemeModeDark, Style: DefaultStylePreset}
+
+	// tintMu serialises writes to the bubbletint global registry. The library
+	// is not goroutine-safe; concurrent calls to tint.SetTintID or
+	// tint.NewDefaultRegistry produce data races. All callers in this module
+	// should use SetCurrentTint instead of calling tint.SetTintID directly.
+	tintMu sync.Mutex
 )
+
+// SetCurrentTint sets the active tint ID on the bubbletint global registry.
+// It is safe to call from multiple goroutines.
+func SetCurrentTint(id string) error {
+	if id == "" {
+		return nil
+	}
+	tintMu.Lock()
+	defer tintMu.Unlock()
+	if ok := tint.SetTintID(id); !ok {
+		return fmt.Errorf("unknown tint ID: %s", id)
+	}
+	return nil
+}
 
 // AppStyle holds the semantic color palette for the application, derived from
 // the active bubbletint theme. Each field maps a UI role to a color.Color.

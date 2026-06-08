@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/jarvisfriends/tui-base/config"
 	"github.com/jarvisfriends/tui-base/logging"
@@ -20,6 +21,17 @@ import (
 
 const defaultSettingsFile = "tui_settings.json"
 
+// initRegistryOnce ensures tint.NewDefaultRegistry is called exactly once
+// across the process lifetime. NewDefaultRegistry writes to a module-level
+// global inside bubbletint; calling it from concurrent goroutines (e.g.
+// parallel tests that each call settings.New) produces a data race.
+var initRegistryOnce sync.Once
+
+// configDirMu guards the configDir package-level variable. Tests that call
+// settings.New in parallel each invoke SetConfigDir, which would otherwise
+// produce a write-write data race on the unguarded string.
+var configDirMu sync.RWMutex
+
 // configDir is the directory tui_settings.json is read from and written to.
 // Empty means the current working directory (legacy behavior). The router sets
 // this to the per-app OS config directory via SetConfigDir before settings.New
@@ -30,15 +42,22 @@ var configDir string
 // SetConfigDir sets the directory used to persist tui_settings.json. Call this
 // before settings.New. An empty string restores current-working-directory
 // behavior. The directory is created on first save if it does not exist.
-func SetConfigDir(dir string) { configDir = dir }
+func SetConfigDir(dir string) {
+	configDirMu.Lock()
+	configDir = dir
+	configDirMu.Unlock()
+}
 
 // settingsFilePath returns the absolute (or CWD-relative) path to the settings
 // JSON file, honoring any directory set via SetConfigDir.
 func settingsFilePath() string {
-	if configDir == "" {
+	configDirMu.RLock()
+	dir := configDir
+	configDirMu.RUnlock()
+	if dir == "" {
 		return defaultSettingsFile
 	}
-	return filepath.Join(configDir, defaultSettingsFile)
+	return filepath.Join(dir, defaultSettingsFile)
 }
 
 // NavStyleMsg is emitted when the user selects a different navigation style.
@@ -240,7 +259,10 @@ func New(extraSections ...config.Section) *SettingsModel {
 		m.NavStyle = "tabs"
 	}
 
-	tint.NewDefaultRegistry()
+	// Initialize the bubbletint global registry exactly once. The library is not
+	// goroutine-safe; calling NewDefaultRegistry from concurrent goroutines races
+	// on the module-level registry pointer.
+	initRegistryOnce.Do(tint.NewDefaultRegistry)
 	if m.ThemeMode == "" {
 		m.ThemeMode = theme.ThemeModeDark
 	}
@@ -249,7 +271,7 @@ func New(extraSections ...config.Section) *SettingsModel {
 	m.ColorThemeID = theme.ResolveTintIDForMode(m.ColorThemeID, m.ThemeMode)
 	theme.SetThemePreferences(m.ThemeMode, m.AccessibilityColors, theme.StylePreset(m.StylePreset))
 	if m.ColorThemeID != "" {
-		tint.SetTintID(m.ColorThemeID) //nolint:errcheck
+		_ = theme.SetCurrentTint(m.ColorThemeID)
 	}
 
 	m.buildItems()
@@ -1041,7 +1063,7 @@ func (m *SettingsModel) SaveToFile(filename string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
 	return enc.Encode(m)

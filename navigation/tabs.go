@@ -195,11 +195,11 @@ func (m *Tabs) View() tea.View {
 
 // Width reports the horizontal layout space consumed by this navigator.
 // Tabs are stacked above content, so they do not consume side width.
-func (m *Tabs) Width() int           { return 0 }
-func (m *Tabs) Height() int          { return lipgloss.Height(m.View().Content) }
+func (m *Tabs) Width() int  { return 0 }
+func (m *Tabs) Height() int { return lipgloss.Height(m.View().Content) }
 
 // Dock reports that the tab bar occupies the top edge.
-func (m *Tabs) Dock() Side { return DockTop }
+func (m *Tabs) Dock() Side           { return DockTop }
 func (m *Tabs) GetPages() []Page     { return m.Pages }
 func (m *Tabs) SetPages(p []Page)    { m.Pages = p }
 func (m *Tabs) SetActiveIndex(i int) { m.ActiveIndex = i }

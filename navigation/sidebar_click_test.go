@@ -46,7 +46,7 @@ func TestSidebarClickSelectsEveryMainItem(t *testing.T) {
 		t.Skipf("need at least 2 main nav items to exercise spacing; have %d", numMain)
 	}
 
-	for idx := 0; idx < numMain; idx++ {
+	for idx := range numMain {
 		y := 1 + idx*navItemStride // row 0 is the header; items every stride rows
 		cmd := v.OnMouse(tea.MouseReleaseMsg{X: 0, Y: y, Button: tea.MouseLeft})
 		sel, ok := selectedFrom(cmd)

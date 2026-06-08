@@ -4,6 +4,7 @@ package inspector
 
 import (
 	"bufio"
+	"log"
 	"os"
 	"strings"
 	"syscall"
@@ -47,7 +48,13 @@ func collectMountPoints() []string {
 	if err != nil {
 		return []string{"/"}
 	}
-	defer f.Close()
+	defer func() {
+		e := f.Close()
+		if e != nil {
+			// handle error if needed
+			log.Default().Printf("warning: failed to close /proc/mounts: %v", e)
+		}
+	}()
 
 	// Filesystem types that carry no real disk data.
 	skipTypes := map[string]bool{

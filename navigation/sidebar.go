@@ -68,7 +68,7 @@ func (d navDelegate) Render(w io.Writer, _ list.Model, index int, item list.Item
 			style = d.activeStyle
 		}
 	}
-	fmt.Fprintf(w, "%s%s", prefix, style.Width(max(d.itemWidth, 1)).Render(pi.title))
+	_, _ = fmt.Fprintf(w, "%s%s", prefix, style.Width(max(d.itemWidth, 1)).Render(pi.title))
 }
 
 // ─── constants ────────────────────────────────────────────────────────────────
