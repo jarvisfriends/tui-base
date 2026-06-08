@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Running tests with coverage..."
-go test ./... -coverprofile=coverage.out
+echo "Running tests with race detector and coverage..."
+go test -race ./... -coverprofile=coverage.out
 
 echo
 echo "Coverage summary (functions):"

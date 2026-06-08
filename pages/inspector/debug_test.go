@@ -136,6 +136,8 @@ func TestInspectorWheelScrollMovesVisibleWindow(t *testing.T) {
 	for i := range 12 {
 		m.AddLog("INFO", time.Now(), fmt.Sprintf("log-%02d", i))
 	}
+	// Drain pendingLogs into m.Logs via a no-op Update.
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 90, Height: 40})
 
 	if len(m.Logs) == 0 {
 		t.Fatal("expected log entries")
@@ -159,6 +161,8 @@ func TestInspectorWheelScrollClampsAtBounds(t *testing.T) {
 	for i := range 30 {
 		m.AddLog("INFO", time.Now(), fmt.Sprintf("row-%02d", i))
 	}
+	// Drain pendingLogs into m.Logs via a no-op Update.
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 90, Height: 40})
 
 	// Wheel-down many times -- should not panic and viewport stays valid.
 	for range 200 {

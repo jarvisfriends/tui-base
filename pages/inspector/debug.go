@@ -262,6 +262,13 @@ type InspectorModel struct {
 
 	// keys holds rebindable key bindings for the inspector.
 	keys DebugKeyMap
+
+	// logMu guards pendingLogs, which is the cross-goroutine inbox for log
+	// entries. AddLog (called from the logging subscriber goroutine) appends
+	// here; Update drains it into m.Logs on the tea goroutine. m.Logs itself
+	// is tea-goroutine-only and needs no lock.
+	logMu       sync.Mutex
+	pendingLogs []MsgLog
 }
 
 type latestValueFlushMsg struct{}
@@ -547,6 +554,16 @@ func (m *InspectorModel) scheduleStatsTick() tea.Cmd {
 }
 
 func (m *InspectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Drain any log entries queued by AddLog (subscriber goroutine) into m.Logs.
+	// m.Logs is tea-goroutine-only; pendingLogs is the cross-goroutine inbox.
+	m.logMu.Lock()
+	pending := m.pendingLogs
+	m.pendingLogs = nil
+	m.logMu.Unlock()
+	for _, entry := range pending {
+		m.appendExternalLog(entry)
+	}
+
 	// Record every message the inspector sees (deduped/stacked) so the log pane
 	// reflects live traffic. Silent, high-frequency messages return early.
 	preCmd := m.LogMessageForDebugging(msg)
@@ -775,7 +792,7 @@ func (m *InspectorModel) LogMessageForDebugging(msg tea.Msg) tea.Cmd {
 		}
 	}
 
-	// Check if the last log is the same to stack them
+	// Check if the last log is the same to stack them.
 	if len(m.Logs) > 0 {
 		last := &m.Logs[len(m.Logs)-1]
 		if last.Type == msgType && last.Content == msgContent {
@@ -802,35 +819,38 @@ func (m *InspectorModel) LogMessageForDebugging(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-// AddLog adds an external log entry (from the runtime logger) to the
-// inspector. This is used for file-backed runtime logging so the same data
-// can be shown in the UI with a brief timestamp while the log file contains
-// the full timestamp and details.
-func (m *InspectorModel) AddLog(level string, ts time.Time, content string) {
-	// Check if the last log is the same to stack them
-	if len(m.Logs) > 0 {
+// appendExternalLog merges one MsgLog (received from the pending queue) into
+// m.Logs with deduplication. Must only be called from the tea goroutine.
+func (m *InspectorModel) appendExternalLog(entry MsgLog) {	if len(m.Logs) > 0 {
 		last := &m.Logs[len(m.Logs)-1]
-		if last.Type == level && last.Content == content {
+		if last.Type == entry.Type && last.Content == entry.Content {
 			last.Count++
-			last.Timestamp = ts
+			last.Timestamp = entry.Timestamp
 			m.dirty = true
 			return
 		}
 	}
+	m.Logs = append(m.Logs, entry)
+	m.dirty = true
+	if len(m.Logs) > 50 {
+		m.Logs = m.Logs[1:]
+	}
+	m.scrollToBottom = true
+}
 
-	m.Logs = append(m.Logs, MsgLog{
+// AddLog adds an external log entry (from the runtime logger) to the
+// inspector. It is safe to call from any goroutine. Entries are buffered in
+// pendingLogs and drained into m.Logs on the next Update() call so that
+// m.Logs is only ever accessed by the tea goroutine.
+func (m *InspectorModel) AddLog(level string, ts time.Time, content string) {
+	m.logMu.Lock()
+	m.pendingLogs = append(m.pendingLogs, MsgLog{
 		Timestamp: ts,
 		Type:      level,
 		Content:   content,
 		Count:     1,
 	})
-	m.dirty = true
-
-	// Keep only last 50 logs for the inspector
-	if len(m.Logs) > 50 {
-		m.Logs = m.Logs[1:]
-	}
-	m.scrollToBottom = true
+	m.logMu.Unlock()
 }
 
 // diskStat holds space information for a single mounted drive or volume.

@@ -20,13 +20,14 @@ var (
 	outFile *os.File
 	writeMu sync.Mutex
 	levelMu sync.RWMutex
+	appNameMu sync.RWMutex // guards logAppName
 
 	// Log rotation state (all guarded by writeMu).
 	logTarget   string           // path of the active log file
 	curLogBytes int64            // bytes written to the active file so far
 	maxLogBytes int64 = 10 << 20 // rotate once the file exceeds this; 0 disables
 
-	logAppName = "tui-base" // overridden by SetAppName before InitFromSettings
+	logAppName = "tui-base" // overridden by SetAppName before InitFromSettings; guarded by appNameMu
 
 	// minLevel is the minimum accepted log level: DEBUG=0, INFO=1, WARN=2, ERROR=3
 	minLevel       = 1
@@ -48,7 +49,9 @@ var (
 // default temp-log subdirectory. Call this before InitFromSettings.
 func SetAppName(name string) {
 	if name != "" {
+		appNameMu.Lock()
 		logAppName = name
+		appNameMu.Unlock()
 	}
 }
 
@@ -75,6 +78,10 @@ func notify(level string, ts time.Time, msg string) {
 func InitFromSettings(logOutputMode, logPath string) (string, error) {
 	// determine output file
 	var target string
+	appNameMu.RLock()
+	currentAppName := logAppName
+	appNameMu.RUnlock()
+
 	switch logOutputMode {
 	case "dir":
 		if logPath == "" {
@@ -83,7 +90,7 @@ func InitFromSettings(logOutputMode, logPath string) (string, error) {
 		if err := os.MkdirAll(logPath, 0o755); err != nil {
 			return "", err
 		}
-		target = filepath.Join(logPath, fmt.Sprintf("%s-%s.log", logAppName, time.Now().Format("20060102-150405")))
+		target = filepath.Join(logPath, fmt.Sprintf("%s-%s.log", currentAppName, time.Now().Format("20060102-150405")))
 	case "file":
 		if logPath == "" {
 			return "", fmt.Errorf("log file path not provided")
@@ -95,26 +102,29 @@ func InitFromSettings(logOutputMode, logPath string) (string, error) {
 		target = logPath
 	default:
 		// default: temp dir
-		dir := filepath.Join(os.TempDir(), logAppName+"-logs")
+		dir := filepath.Join(os.TempDir(), currentAppName+"-logs")
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return "", err
 		}
-		target = filepath.Join(dir, fmt.Sprintf("%s-%s.log", logAppName, time.Now().Format("20060102-150405")))
+		target = filepath.Join(dir, fmt.Sprintf("%s-%s.log", currentAppName, time.Now().Format("20060102-150405")))
 	}
 
 	f, err := os.OpenFile(target, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return "", err
 	}
-	// keep file handle for later (could expose Close if needed)
-	outFile = f
-	logTarget = target
-	curLogBytes = 0
+	// Keep file handle; assign outFile/logTarget/curLogBytes inside writeMu so
+	// concurrent readers of these fields (e.g. CurrentLogFile, rotateIfNeededLocked)
+	// always see a consistent state.
+	var initBytes int64
 	if fi, statErr := f.Stat(); statErr == nil {
-		curLogBytes = fi.Size()
+		initBytes = fi.Size()
 	}
 	// initial info (write directly to file)
 	writeMu.Lock()
+	outFile = f
+	logTarget = target
+	curLogBytes = initBytes
 	n, _ := fmt.Fprintf(outFile, "%s [INFO] Logging initialized; file=%s\n", time.Now().Format(time.RFC3339), target)
 	curLogBytes += int64(n)
 	writeMu.Unlock()
@@ -211,8 +221,8 @@ func GetLevel() string {
 
 // CurrentLogFile returns the path to the currently open log file, if any.
 func CurrentLogFile() string {
-	if outFile == nil {
-		return ""
-	}
-	return outFile.Name()
+	writeMu.Lock()
+	path := logTarget
+	writeMu.Unlock()
+	return path
 }
