@@ -190,7 +190,7 @@ jobs:
       - name: Run coverage script
         run: bash tools/test_coverage.sh
       - name: Upload coverage artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: |
