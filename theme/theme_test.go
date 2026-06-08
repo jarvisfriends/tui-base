@@ -35,12 +35,6 @@ type pairMetrics struct {
 	failures       []string
 }
 
-type adjustment struct {
-	color   colorful.Color
-	metrics pairMetrics
-	passes  bool
-}
-
 var colorVisionFilters = []colorVisionFilter{
 	{
 		name: "protanopia",
@@ -123,77 +117,6 @@ func evaluatePair(pair semanticPair) pairMetrics {
 	}
 
 	return metrics
-}
-
-func suggestAdjustedForeground(pair semanticPair, step float64) adjustment {
-	if step <= 0 || step > 1 {
-		step = 0.01
-	}
-
-	originalFG, ok := colorful.MakeColor(pair.fg)
-	if !ok {
-		return adjustment{}
-	}
-	originalBG, ok := colorful.MakeColor(pair.bg)
-	if !ok {
-		return adjustment{}
-	}
-
-	targets := []colorful.Color{{R: 0, G: 0, B: 0}, {R: 1, G: 1, B: 1}}
-
-	closest := adjustment{}
-	closestDistance := math.MaxFloat64
-	closestPenalty := math.MaxFloat64
-
-	bestPassing := adjustment{}
-	bestPassingDistance := math.MaxFloat64
-
-	for _, target := range targets {
-		for blend := 0.0; blend <= 1.0+1e-12; blend += step {
-			candidate := originalFG.BlendLab(target, blend).Clamped()
-			metrics := evaluatePair(semanticPair{
-				fg:            candidate,
-				bg:            originalBG,
-				minContrast:   pair.minContrast,
-				minCVDistance: pair.minCVDistance,
-				minCVContrast: pair.minCVContrast,
-			})
-			distance := originalFG.DistanceCIEDE2000(candidate)
-
-			if len(metrics.failures) == 0 && distance < bestPassingDistance {
-				bestPassing = adjustment{color: candidate, metrics: metrics, passes: true}
-				bestPassingDistance = distance
-			}
-
-			penalty := accessibilityPenalty(metrics, pair)
-			if penalty < closestPenalty || (almostEqualFloat64(penalty, closestPenalty, 1e-12) && distance < closestDistance) {
-				closest = adjustment{color: candidate, metrics: metrics, passes: len(metrics.failures) == 0}
-				closestDistance = distance
-				closestPenalty = penalty
-			}
-		}
-	}
-
-	if bestPassing.passes {
-		return bestPassing
-	}
-	return closest
-}
-
-func accessibilityPenalty(metrics pairMetrics, pair semanticPair) float64 {
-	penalty := 0.0
-
-	if metrics.normalContrast < pair.minContrast {
-		penalty += pair.minContrast - metrics.normalContrast
-	}
-	if metrics.minCVDistance < pair.minCVDistance {
-		penalty += (pair.minCVDistance - metrics.minCVDistance) * 8
-	}
-	if metrics.minCVContrast < pair.minCVContrast {
-		penalty += pair.minCVContrast - metrics.minCVContrast
-	}
-
-	return penalty
 }
 
 func applyColorVisionFilter(c colorful.Color, filter colorVisionFilter) colorful.Color {
@@ -453,8 +376,8 @@ func TestStyleComboShortlistJSON(t *testing.T) {
 	}
 
 	var got shortlistDoc
-	if err := json.Unmarshal(b, &got); err != nil {
-		t.Fatalf("parse shortlist json: %v", err)
+	if unmarshalErr := json.Unmarshal(b, &got); unmarshalErr != nil {
+		t.Fatalf("parse shortlist json: %v", unmarshalErr)
 	}
 
 	if len(got.Dark) == 0 || len(got.Light) == 0 {

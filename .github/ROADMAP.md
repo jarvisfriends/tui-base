@@ -114,7 +114,7 @@
 
 | Status | # | Task | Notes |
 |---|---|---|---|
-| ✅ Done | TL-4 | Add `.golangci.yml` lint config | Enables `govet`(+shadow), `staticcheck`, `unused`, `gosimple`, `errcheck`, `ineffassign`; v1 config (see note for v2) |
+| ✅ Done | TL-4 | Add `.golangci.yml` lint config | Enables `govet`(+shadow), `staticcheck`, `unused`, `gosimple`, `errcheck`, `ineffassign`; config kept aligned with current golangci-lint schema |
 
 ## aSettings Integration Follow-ups
 

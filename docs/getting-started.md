@@ -1,6 +1,7 @@
 # Getting Started with tui-base
 
-This tutorial is for engineers building a multi-page Charm v2 application that needs structure, observability, and maintainability from day one.
+This tutorial is for engineers building a multi-page Charm v2 application that needs structure,
+observability, and maintainability from day one.
 
 ## 1. Prerequisites
 
@@ -37,7 +38,7 @@ This lets theme changes propagate immediately without replacing every child mode
 
 ## 5. Debug While You Build
 
-Use the debug page and status bar to inspect behavior:
+Use the inspector page and status bar to inspect behavior:
 
 - Message log deduplicates repeated events.
 - Runtime logs are streamed from the shared logger.
@@ -66,6 +67,14 @@ Checklist:
 ```bash
 go test ./... -v
 go test -race ./... -v
+GOOS=windows GOARCH=amd64 golangci-lint run ./...
+GOOS=linux GOARCH=amd64 golangci-lint run ./...
+```
+
+Preferred local gate (matches pre-commit expectations):
+
+```bash
+bash tools/local_verify.sh
 ```
 
 If available in your environment, also run:

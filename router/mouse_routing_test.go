@@ -102,7 +102,7 @@ func TestMouseRoutingBoundaries(t *testing.T) {
 		switch mm := m.(type) {
 		case inspector.MouseHighlightMsg:
 			found = true
-		if mm.Child != "content" {
+			if mm.Child != "content" {
 				t.Fatalf("expected child=content, got=%s", mm.Child)
 			}
 			if mm.OffX != navWidth || mm.OffY != 3 {

@@ -5,7 +5,8 @@ This document captures stable decisions that were previously mixed into complete
 ## ADR-001: Router-Owned Composition
 
 Decision:
-- The router is the root model that owns navigation, active page selection, status bar integration, theme pointer wiring, and message forwarding.
+- The router is the root model that owns navigation, active page selection,
+  status bar integration, theme pointer wiring, and message forwarding.
 
 Why:
 - Centralizes cross-cutting concerns and keeps page models focused on local behavior.
