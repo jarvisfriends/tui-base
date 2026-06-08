@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "==> gofmt (check only)"
+UNFORMATTED=$(gofmt -l $(git ls-files '*.go') 2>/dev/null || true)
+if [[ -n "${UNFORMATTED}" ]]; then
+  echo "ERROR: gofmt required for:"
+  echo "${UNFORMATTED}"
+  exit 1
+fi
+
+echo "==> golangci-lint"
+if ! command -v golangci-lint >/dev/null 2>&1; then
+  echo "ERROR: golangci-lint is required but not installed."
+  echo "Install: https://golangci-lint.run/welcome/install/"
+  exit 1
+fi
+if ! golangci-lint run ./...; then
+  echo "ERROR: golangci-lint failed — commit blocked"
+  exit 1
+fi
+
+echo "==> go vet"
+if ! go vet ./...; then
+  echo "ERROR: go vet failed — commit blocked"
+  exit 1
+fi
+
+echo "==> go test -race"
+if ! go test -race ./...; then
+  echo "ERROR: tests failed (race detector on) — commit blocked"
+  exit 1
+fi
+
+echo "All checks passed."

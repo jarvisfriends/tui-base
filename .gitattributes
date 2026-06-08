@@ -1,0 +1,22 @@
+# Enforce LF line endings for all text files
+* text=auto eol=lf
+
+# Go source files — always LF
+*.go text eol=lf
+
+# Shell scripts — always LF (CRLF breaks shebangs)
+*.sh text eol=lf
+
+# Config / markup files — always LF
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+
+# Binary — no conversion
+*.png binary
+*.jpg binary
+*.gif binary
+*.exe binary
+*.wasm binary

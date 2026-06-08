@@ -3,39 +3,37 @@
 # Run locally with:
 #   golangci-lint run ./...
 #
-# This config targets golangci-lint v1.x. Note: under golangci-lint v2,
-# `gosimple` was merged into `staticcheck`; if you upgrade to v2, remove the
-# `gosimple` entry below (staticcheck will cover those checks).
+# Compatible with current golangci-lint versions.
+version: "2"
 run:
   timeout: 5m
   tests: true
 
 linters:
-  disable-all: true
+  default: none
   enable:
     - govet      # suspicious constructs (printf args, shadowing, etc.)
     - staticcheck # broad correctness + simplification analyses
     - unused     # unused code (vars, funcs, types)
-    - gosimple   # code simplifications (folded into staticcheck in v2)
     - errcheck   # unchecked error return values
     - ineffassign # ineffectual assignments
-
-linters-settings:
-  govet:
-    enable:
-      - shadow
-  errcheck:
-    # Report `x, _ := f()` only for type assertions, not blank-assigned errors
-    # (the codebase intentionally uses `//nolint:errcheck` where appropriate).
-    check-type-assertions: true
-    check-blank: false
+  settings:
+    govet:
+      enable:
+        - shadow
+    errcheck:
+      # Report `x, _ := f()` only for type assertions, not blank-assigned errors
+      # (the codebase intentionally uses `//nolint:errcheck` where appropriate).
+      check-type-assertions: true
+      check-blank: false
+  exclusions:
+    rules:
+      # Tests frequently ignore errors from setup/teardown helpers.
+      - path: _test\.go
+        linters:
+          - errcheck
 
 issues:
   # Show every finding rather than capping per-linter/per-message.
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-rules:
-    # Tests frequently ignore errors from setup/teardown helpers.
-    - path: _test\.go
-      linters:
-        - errcheck

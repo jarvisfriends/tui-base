@@ -20,9 +20,7 @@ func TestInterfaceAssertions(t *testing.T) {
 	t.Parallel()
 
 	var component Component = stubComponent{}
-	if component == nil {
-		t.Fatal("expected Component assignment to succeed")
-	}
+	_ = component
 
 	if AppVersion() == "" {
 		t.Fatal("expected AppVersion to return a non-empty value")

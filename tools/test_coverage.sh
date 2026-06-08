@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "Running golangci-lint..."
+golangci-lint run ./...
+
 echo "Running tests with race detector and coverage..."
 go test -race ./... -coverprofile=coverage.out
 

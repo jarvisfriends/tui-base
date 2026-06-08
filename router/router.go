@@ -887,8 +887,8 @@ func (m *RouterModel) handleResizeCmd() tea.Cmd {
 	}
 	if m.navigationVisible && m.nav != nil {
 		// Let the active nav compute its preferred size based on the full terminal width and available height.
-		_, cmd := m.nav.Update(tea.WindowSizeMsg{Width: m.width - removeWidth, Height: m.height - removeHeight})
-		cmds = append(cmds, cmd)
+		_, navCmd := m.nav.Update(tea.WindowSizeMsg{Width: m.width - removeWidth, Height: m.height - removeHeight})
+		cmds = append(cmds, navCmd)
 		// A left-docked nav (sidebar) reserves width; a top-docked nav (tabs)
 		// reserves height. Driven by Dock() so a new nav style needs no router change.
 		if m.nav.Dock() == navigation.DockLeft {

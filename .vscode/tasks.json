@@ -41,6 +41,18 @@
             "problemMatcher": []
         },
         {
+            "label": "go: lint",
+            "type": "shell",
+            "command": "golangci-lint run ./...",
+            "problemMatcher": []
+        },
+        {
+            "label": "go: verify local",
+            "type": "shell",
+            "command": "bash tools/local_verify.sh",
+            "problemMatcher": []
+        },
+        {
             "label": "go: coverage",
             "type": "shell",
             "command": "bash tools/test_coverage.sh",

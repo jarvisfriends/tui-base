@@ -821,7 +821,8 @@ func (m *InspectorModel) LogMessageForDebugging(msg tea.Msg) tea.Cmd {
 
 // appendExternalLog merges one MsgLog (received from the pending queue) into
 // m.Logs with deduplication. Must only be called from the tea goroutine.
-func (m *InspectorModel) appendExternalLog(entry MsgLog) {	if len(m.Logs) > 0 {
+func (m *InspectorModel) appendExternalLog(entry MsgLog) {
+	if len(m.Logs) > 0 {
 		last := &m.Logs[len(m.Logs)-1]
 		if last.Type == entry.Type && last.Content == entry.Content {
 			last.Count++

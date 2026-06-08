@@ -15,17 +15,17 @@ import (
 type Subscriber func(level string, ts time.Time, msg string)
 
 var (
-	subsMu  sync.RWMutex
-	subs    []Subscriber
-	outFile *os.File
-	writeMu sync.Mutex
-	levelMu sync.RWMutex
+	subsMu    sync.RWMutex
+	subs      []Subscriber
+	outFile   *os.File
+	writeMu   sync.Mutex
+	levelMu   sync.RWMutex
 	appNameMu sync.RWMutex // guards logAppName
 
 	// Log rotation state (all guarded by writeMu).
-	logTarget   string           // path of the active log file
-	curLogBytes int64            // bytes written to the active file so far
-	maxLogBytes int64 = 10 << 20 // rotate once the file exceeds this; 0 disables
+	logTarget   string            // path of the active log file
+	curLogBytes int64             // bytes written to the active file so far
+	maxLogBytes int64  = 10 << 20 // rotate once the file exceeds this; 0 disables
 
 	logAppName = "tui-base" // overridden by SetAppName before InitFromSettings; guarded by appNameMu
 
