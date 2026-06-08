@@ -21,7 +21,7 @@ builds:
       - amd64
       - arm64
     ldflags:
-      - -s -w
+      - -s -w -X github.com/jarvisfriends/tui-base/common.appVersion={{.Version}}
 
 archives:
   - id: default
@@ -37,11 +37,11 @@ checksum:
   name_template: "checksums.txt"
 
 snapshot:
-  name_template: "{{ .Tag }}"
+  version_template: "{{ .Tag }}-next"
 
 release:
   github:
-    owner: amarcum
+    owner: jarvisfriends
     name: tui-base
 
 changelog:

@@ -205,7 +205,7 @@ func (m *UserNotificationOverlay) renderHistoryOverlay(maxW, maxH int) string {
 	innerW := panelW - 2
 
 	// header — must fill innerW so JoinVertical adds no unstyled padding.
-	headerStyle := c.Styles.FilterDim.Bold(true).Foreground(c.Styles.Title.GetForeground())
+	headerStyle := c.Styles.FilterDim.Bold(true).Foreground(c.Styles.Title.GetForeground()).Background(c.StatusBg)
 	header := headerStyle.Width(innerW).Render(fmt.Sprintf(" Notifications (%d active) ", activeCount))
 
 	// rows (cap to maxH - 5 to leave room for header, footer, borders)
@@ -224,6 +224,7 @@ func (m *UserNotificationOverlay) renderHistoryOverlay(maxW, maxH int) string {
 		n := active[i]
 		ageStr := formatAge(time.Since(n.CreatedAt))
 		sevStyle := c.Styles.FilterDim.Foreground(lipgloss.Color(m.colorForSeverity(n.Severity))).Bold(true)
+		sevStyle = sevStyle.Background(c.StatusBg)
 		badge := sevStyle.Render("[" + n.Severity.Badge() + "]")
 
 		// Layout: [badge][space+content][gap][space+ageStr] = innerW.
@@ -235,16 +236,14 @@ func (m *UserNotificationOverlay) renderHistoryOverlay(maxW, maxH int) string {
 			content = string(runes[:contentMaxW-1]) + "…"
 		}
 
-		rowBg := c.Styles.TextOnBg.GetBackground()
 		rowFg := c.Styles.StatusBase.GetForeground()
 		if i == m.historyCursor {
-			rowBg = c.Styles.TextOnBg.GetBackground()
 			rowFg = c.Styles.SelectedItem.GetForeground()
 		}
 
-		rowStyle := c.Styles.Row.Background(rowBg)
-		contentStyle := c.Styles.Row.Background(rowBg).Foreground(rowFg)
-		ageStyle := c.Styles.Row.Background(rowBg).Foreground(c.Styles.Subtitle.GetForeground())
+		rowStyle := c.Styles.Row.Background(c.StatusBg)
+		contentStyle := c.Styles.Row.Background(c.StatusBg).Foreground(rowFg)
+		ageStyle := c.Styles.Row.Background(c.StatusBg).Foreground(c.Styles.Subtitle.GetForeground())
 
 		contentPart := contentStyle.Render(" " + content)
 		agePart := ageStyle.Render(" " + ageStr)
@@ -259,14 +258,14 @@ func (m *UserNotificationOverlay) renderHistoryOverlay(maxW, maxH int) string {
 	}
 
 	// footer
-	footerStyle := c.Styles.FilterDim
+	footerStyle := c.Styles.FilterDim.Background(c.StatusBg)
 	footer := footerStyle.Width(innerW).Render(" ↑↓ navigate  Enter dismiss  d dismiss all  Esc close")
 
 	inner := lipgloss.JoinVertical(lipgloss.Left, header, strings.Join(rows, "\n"), footer)
 	borderStyle := c.Styles.OverlayBorder.
 		Border(lipgloss.RoundedBorder()).
-		BorderBackground(c.Styles.FilterDim.GetBackground()).
-		Background(c.Styles.FilterDim.GetBackground())
+		BorderBackground(c.StatusBg).
+		Background(c.StatusBg)
 	// Width(panelW) sets the TOTAL width including border.
 	return borderStyle.Width(panelW).Render(inner)
 }

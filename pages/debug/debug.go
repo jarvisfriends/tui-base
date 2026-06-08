@@ -18,6 +18,7 @@ import (
 
 	"charm.land/bubbles/v2/table"
 	"charm.land/bubbles/v2/viewport"
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"golang.org/x/text/language"
@@ -42,6 +43,27 @@ type MsgLog struct {
 	Count     int
 }
 
+// DebugKeyMap holds key bindings for the debug inspector page. All bindings
+// are exported so consumers can rebind them without forking the package.
+type DebugKeyMap struct {
+	Accessibility key.Binding // toggle accessibility panel
+	Highlight     key.Binding // toggle mouse-highlight overlay
+	NotifyInfo    key.Binding // fire a test info notification
+	NotifyWarning key.Binding // fire a test warning notification
+	NotifyError   key.Binding // fire a test error notification
+}
+
+// DefaultDebugKeys returns the default key bindings for the debug inspector.
+func DefaultDebugKeys() DebugKeyMap {
+	return DebugKeyMap{
+		Accessibility: key.NewBinding(key.WithKeys("a", "A"), key.WithHelp("a", "accessibility panel")),
+		Highlight:     key.NewBinding(key.WithKeys("h", "H"), key.WithHelp("h", "highlight toggle")),
+		NotifyInfo:    key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "test info notification")),
+		NotifyWarning: key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "test warning notification")),
+		NotifyError:   key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "test error notification")),
+	}
+}
+
 type Model struct {
 	Logs           []MsgLog
 	width          int
@@ -51,19 +73,14 @@ type Model struct {
 	colors         *theme.AppStyle
 	// Accessibility panel — toggled with 'a'
 	acPanel *AccessibilityPanel
-	// mouse highlight support
-	ShowHighlight   bool
-	LastMouseX      int
-	LastMouseY      int
-	LastMouseChild  string
-	LastMouseButton string
-	LastMouseMod    int
-	LastMouseOffX   int
-	LastMouseOffY   int
-	LastKeyPress    string
-	LastKeyMod      []string
-	LastKeyRelease  string
-	LastKeyRelMod   []string
+	// highlight when stable values change, Change background color
+	ShowHighlight    bool
+	LastMouseClick   tea.Mouse
+	LastMouseRelease tea.Mouse
+	LastMouseMotion  tea.Mouse
+	LastMouseWheel   tea.Mouse
+	LastKeyPress     tea.Key
+	LastKeyRel       tea.Key
 	// runtime stats refreshed by background tick (≤1 s cadence)
 	stats     runtimeStatsSnapshot
 	prevStats runtimeStatsSnapshot // previous snapshot for computing per-second deltas
@@ -74,6 +91,7 @@ type Model struct {
 	termDiag       *TermDiagMsg
 	termDiagSet    bool
 	initialProfile colorprofile.Profile // detected at New() time
+	visible        bool
 
 	// Cached render artifacts to reduce per-frame allocations.
 	view           tea.View
@@ -83,6 +101,27 @@ type Model struct {
 	runtimeColumns []table.Column // pre-allocated column slice for the runtime stats table (to avoid reallocating on every View)
 	runtimeColMaxW []int          // high-watermark: max rendered width ever seen per column
 	diskHeader     []table.Column // pre-allocated column slice for the disk stats table
+
+	// colorProfileEnvVar is the app-specific env var name for color-profile
+	// overrides, set by the router via SetColorProfileEnvVar.
+	colorProfileEnvVar string
+
+	// keys holds rebindable key bindings for the inspector.
+	keys DebugKeyMap
+}
+
+func (m *Model) IsVisible() bool { return m.visible }
+func (m *Model) ToggleVisible()  { m.visible = !m.visible }
+
+// SetColorProfileEnvVar tells the inspector which env-var name the embedding
+// app uses for color-profile overrides (e.g. "MY_APP_COLOR_PROFILE").
+// The router calls this immediately after construction so the inspector can
+// surface the correct env-var name in its terminal diagnostics section.
+func (m *Model) SetColorProfileEnvVar(name string) {
+	if name == "" {
+		name = "TUI_BASE_COLOR_PROFILE"
+	}
+	m.colorProfileEnvVar = name
 }
 
 // SetColors stores a shared AppColors pointer so the router can update the
@@ -112,6 +151,7 @@ func New() *Model {
 		printer:        message.NewPrinter(language.English),
 		dirty:          true,
 		initialProfile: colorprofile.Detect(os.Stdout, os.Environ()),
+		keys:           DefaultDebugKeys(),
 	}
 	// populate stats immediately so View() has data before the first tick fires
 	m.stats = collectSnapshot(m.startTime)
@@ -170,6 +210,9 @@ func (m *Model) scheduleStatsTick() tea.Cmd {
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Record every message the inspector sees (deduped/stacked) so the log pane
+	// reflects live traffic. Silent, high-frequency messages return early.
+	m.LogMessageForDebugging(msg)
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -185,7 +228,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// When the accessibility panel is open it handles its own navigation;
 		// only 'a' is intercepted here to toggle it.
 		if m.acPanel != nil && m.acPanel.IsVisible() {
-			if press, ok := msg.(tea.KeyPressMsg); ok && press.String() == "a" {
+			if press, ok := msg.(tea.KeyPressMsg); ok && key.Matches(press, m.keys.Accessibility) {
 				m.acPanel.Toggle()
 				return m, nil
 			}
@@ -194,26 +237,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch km := msg.(type) {
 		case tea.KeyPressMsg:
-			switch km.String() {
-			case "a", "A":
+			switch {
+			case key.Matches(km, m.keys.Accessibility):
 				if m.acPanel != nil {
 					m.acPanel.Toggle()
 				}
 				m.dirty = true
 				return m, nil
-			case "h", "H":
+			case key.Matches(km, m.keys.Highlight):
 				m.ShowHighlight = !m.ShowHighlight
 				m.dirty = true
 				return m, nil
-			case "i":
+			case key.Matches(km, m.keys.NotifyInfo):
 				return m, func() tea.Msg {
 					return notifications.AddMsg{Content: "Test: Info notification from Inspector", Severity: notifications.SeverityInfo, TTL: notifications.SeverityInfo.DefaultTTL()}
 				}
-			case "w":
+			case key.Matches(km, m.keys.NotifyWarning):
 				return m, func() tea.Msg {
 					return notifications.AddMsg{Content: "Test: Warning notification from Inspector", Severity: notifications.SeverityWarning, TTL: notifications.SeverityWarning.DefaultTTL()}
 				}
-			case "e":
+			case key.Matches(km, m.keys.NotifyError):
 				return m, func() tea.Msg {
 					return notifications.AddMsg{Content: "Test: Error notification from Inspector", Severity: notifications.SeverityError, TTL: notifications.SeverityError.DefaultTTL()}
 				}
@@ -229,47 +272,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.stats = msg.snapshot
 		m.dirty = true
 		return m, m.scheduleStatsTick()
-	case MouseHighlightMsg:
-		// update last mouse highlight info (sent from router)
-		m.LastMouseX = msg.GlobalX
-		m.LastMouseY = msg.GlobalY
-		m.LastMouseChild = msg.Child
-		m.LastMouseOffX = msg.OffX
-		m.LastMouseOffY = msg.OffY
-		// Mouse motion can be extremely high frequency. Only invalidate the view
-		// when highlight UI is enabled; otherwise keep cached rendering.
-		if m.ShowHighlight {
-			m.dirty = true
+	case tea.MouseWheelMsg:
+		if msg.Mouse().Button == tea.MouseWheelUp {
+			m.logViewport.ScrollUp(3)
+		} else {
+			m.logViewport.ScrollDown(3)
 		}
-	case tea.MouseMsg: //, tea.MousePressMsg, tea.MouseWheelMsg:
-		m.LastMouseX = msg.Mouse().X
-		m.LastMouseY = msg.Mouse().Y
-		m.LastMouseButton = msg.Mouse().String()
-		m.LastMouseMod = int(msg.Mouse().Mod)
-		m.LastMouseOffX = 0
-		m.LastMouseOffY = 0
-		// Avoid logging cell-motion spam; only log user-significant mouse actions.
-		switch msg.(type) {
-		case tea.MouseClickMsg, tea.MouseReleaseMsg, tea.MouseWheelMsg:
-			if wheel, ok := msg.(tea.MouseWheelMsg); ok {
-				if wheel.Mouse().Button == tea.MouseWheelUp {
-					m.logViewport.ScrollUp(3)
-				} else {
-					m.logViewport.ScrollDown(3)
-				}
-				m.dirty = true
-				return m, nil
-			}
-			m.dirty = true
-		case tea.MouseMotionMsg:
-			if m.ShowHighlight {
-				m.dirty = true
-			}
-		}
+		return m, nil
 	}
-	// Record every message the inspector sees (deduped/stacked) so the log pane
-	// reflects live traffic. Silent, high-frequency messages return early above.
-	m.LogMessageForDebugging(msg)
 	return m, nil
 }
 
@@ -284,6 +294,10 @@ type MouseHighlightMsg struct {
 	OffY    int
 }
 
+func KeyModToString(mod tea.KeyMod) string {
+	return strings.ReplaceAll(strings.TrimSpace(tea.Key{Mod: mod}.Keystroke()), "+", " ")
+}
+
 func (m *Model) LogMessageForDebugging(msg tea.Msg) {
 	msgType := fmt.Sprintf("%T", msg)
 	msgContent := fmt.Sprintf("%+v", msg)
@@ -291,39 +305,47 @@ func (m *Model) LogMessageForDebugging(msg tea.Msg) {
 	case statsTickMsg:
 		return // skip logging internal stats ticks to reduce noise
 	case tea.WindowSizeMsg:
-		msgContent = fmt.Sprintf("Width: %d, Height: %d", mt.Width, mt.Height)
-	case tea.MouseReleaseMsg:
-		curMouse := mt.Mouse()
-		msgContent = fmt.Sprintf("Global: %d,%d  Button: %s  Mod: %d",
-			curMouse.X, curMouse.Y, curMouse.Button, curMouse.Mod)
+		_ = mt
+		return // window resize is high-frequency and already reflected in the layout; skip logging
 	case tea.MouseMsg:
 		curMouse := mt.Mouse()
-		msgContent = fmt.Sprintf("Global: %d,%d  Button: %s  Mod: %d",
-			curMouse.X, curMouse.Y, curMouse.Button, curMouse.Mod)
+		switch mt.(type) {
+		case tea.MouseClickMsg:
+			m.LastMouseClick = curMouse
+			m.dirty = true
+			return
+		case tea.MouseReleaseMsg:
+			m.LastMouseRelease = curMouse
+			m.dirty = true
+			return
+		case tea.MouseWheelMsg:
+			m.LastMouseWheel = curMouse
+			m.dirty = true
+			return
+		case tea.MouseMotionMsg:
+			// Mouse motion can be extremely high frequency. Only invalidate the view
+			// when highlight UI is enabled; otherwise keep cached rendering.
+			if m.ShowHighlight {
+				m.dirty = true
+			}
+			// Avoid logging cell-motion spam; only log user-significant mouse actions.
+			m.LastMouseMotion = curMouse
+			return
+		default:
+			msgContent = fmt.Sprintf("Global: %d,%d  Button: %s  Mod: %d(%s)",
+				curMouse.X, curMouse.Y, curMouse.Button, curMouse.Mod, KeyModToString(curMouse.Mod))
+		}
 	case tea.KeyMsg:
 		switch km := msg.(type) {
 		case tea.KeyPressMsg:
-			m.LastKeyPress = km.Key().String()
-			if sp := strings.Split(km.String(), "+"); len(sp) > 1 {
-				m.LastKeyMod = strings.Split(km.String(), "+")[:len(sp)-1]
-				m.LastKeyPress = strings.Split(km.String(), "+")[len(sp)-1]
-			} else {
-				m.LastKeyMod = []string{}
-			}
+			m.LastKeyPress = km.Key()
 			return // skip logging every key press to reduce noise; tracked separately in the view
 		case tea.KeyReleaseMsg:
-			m.LastKeyRelease = km.Key().String()
-			if sp := strings.Split(km.String(), "+"); len(sp) > 1 {
-				m.LastKeyRelMod = strings.Split(km.String(), "+")[:len(sp)-1]
-				m.LastKeyRelease = strings.Split(km.String(), "+")[len(sp)-1]
-			} else {
-				m.LastKeyRelMod = []string{}
-			}
-			msgContent = fmt.Sprintf("Key Release: %s", km.Keystroke())
+			m.LastKeyRel = km.Key()
+			return
 		default:
 			msgContent = fmt.Sprintf("%T Key: %s", km, mt.String())
 		}
-
 	}
 
 	// Check if the last log is the same to stack them
@@ -601,15 +623,32 @@ func (m *Model) View() tea.View {
 			"Allocs/sec", colorStat(allocsPerSec, 10000, 100000, p.Sprintf("%.0f", allocsPerSec)),
 			"Heap Objects", valStyle.Render(p.Sprintf("%d", st.HeapObjects)),
 		},
-		{"Mouse Down", valStyle.Render(fmt.Sprintf("%d,%d", m.LastMouseX, m.LastMouseY)),
-			"Mod", valStyle.Render(fmt.Sprintf("%d", m.LastMouseMod)),
-			"Button", valStyle.Render(m.LastMouseButton),
-			"OffX/Y", valStyle.Render(fmt.Sprintf("%d,%d", m.LastMouseOffX, m.LastMouseOffY)),
+		// Click, Release, Motion, Wheel
+		{"Mouse Click", valStyle.Render(fmt.Sprintf("%d,%d", m.LastMouseClick.X, m.LastMouseClick.Y)),
+			"Mod", valStyle.Render(KeyModToString(m.LastMouseClick.Mod)),
+			"Button", valStyle.Render(m.LastMouseClick.Button.String()),
 		},
-		{"Key Mod", valStyle.Render(strings.Join(m.LastKeyMod, "+")),
-			"Press", valStyle.Render(m.LastKeyPress),
-			"Rel Mod", valStyle.Render(strings.Join(m.LastKeyRelMod, "+")),
-			"Rel", valStyle.Render(m.LastKeyRelease),
+		{"Mouse Release", valStyle.Render(fmt.Sprintf("%d,%d", m.LastMouseRelease.X, m.LastMouseRelease.Y)),
+			"Mod", valStyle.Render(KeyModToString(m.LastMouseRelease.Mod)),
+			"Button", valStyle.Render(m.LastMouseRelease.Button.String()),
+		},
+		{"Mouse Motion", valStyle.Render(fmt.Sprintf("%d,%d", m.LastMouseMotion.X, m.LastMouseMotion.Y)),
+			"Mod", valStyle.Render(KeyModToString(m.LastMouseMotion.Mod)),
+			"Button", valStyle.Render(m.LastMouseMotion.Button.String()),
+		},
+		{"Mouse Wheel", valStyle.Render(fmt.Sprintf("%d,%d", m.LastMouseWheel.X, m.LastMouseWheel.Y)),
+			"Mod", valStyle.Render(KeyModToString(m.LastMouseWheel.Mod)),
+			"Button", valStyle.Render(m.LastMouseWheel.Button.String()),
+		},
+		{"Key Press String", valStyle.Render(m.LastKeyPress.String()),
+			"Text/Repeated", valStyle.Render(fmt.Sprintf("%s/%t", m.LastKeyPress.Text, m.LastKeyPress.IsRepeat)),
+			"Mod", valStyle.Render(KeyModToString(m.LastKeyPress.Mod)),
+			// "Code/Shifted", valStyle.Render(fmt.Sprintf("%c/%c", m.LastKeyPress.Code, m.LastKeyPress.ShiftedCode)),
+		},
+		{"Key Rel String", valStyle.Render(m.LastKeyRel.String()),
+			"Text/Repeated", valStyle.Render(fmt.Sprintf("%s/%t", m.LastKeyRel.Text, m.LastKeyRel.IsRepeat)),
+			"Mod", valStyle.Render(KeyModToString(m.LastKeyRel.Mod)),
+			// "Code/Shifted", valStyle.Render(fmt.Sprintf("%c/%c", m.LastKeyRel.Code, m.LastKeyRel.ShiftedCode)),
 		},
 	}
 	for i := range m.runtimeColumns {
@@ -746,16 +785,6 @@ func (m *Model) View() tea.View {
 	acHint := hintStyle.Render("  [a] Accessibility browser")
 	buttons := hintStyle.Render("Notification test: ") + infoBtn + "  " + warnBtn + "  " + errBtn + acHint
 
-	// Mouse highlight block (optional)
-	highlight := ""
-	if m.ShowHighlight {
-		highlight = c.Styles.SelectedItem.
-			Background(c.Styles.SelectedItem.GetBackground()).
-			Foreground(c.Styles.SelectedItem.GetForeground()).
-			Padding(0, 1).
-			Render(fmt.Sprintf("Mouse: %d,%d  over: %s  (off: %d,%d)  [H to toggle]", m.LastMouseX, m.LastMouseY, m.LastMouseChild, m.LastMouseOffX, m.LastMouseOffY))
-	}
-
 	// When the accessibility panel is open, render it in place of the log area.
 	if m.acPanel != nil && m.acPanel.IsVisible() {
 		panelH := max(m.height-4, 6)
@@ -765,7 +794,7 @@ func (m *Model) View() tea.View {
 			Height(panelH).
 			MaxHeight(panelH).
 			Render(m.acPanel.View().Content)
-		m.view.SetContent(lipgloss.JoinVertical(lipgloss.Left, title, buttons, highlight, "", acStr))
+		m.view.SetContent(lipgloss.JoinVertical(lipgloss.Left, title, buttons, "", acStr))
 		m.view.BackgroundColor = c.Styles.TextOnBg.GetBackground()
 		m.view.ForegroundColor = c.Styles.TextOnBg.GetForeground()
 		m.dirty = false
@@ -785,7 +814,6 @@ func (m *Model) View() tea.View {
 		subtitleStyle.Render("Terminal & Theme"),
 		termSection,
 		buttons,
-		highlight,
 	)
 	logTitle := subtitleStyle.Render("Message Log")
 	logH := max(m.height-lipgloss.Height(title)-lipgloss.Height(staticContent)-lipgloss.Height(logTitle), 1)
@@ -848,9 +876,13 @@ func (m *Model) buildTermSection(c *theme.AppStyle, width int) string {
 	// Surface an active profile override. The env var name mirrors
 	// router.ColorProfileEnvVar; read directly here to avoid an import cycle
 	// (router imports this debug package).
-	profileOverride := strings.TrimSpace(os.Getenv("TUI_BASE_COLOR_PROFILE"))
+	envName := m.colorProfileEnvVar
+	if envName == "" {
+		envName = "TUI_BASE_COLOR_PROFILE"
+	}
+	profileOverride := strings.TrimSpace(os.Getenv(envName))
 	if profileOverride != "" {
-		profStr += " (forced: TUI_BASE_COLOR_PROFILE=" + profileOverride + ")"
+		profStr += " (forced: " + envName + "=" + profileOverride + ")"
 	}
 
 	// Detected background color from BackgroundColorMsg
@@ -931,7 +963,7 @@ func (m *Model) buildTermSection(c *theme.AppStyle, width int) string {
 	if prof == colorprofile.ANSI256 && isSSH && profileOverride == "" && colorterm == "(not set)" {
 		rows = append(rows,
 			warn("Color hint", "24-bit colors quantized to ANSI256 (COLORTERM not forwarded over SSH)"),
-			warn("Fix", "set COLORTERM=truecolor on the remote, or run with TUI_BASE_COLOR_PROFILE=truecolor"),
+			warn("Fix", "set COLORTERM=truecolor on the remote, or run with "+envName+"=truecolor"),
 		)
 	}
 

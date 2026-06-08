@@ -76,11 +76,39 @@ func pageIDFromTitle(title string) string {
 	return strings.ToLower(strings.ReplaceAll(title, " ", "-"))
 }
 
+// screamingSnake converts a human-readable app name to a SCREAMING_SNAKE_CASE
+// env-var prefix, e.g. "TUI Base" → "TUI_BASE", "My Cool App" → "MY_COOL_APP".
+// Non-alphanumeric runes are collapsed to underscores and duplicates removed.
+func screamingSnake(name string) string {
+	var b strings.Builder
+	prev := '_'
+	for _, r := range strings.ToUpper(name) {
+		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			prev = r
+		} else if prev != '_' {
+			b.WriteByte('_')
+			prev = '_'
+		}
+	}
+	result := strings.Trim(b.String(), "_")
+	if result == "" {
+		return "TUI_BASE"
+	}
+	return result
+}
+
 // var assertion is at the bottom of this file.
 
 type RouterModel struct {
 	nav     navigation.Navigator
 	appName string
+	// appEnvPrefix is the SCREAMING_SNAKE_CASE env-var prefix derived from the
+	// app name (e.g. "TUI Base" → "TUI_BASE"). Used to derive env var names
+	// so consumer apps get branded env vars instead of the framework defaults.
+	appEnvPrefix        string
+	colorProfileEnvVar  string
+	debugEnvVar         string
 
 	pages []tea.Model
 
@@ -104,8 +132,6 @@ type RouterModel struct {
 	// re-parsing ANSI output.
 	historyOverlayBounds [4]int
 
-	// inspectorOverlayVisible controls the Ctrl+D inspector overlay.
-	inspectorOverlayVisible bool
 	// inspectorOverlayBounds caches [x, y, w, h] of the last-rendered
 	// inspector overlay for hit-testing in OnMouse.
 	inspectorOverlayBounds [4]int
@@ -218,6 +244,14 @@ func NewWithOptions(opts Options) *RouterModel {
 	initialColors := theme.Active()
 
 	// create router with chosen nav
+
+	// Derive env-var prefix before struct construction so colorProfile can
+	// honor the app-specific override (e.g. MY_APP_COLOR_PROFILE).
+	appPrefix := screamingSnake(appName)
+	appColorProfileEnvVar := appPrefix + "_COLOR_PROFILE"
+	appDebugEnvVar := appPrefix + "_DEBUG"
+	initialColorProfile := effectiveColorProfileForEnvVar(appColorProfileEnvVar)
+
 	m := &RouterModel{
 		nav:               nav,
 		appName:           appName,
@@ -225,13 +259,26 @@ func NewWithOptions(opts Options) *RouterModel {
 		keys:              keys.DefaultKeyMap(),
 		colors:            initialColors,
 		navigationVisible: true,
-		colorProfile:      EffectiveColorProfile(),
+		colorProfile:      initialColorProfile,
 		settingsPage:      settingsModel,
 		homePage:          home.New(),
 	}
 	// create a single inspector instance and keep a pointer to it so we can
 	// forward messages to it even when it's not the active page.
 	m.inspector = debug.New()
+
+	// Derive env-var names from the app name so consumers get branded vars
+	// (e.g. "My App" → MY_APP_COLOR_PROFILE, MY_APP_DEBUG) instead of the
+	// generic TUI_BASE_* names.
+	m.appEnvPrefix = appPrefix
+	m.colorProfileEnvVar = appColorProfileEnvVar
+	m.debugEnvVar = appDebugEnvVar
+	m.inspector.SetColorProfileEnvVar(m.colorProfileEnvVar)
+
+	// Also expose the app's env var name via the program helper so that
+	// NewProgram(m) picks up the correct override if a consumer sets it.
+	// The router exposes ColorProfileEnvVar() for callers who need the name.
+
 	// subscribe inspector to log events so runtime logs appear in the UI
 	log.RegisterSubscriber(func(level string, ts time.Time, msg string) {
 		m.inspector.AddLog(level, ts, msg)
@@ -241,18 +288,6 @@ func NewWithOptions(opts Options) *RouterModel {
 	// page). Settings is always appended last. Inspector is available globally
 	// as an overlay via Ctrl+D.
 	// When no extra pages are supplied the default is Home + Settings.
-	var extraNavPages []navigation.Page
-	var extraModels []tea.Model
-	for _, rp := range opts.ExtraPages {
-		if rp.Model == nil || rp.Title == "" {
-			continue
-		}
-		extraNavPages = append(extraNavPages, navigation.Page{ID: pageIDFromTitle(rp.Title), Title: rp.Title})
-		extraModels = append(extraModels, rp.Model)
-	}
-
-	_ = extraNavPages // retained for clarity with the existing collection loop
-	_ = extraModels
 	m.status.SetKeys(m.keys)
 	m.replaceAppPages(opts.ExtraPages, opts.DefaultPage, -1)
 	// create notification manager and load persisted entries (best-effort)
@@ -282,8 +317,8 @@ func NewWithOptions(opts Options) *RouterModel {
 	return m
 }
 
-// colorAware is implemented by any component that accepts a shared color palette pointer.
-type colorAware interface {
+// ColorAware is implemented by any component that accepts a shared color palette pointer.
+type ColorAware interface {
 	SetColors(c *theme.AppStyle)
 }
 
@@ -309,21 +344,21 @@ func (m *RouterModel) updatePageKeys() {
 // whenever the nav component is replaced.
 func (m *RouterModel) applyColors() {
 	if m.nav != nil {
-		if ca, ok := m.nav.(colorAware); ok {
+		if ca, ok := m.nav.(ColorAware); ok {
 			ca.SetColors(m.colors)
 		}
 	}
 	for _, p := range m.pages {
-		if ca, ok := p.(colorAware); ok {
+		if ca, ok := p.(ColorAware); ok {
 			ca.SetColors(m.colors)
 		}
 	}
 	if m.inspector != nil {
-		if ca, ok := any(m.inspector).(colorAware); ok {
+		if ca, ok := any(m.inspector).(ColorAware); ok {
 			ca.SetColors(m.colors)
 		}
 	}
-	if ca, ok := any(m.status).(colorAware); ok {
+	if ca, ok := any(m.status).(ColorAware); ok {
 		ca.SetColors(m.colors)
 	}
 }
@@ -487,7 +522,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.nav.SetActiveIndex(0)
 			}
 			// Wire the shared colors pointer to the new nav component.
-			if ca, ok := m.nav.(colorAware); ok {
+			if ca, ok := m.nav.(ColorAware); ok {
 				ca.SetColors(m.colors)
 			}
 		}
@@ -554,7 +589,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Apply the selected tint globally and refresh the shared colors pointer.
 		// All child components hold *m.colors so they see the new palette on the
 		// next render without any additional wiring.
-		if os.Getenv("MYTUI_DEBUG") == "1" {
+		if os.Getenv(m.debugEnvVar) == "1" {
 			log.Debugf("Router.Update: received ThemeMsg id=%s router size=%dx%d", msg.ID, m.width, m.height)
 		}
 		if msg.ApplyPreferences {
@@ -572,7 +607,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			*m.colors = *newColors
 		}
 		m.applyColors()
-		if os.Getenv("MYTUI_DEBUG") == "1" {
+		if os.Getenv(m.debugEnvVar) == "1" {
 			log.Debugf("Router.Update: applied theme id=%s", msg.ID)
 		}
 		// Force a resize pass so children receive the correct content dimensions
@@ -584,10 +619,10 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch keyMsg := msg.(type) {
 		case tea.KeyPressMsg:
 			// Inspector overlay intercepts keys when open.
-			if m.inspectorOverlayVisible {
+			if m.inspector.IsVisible() {
 				switch {
 				case key.Matches(keyMsg, m.keys.Debug), key.Matches(keyMsg, m.keys.Dismiss):
-					m.inspectorOverlayVisible = false
+					m.inspector.ToggleVisible()
 					m.inspectorOverlayBounds = [4]int{}
 					return m, m.handleResizeCmd()
 				default:
@@ -681,8 +716,8 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.status.ToggleVisible()
 				return m, m.handleResizeCmd()
 			case key.Matches(keyMsg, m.keys.Debug):
-				m.inspectorOverlayVisible = !m.inspectorOverlayVisible
-				if !m.inspectorOverlayVisible {
+				m.inspector.ToggleVisible()
+				if !m.inspector.IsVisible() {
 					m.inspectorOverlayBounds = [4]int{}
 				}
 				return m, m.handleResizeCmd()
@@ -825,7 +860,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Nav: always receives non-key messages (WindowSizeMsg, etc.);
 	// receives key messages only when the sidebar is focused AND the active
 	// page is not claiming exclusive keyboard focus.
-	if m.inspectorOverlayVisible {
+	if m.inspector.IsVisible() {
 		ow, oh := m.inspectorOverlayInnerSize()
 		_, inspectorCmd := m.inspector.Update(tea.WindowSizeMsg{Width: ow, Height: oh})
 		cmds = append(cmds, inspectorCmd)
@@ -894,7 +929,7 @@ func (m *RouterModel) handleResizeCmd() tea.Cmd {
 	cmds = append(cmds, cmd)
 	removeHeight := m.status.Height() // status bar knows if its active and what its height is
 	removeWidth := 0
-	if os.Getenv("MYTUI_DEBUG") == "1" {
+	if os.Getenv(m.debugEnvVar) == "1" {
 		log.Debugf("handleResizeCmd: router size=%dx%d statusHeight=%d", m.width, m.height, removeHeight)
 	}
 	if m.navigationVisible && m.nav != nil {
@@ -911,11 +946,11 @@ func (m *RouterModel) handleResizeCmd() tea.Cmd {
 			removeWidth += m.nav.Width()
 			removeHeight += m.nav.Height()
 		}
-		if os.Getenv("MYTUI_DEBUG") == "1" {
+		if os.Getenv(m.debugEnvVar) == "1" {
 			log.Debugf("handleResizeCmd: after nav type=%T removeWidth=%d removeHeight=%d", m.nav, removeWidth, removeHeight)
 		}
 	}
-	if os.Getenv("MYTUI_DEBUG") == "1" {
+	if os.Getenv(m.debugEnvVar) == "1" {
 		log.Debugf("handleResizeCmd: active page will get size=%dx%d", m.width-removeWidth, m.height-removeHeight)
 	}
 	_, cmd = m.GetActivePage().Update(tea.WindowSizeMsg{Width: m.width - removeWidth, Height: m.height - removeHeight})
@@ -1058,7 +1093,7 @@ func (m *RouterModel) View() tea.View {
 		}
 	}
 
-	if m.inspectorOverlayVisible && m.inspector != nil {
+	if m.inspector.IsVisible() {
 		ow, oh := m.inspectorOverlayOuterSize()
 		ox := max((m.width-ow)/2, 0)
 		oy := max((m.height-oh)/2, 0)
@@ -1119,13 +1154,13 @@ func (m *RouterModel) View() tea.View {
 	v.OnMouse = func(mm tea.MouseMsg) tea.Cmd {
 		// Inspector overlay intercept: click outside closes; inside routes to
 		// the inspector child view (wheel/drag/click handling).
-		if m.inspectorOverlayVisible && m.inspector != nil {
+		if m.inspector.IsVisible() {
 			bx, by, bw, bh := m.inspectorOverlayBounds[0], m.inspectorOverlayBounds[1], m.inspectorOverlayBounds[2], m.inspectorOverlayBounds[3]
 			me := mm.Mouse()
 			inside := me.X >= bx && me.X < bx+bw && me.Y >= by && me.Y < by+bh
 			if rel, ok := mm.(tea.MouseReleaseMsg); ok && !inside {
 				_ = rel
-				m.inspectorOverlayVisible = false
+				m.inspector.ToggleVisible()
 				m.inspectorOverlayBounds = [4]int{}
 				return m.handleResizeCmd()
 			}
@@ -1352,3 +1387,16 @@ func colorHex(c color.Color) string {
 }
 
 var _ tea.Model = (*RouterModel)(nil)
+
+// ColorProfileEnvVar returns the env-var name the router uses to honor a
+// forced color profile override. For an app named "My App" this will be
+// "MY_APP_COLOR_PROFILE". Pass this name to NewProgram so the program and the
+// router agree on which variable to read:
+//
+//	m := router.NewWithOptions(router.Options{AppName: "My App"})
+//	p := router.NewProgram(m, m.ColorProfileEnvVar())
+func (m *RouterModel) ColorProfileEnvVar() string { return m.colorProfileEnvVar }
+
+// DebugEnvVar returns the env-var name the router uses to enable verbose debug
+// logging (e.g. "MY_APP_DEBUG"). Set it to "1" at runtime to activate.
+func (m *RouterModel) DebugEnvVar() string { return m.debugEnvVar }

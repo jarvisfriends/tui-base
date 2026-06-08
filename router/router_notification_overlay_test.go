@@ -344,7 +344,7 @@ func TestInspectorOverlayStillShowsStatusBar(t *testing.T) {
 	if m.nav == nil {
 		t.Fatal("router nav is nil")
 	}
-	m.inspectorOverlayVisible = true
+	m.inspector.ToggleVisible() // make inspector visible
 	_ = m.handleResizeCmd()
 
 	content := stripANSI(m.View().Content)
