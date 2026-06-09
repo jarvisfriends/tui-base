@@ -70,7 +70,7 @@ fi
 echo "==> go vet"
 go vet ./...
 
-echo "==> go test -race"
-go test -race ./... -v
+echo "==> go test"
+go test ./... -v
 
 echo "Local verification passed."

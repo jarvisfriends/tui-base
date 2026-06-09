@@ -3,6 +3,7 @@ package status
 import (
 	"github.com/jarvisfriends/tui-base/keys"
 	"github.com/jarvisfriends/tui-base/notifications"
+	"github.com/jarvisfriends/tui-base/page"
 	"github.com/jarvisfriends/tui-base/theme"
 
 	"charm.land/bubbles/v2/help"
@@ -15,6 +16,7 @@ import (
 // statusbar model (animation, overlay, click regions) and exposes the same
 // tea.Model surface used elsewhere in the app.
 type BarModel struct {
+	page.Base
 	help     *help.Model
 	helpView tea.View
 	keys     *keys.AppKeyMap
@@ -23,8 +25,6 @@ type BarModel struct {
 	// page can show its own relevant shortcuts in the status bar.
 	pageBindings help.KeyMap
 	isVisible    bool
-
-	colors *theme.AppStyle
 
 	sb          *UserNotificationOverlay
 	lastRegions []ClickRegion // regions from the last SetWidth render
@@ -57,27 +57,10 @@ func (b *BarModel) summary() string {
 // ANSI-encoded output.
 func (b *BarModel) Regions() []ClickRegion { return b.lastRegions }
 
-// SetColors stores a shared AppColors pointer so theme changes propagate
-// without rebuilding the component.
-func (b *BarModel) SetColors(c *theme.AppStyle) { b.colors = c }
-
-// resolveColors returns the current palette from the shared pointer, falling
-// back to theme.Active() when no pointer has been set (e.g. in tests).
-func (b *BarModel) resolveColors() *theme.AppStyle {
-	if b.colors != nil {
-		return b.colors
-	}
-	return theme.Active()
-}
-
-// // applyHelpStyles updates the help widget's internal styles to match the
-// // current theme palette.
+// applyHelpStyles updates the help widget's internal styles to match the
+// current theme palette. SetColors/Colors are inherited from page.Base.
 func (b *BarModel) applyHelpStyles() {
-	if b.colors == nil {
-		b.colors = theme.Active()
-	}
-	c := b.resolveColors()
-	b.help.Styles = c.Styles.Help
+	b.help.Styles = b.Colors().Styles.Help
 }
 
 func New() *BarModel {
@@ -153,7 +136,7 @@ func (b *BarModel) SetWidth(width int) {
 	b.applyHelpStyles()
 	// ensure help width is up to date for the left content
 	b.help.SetWidth(width)
-	c := b.resolveColors()
+	c := b.Colors()
 
 	// When the active page provides its own key bindings show those; otherwise
 	// fall back to the global router shortcuts.
@@ -166,7 +149,7 @@ func (b *BarModel) SetWidth(width int) {
 	// The bubbles help widget emits \x1b[m (reset) before each inter-element
 	// space, stripping the background. Re-apply StatusBg after every reset so
 	// those spaces stay on the status bar background, not the terminal default.
-	left = reapplyBg(left, c.Styles.StatusBase.GetBackground())
+	left = theme.ReapplyBg(left, c.Styles.StatusBase.GetBackground())
 
 	// Render the status line using the internal statusbar renderer. The right
 	// segment carries the optional summary (e.g. the inspector's runtime stats).

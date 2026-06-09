@@ -2,7 +2,6 @@ package status
 
 import (
 	"fmt"
-	"image/color"
 	"strconv"
 	"strings"
 	"time"
@@ -268,34 +267,6 @@ func (m *UserNotificationOverlay) renderHistoryOverlay(maxW, maxH int) string {
 		Background(c.StatusBg)
 	// Width(panelW) sets the TOTAL width including border.
 	return borderStyle.Width(panelW).Render(inner)
-}
-
-// reapplyBg replaces every ANSI reset sequence (\x1b[m or \x1b[0m) with the
-// reset immediately followed by the given background escape code. This patches
-// the gaps left by the bubbles help widget, which resets styles between elements
-// and then emits a plain (no-background) space before the next styled segment.
-func reapplyBg(s string, bg color.Color) string {
-	bgCode := firstEscapeFromStyle(lipgloss.NewStyle().Background(bg).Render("X"))
-	if bgCode == "" {
-		return s
-	}
-	s = strings.ReplaceAll(s, "\x1b[0m", "\x1b[0m"+bgCode)
-	s = strings.ReplaceAll(s, "\x1b[m", "\x1b[m"+bgCode)
-	return s
-}
-
-// firstEscapeFromStyle extracts the first ANSI escape sequence from a lipgloss-
-// rendered string (e.g. "\x1b[48;5;236m" from "…\x1b[48;5;236mX\x1b[m").
-func firstEscapeFromStyle(s string) string {
-	i := strings.Index(s, "\x1b[")
-	if i < 0 {
-		return ""
-	}
-	j := strings.Index(s[i:], "m")
-	if j < 0 {
-		return ""
-	}
-	return s[i : i+j+1]
 }
 
 // colorForSeverity returns a hex color string for the given severity badge.
