@@ -1,7 +1,6 @@
 package router
 
 import (
-	"os"
 	"testing"
 
 	"github.com/jarvisfriends/tui-base/pages/settings"
@@ -15,9 +14,10 @@ import (
 // correctly initialises with the persisted nav style.
 func TestSettingsNavToggleViaClick(t *testing.T) {
 	// ensure no leftover settings file
-	_ = os.Remove("tui_settings.json")
-
-	m := New()
+	tmpDir := t.TempDir()
+	m := NewWithOptions(Options{
+		ConfigDir: tmpDir,
+	})
 
 	// initialize sizes so children render
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -53,14 +53,13 @@ func TestSettingsNavToggleViaClick(t *testing.T) {
 	if _, ok := m.nav.(*navigation.Tabs); !ok {
 		t.Fatalf("expected router nav to be tabs after NavStyleMsg; got %T", m.nav)
 	}
-
-	// cleanup settings file
-	_ = os.Remove("tui_settings.json")
 }
 
 // Also verify that sending the NavStyleMsg directly switches the nav.
 func TestSettingsNavToggleViaMsg(t *testing.T) {
-	m := New()
+	m := NewWithOptions(Options{
+		ConfigDir: t.TempDir(),
+	})
 	if _, ok := m.nav.(*navigation.Tabs); !ok {
 		t.Fatalf("expected initial nav to be sidebar; got %T", m.nav)
 	}

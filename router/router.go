@@ -1,6 +1,8 @@
 package router
 
 import (
+	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,7 +61,10 @@ type Options struct {
 	// storing notifications and other persistent state. Defaults to AppName
 	// (lowercased) when empty, and further falls back to "tui-base".
 	ConfigDirName string
-	ExtraPages    []RegisteredPage
+	// ConfigDir directly overrides the settings configuration directory.
+	// If set, this path is used directly.
+	ConfigDir  string
+	ExtraPages []RegisteredPage
 	// DefaultPage is the Title of the page to activate on startup.
 	// When empty the first page in the list is shown.
 	DefaultPage      string
@@ -187,11 +192,17 @@ func NewWithOptions(opts Options) *RouterModel {
 
 	// Persist settings (tui_settings.json) under the per-app OS config directory
 	// rather than the current working directory, so settings survive regardless
-	// of where the binary is launched from. Falls back to CWD if the OS config
-	// dir is unavailable.
-	appConfigDir := ""
-	if base, err := os.UserConfigDir(); err == nil {
-		appConfigDir = filepath.Join(base, configDirName)
+	// of where the binary is launched from. Falls back to a temp directory if
+	// the OS config dir is unavailable or we are running in tests.
+	appConfigDir := opts.ConfigDir
+	if appConfigDir == "" {
+		if flag.Lookup("test.v") != nil {
+			appConfigDir = filepath.Join(os.TempDir(), fmt.Sprintf("tui-base-tests-%s-%d", configDirName, time.Now().UnixNano()))
+		} else if base, err := os.UserConfigDir(); err == nil {
+			appConfigDir = filepath.Join(base, configDirName)
+		} else {
+			appConfigDir = filepath.Join(os.TempDir(), configDirName)
+		}
 	}
 	settings.SetConfigDir(appConfigDir)
 
@@ -286,10 +297,9 @@ func NewWithOptions(opts Options) *RouterModel {
 	m.replaceAppPages(opts.ExtraPages, opts.DefaultPage, -1)
 	// create notification manager and load persisted entries (best-effort)
 	m.notifMgr = notifications.NewManager()
-	if configDir, err := os.UserConfigDir(); err == nil {
-		persistDir := filepath.Join(configDir, configDirName)
-		_ = m.notifMgr.Load(persistDir)
-		defaultPersistPath := filepath.Join(persistDir, "notifications.json")
+	if appConfigDir != "" {
+		_ = m.notifMgr.Load(appConfigDir)
+		defaultPersistPath := filepath.Join(appConfigDir, "notifications.json")
 		m.notifPersistPath = defaultPersistPath
 		// honour the persisted setting: only activate file persistence when enabled
 		if settingsModel.NotificationsPersist {

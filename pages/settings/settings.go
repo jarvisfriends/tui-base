@@ -58,7 +58,11 @@ func settingsFilePath() string {
 	dir := configDir
 	configDirMu.RUnlock()
 	if dir == "" {
-		return defaultSettingsFile
+		if base, err := os.UserConfigDir(); err == nil {
+			dir = filepath.Join(base, "tui-base")
+		} else {
+			dir = filepath.Join(os.TempDir(), "tui-base")
+		}
 	}
 	return filepath.Join(dir, defaultSettingsFile)
 }
@@ -309,8 +313,8 @@ func (m *SettingsModel) buildItems() {
 	m.StylePreset = string(theme.NormalizePreset(m.StylePreset))
 	m.ColorThemeID = theme.ResolveTintIDForMode(m.ColorThemeID, m.ThemeMode)
 	navOpts := []huh.Option[string]{
-		huh.NewOption("Sidebar \u2013 vertical panel on the left", "sidebar"),
-		huh.NewOption("Tabs    \u2013 horizontal bar at the top", "tabs"),
+		huh.NewOption("Sidebar - vertical panel on the left", "sidebar"),
+		huh.NewOption("Tabs    - horizontal bar at the top", "tabs"),
 	}
 	modeOpts := []huh.Option[string]{
 		huh.NewOption("Dark", theme.ThemeModeDark),
@@ -386,7 +390,7 @@ func (m *SettingsModel) buildItems() {
 			return huh.NewForm(huh.NewGroup(
 				huh.NewFilePicker().
 					Title("Log Path").
-					Description("Directory or file  \u00b7  ignored when destination is Temporary").
+					Description("Directory or file, ignored when destination is Temporary").
 					DirAllowed(true).
 					FileAllowed(true).
 					Value(&m.LogPath),
@@ -428,7 +432,7 @@ func (m *SettingsModel) buildItems() {
 			return huh.NewForm(huh.NewGroup(
 				huh.NewSelect[string]().
 					Title("Color Theme").
-					Description("Up/Down to browse \u2014 applied immediately as you scroll").
+					Description("Up/Down to browse - applied immediately as you scroll").
 					Options(buildThemeOptions(m.ThemeMode)...).
 					Height(14).
 					Value(&m.ColorThemeID),
@@ -443,7 +447,7 @@ func (m *SettingsModel) buildItems() {
 			return huh.NewForm(huh.NewGroup(
 				huh.NewSelect[string]().
 					Title("Form Style").
-					Description("Border, prefix, and indicator style for forms — colors come from the Color Theme").
+					Description("Border, prefix, and indicator style for forms - colors come from the Color Theme").
 					Options(styleOpts...).
 					Value(&m.StylePreset),
 			).WithTheme(theme.HuhThemeFunc()))
@@ -836,11 +840,12 @@ func (m *SettingsModel) renderOverview() string {
 	labelW := min(24, max(12, layout.colWidth/2))
 	valueW := max(layout.colWidth-labelW-3, 1)
 
+	hoverBg := c.Styles.TabHover.GetBackground()
 	normalLabel := c.Styles.TextOnBg.Width(labelW)
 	normalValue := c.Styles.Subtitle.Width(valueW)
-	cursorLabel := c.Styles.Title.Width(labelW)
-	cursorValue := c.Styles.TextOnBg.Width(valueW)
-	cursorBg := c.Styles.Row.Background(c.Styles.TabHover.GetBackground()).Width(layout.colWidth)
+	cursorLabel := c.Styles.Title.Background(hoverBg).Width(labelW)
+	cursorValue := c.Styles.TextOnBg.Background(hoverBg).Width(valueW)
+	cursorBg := c.Styles.Row.Background(hoverBg).Width(layout.colWidth)
 	headerStyle := c.Styles.Subtitle.Bold(true).Width(layout.colWidth)
 	emptyRow := lipgloss.NewStyle().Width(layout.colWidth).Render("")
 	titleStyle := c.Styles.Title
@@ -875,7 +880,9 @@ func (m *SettingsModel) renderOverview() string {
 				val = ansi.TruncateLeft(v, ansi.StringWidth(v)-valueW+1, "…")
 			}
 			if entry.itemIndex == m.cursor {
-				rowText := "▶ " + cursorLabel.Render(lbl) + " " + cursorValue.Render(val)
+				indicatorStyle := lipgloss.NewStyle().Foreground(c.Border).Background(hoverBg)
+				spaceStyle := lipgloss.NewStyle().Background(hoverBg)
+				rowText := indicatorStyle.Render("▶ ") + cursorLabel.Render(lbl) + spaceStyle.Render(" ") + cursorValue.Render(val)
 				colLines = append(colLines, cursorBg.Render(rowText))
 				continue
 			}

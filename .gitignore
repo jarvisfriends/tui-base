@@ -29,6 +29,7 @@ go.work.sum
 # .vscode/
 
 .history
+coverage
 coverage.txt
 coverage.html
 *.out

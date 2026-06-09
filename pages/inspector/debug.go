@@ -997,7 +997,7 @@ func (m *InspectorModel) View() tea.View {
 	}
 
 	c := m.Colors()
-	availW := max(m.Width()-2, 20)
+	availW := max(m.Width()-4, 20)
 	runtimeRows := m.buildRuntimeRows(c)
 	inputRows := m.buildInputRows(c)
 	m.updateRuntimeColumnWidths(runtimeRows)
@@ -1005,7 +1005,7 @@ func (m *InspectorModel) View() tea.View {
 	tblStyles := m.baseTableStyles(c)
 	runtimeSection := m.renderRuntimeSection(c, tblStyles, runtimeRows, availW)
 	logContent := m.renderLogContent(c)
-	tabsLine := m.buildTabsLine(c)
+	rawTabsLine := m.buildTabsLine(c)
 	sectionTitle, sectionContent := m.sectionForActiveTab(c, availW, tblStyles, runtimeSection, inputRows, logContent)
 
 	// When the accessibility panel is open, render it in place of the section content.
@@ -1018,6 +1018,7 @@ func (m *InspectorModel) View() tea.View {
 			MaxHeight(panelH).
 			Render(m.acPanel.View().Content)
 		titleLine := c.Styles.Title.Padding(0, 1).Render("MESSAGE INSPECTOR (Inspector)")
+		tabsLine := ansi.Truncate(rawTabsLine, m.Width(), "…")
 		m.view.SetContent(lipgloss.JoinVertical(lipgloss.Left, titleLine, tabsLine, acStr))
 		m.view.BackgroundColor = c.Styles.TextOnBg.GetBackground()
 		m.view.ForegroundColor = c.Styles.TextOnBg.GetForeground()
@@ -1028,6 +1029,7 @@ func (m *InspectorModel) View() tea.View {
 	titleText := sectionTitle + " (Inspector)"
 	titleLine := lipgloss.PlaceHorizontal(availW, lipgloss.Center, c.Styles.Title.Bold(true).Render(titleText))
 	sep := c.Styles.Title.Render(strings.Repeat("─", availW))
+	tabsLine := ansi.Truncate(rawTabsLine, availW, "…")
 
 	topH := lipgloss.Height(titleLine) + lipgloss.Height(tabsLine) + lipgloss.Height(sep)
 	m.sectionOriginX = 0
@@ -1037,7 +1039,7 @@ func (m *InspectorModel) View() tea.View {
 	m.tabsHeight = lipgloss.Height(tabsLine)
 	m.sectionOriginY = topH
 	m.sectionHeight = max(1, m.Height()-topH)
-	m.logViewport.SetWidth(max(m.Width(), 1))
+	m.logViewport.SetWidth(max(availW, 1))
 	m.logViewport.SetHeight(m.sectionHeight)
 	m.logViewport.SetContent(logContent)
 	if m.scrollToBottom {
@@ -1049,7 +1051,7 @@ func (m *InspectorModel) View() tea.View {
 		m.restoreActiveTabScroll()
 		sectionContent = m.logViewport.View()
 	} else {
-		m.sectionViewport.SetWidth(max(m.Width(), 1))
+		m.sectionViewport.SetWidth(max(availW, 1))
 		m.sectionViewport.SetHeight(m.sectionHeight)
 		m.sectionViewport.SetContent(sectionContent)
 		m.restoreActiveTabScroll()
@@ -1239,7 +1241,7 @@ func (m *InspectorModel) buildTermSection(c *theme.AppStyle, width int) string {
 
 func (m *InspectorModel) renderSettingsSection(c *theme.AppStyle) string {
 	items := m.settingsRows()
-	availW := max(m.Width()-2, 28)
+	availW := max(m.Width()-4, 28)
 	fieldW := 0
 	for _, row := range items {
 		if row.SectionOnly {
