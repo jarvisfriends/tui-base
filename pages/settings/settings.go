@@ -7,9 +7,12 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/jarvisfriends/tui-base/config"
 	"github.com/jarvisfriends/tui-base/logging"
 	"github.com/jarvisfriends/tui-base/overlay"
+	"github.com/jarvisfriends/tui-base/page"
 	"github.com/jarvisfriends/tui-base/theme"
 
 	"charm.land/bubbles/v2/key"
@@ -161,8 +164,7 @@ func DefaultKeys() *Keys {
 //   - Editing: a centred huh form (one field) is composited over the overview using
 //     the lipgloss Compositor. Submitting or aborting the form returns to overview.
 type SettingsModel struct {
-	width, height int
-	colors        *theme.AppStyle
+	page.Base
 
 	// Persisted fields (exported so JSON encoding works).
 	NavStyle             string `json:"nav_style"`
@@ -217,16 +219,6 @@ func (m *SettingsModel) Save() error {
 	}
 	m.loadedFromFile = true
 	return nil
-}
-
-// SetColors stores a shared AppColors pointer.
-func (m *SettingsModel) SetColors(c *theme.AppStyle) { m.colors = c }
-
-func (m *SettingsModel) resolveColors() *theme.AppStyle {
-	if m.colors != nil {
-		return m.colors
-	}
-	return theme.Active()
 }
 
 // New creates a settings model. Pass extra config.Sections contributed by
@@ -622,10 +614,10 @@ func (m *SettingsModel) Init() tea.Cmd { return nil }
 
 func (m *SettingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if wMsg, ok := msg.(tea.WindowSizeMsg); ok {
-		m.width, m.height = wMsg.Width, wMsg.Height
-		m.editOverlay.OnResize(m.width, m.height)
+		m.SetSize(wMsg.Width, wMsg.Height)
+		m.editOverlay.OnResize(m.Width(), m.Height())
 	}
-	if m.width == 0 {
+	if m.Width() == 0 {
 		return m, nil
 	}
 	if m.editOverlay.IsOpen() {
@@ -670,7 +662,7 @@ func (m *SettingsModel) startEdit() tea.Cmd {
 	if f == nil {
 		return nil
 	}
-	return m.editOverlay.Open(f, m.width, m.height)
+	return m.editOverlay.Open(f, m.Width(), m.Height())
 }
 
 // abortEdit reverts to the last persisted state and closes the overlay.
@@ -775,7 +767,7 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *SettingsModel) View() tea.View {
-	c := m.resolveColors()
+	c := m.Colors()
 	overview := m.renderOverview()
 	content := m.editOverlay.Composite(overview, c.Styles.OverlayBorder)
 
@@ -838,7 +830,7 @@ func (m *SettingsModel) View() tea.View {
 
 // renderOverview renders the compact one-line-per-setting list.
 func (m *SettingsModel) renderOverview() string {
-	c := m.resolveColors()
+	c := m.Colors()
 	layout := m.overviewLayout()
 
 	labelW := min(24, max(12, layout.colWidth/2))
@@ -875,12 +867,12 @@ func (m *SettingsModel) renderOverview() string {
 				continue
 			}
 			item := m.items[entry.itemIndex]
-			lbl := truncate(item.title, labelW)
-			var val string
-			if item.leftTrunc {
-				val = truncateLeft(item.value(), valueW)
-			} else {
-				val = truncate(item.value(), valueW)
+			lbl := ansi.Truncate(item.title, labelW, "…")
+			v := item.value()
+			val := ansi.Truncate(v, valueW, "…")
+			if item.leftTrunc && ansi.StringWidth(v) > valueW {
+				// Keep the tail (e.g. a file path's end) when it overflows.
+				val = ansi.TruncateLeft(v, ansi.StringWidth(v)-valueW+1, "…")
 			}
 			if entry.itemIndex == m.cursor {
 				rowText := "▶ " + cursorLabel.Render(lbl) + " " + cursorValue.Render(val)
@@ -908,8 +900,8 @@ func (m *SettingsModel) renderOverview() string {
 	}
 
 	return c.Styles.TextOnBg.
-		Width(m.width).
-		Height(m.height).
+		Width(m.Width()).
+		Height(m.Height()).
 		Padding(1, 0).
 		Render(lipgloss.JoinVertical(lipgloss.Top, lines...))
 }
@@ -948,8 +940,8 @@ func (m *SettingsModel) overviewLayout() overviewLayout {
 		}
 	}
 
-	innerW := max(m.width-4, 20)
-	innerH := max(m.height-2, 1)
+	innerW := max(m.Width()-4, 20)
+	innerH := max(m.Height()-2, 1)
 	listTopY := 3 // top padding + title + blank separator
 	listHeight := max(innerH-2, 1)
 
@@ -1097,31 +1089,6 @@ func tintDisplayName(id string) string {
 		}
 	}
 	return id
-}
-
-// truncate shortens s to at most maxW runes, appending "…" if cut.
-func truncate(s string, maxW int) string {
-	r := []rune(s)
-	if len(r) <= maxW {
-		return s
-	}
-	if maxW <= 1 {
-		return "…"
-	}
-	return string(r[:maxW-1]) + "…"
-}
-
-// truncateLeft shortens s to at most maxW runes keeping the tail, prepending
-// "…" if cut. Use this for file paths so the filename/end remains visible.
-func truncateLeft(s string, maxW int) string {
-	r := []rune(s)
-	if len(r) <= maxW {
-		return s
-	}
-	if maxW <= 1 {
-		return "…"
-	}
-	return "…" + string(r[len(r)-(maxW-1):])
 }
 
 // buildThemeOptions generates one huh.Option per registered tint.

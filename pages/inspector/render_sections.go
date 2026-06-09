@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dustin/go-humanize"
+
 	"github.com/jarvisfriends/tui-base/theme"
 
 	"charm.land/bubbles/v2/table"
@@ -54,15 +56,15 @@ func (m *InspectorModel) buildRuntimeRows(c *theme.AppStyle) []table.Row {
 			"CGO Calls", valStyle.Render(p.Sprintf("%d", st.NumCgoCalls)),
 			"Term Size", valStyle.Render(p.Sprintf("%dx%d", m.Width(), m.Height())),
 		},
-		{"Heap Alloc", m.colorStat(c, float64(st.HeapAllocBytes)/1024/1024, 100, 500, formatBytes(st.HeapAllocBytes)),
-			"Heap InUse", valStyle.Render(formatBytes(st.HeapInUseBytes)),
-			"Heap Sys", valStyle.Render(formatBytes(st.HeapSysBytes)),
-			"Stack InUse", valStyle.Render(formatBytes(st.StackInUseBytes)),
+		{"Heap Alloc", m.colorStat(c, float64(st.HeapAllocBytes)/1024/1024, 100, 500, humanize.IBytes(st.HeapAllocBytes)),
+			"Heap InUse", valStyle.Render(humanize.IBytes(st.HeapInUseBytes)),
+			"Heap Sys", valStyle.Render(humanize.IBytes(st.HeapSysBytes)),
+			"Stack InUse", valStyle.Render(humanize.IBytes(st.StackInUseBytes)),
 		},
 		{"GC Cycles", valStyle.Render(p.Sprintf("%d", st.NumGC)),
 			"Last Pause", m.colorStat(c, float64(st.LastPause.Milliseconds()), 1, 10, st.LastPause.Round(time.Microsecond).String()),
 			"Total Paused", valStyle.Render(st.PauseTotal.Round(time.Millisecond).String()),
-			"Bin Size", valStyle.Render(formatBytes(uint64(st.Launch.BinarySize))),
+			"Bin Size", valStyle.Render(humanize.IBytes(uint64(st.Launch.BinarySize))),
 		},
 		{"GC CPU %", m.colorStat(c, st.GcCPUFraction*100, 5, 25, p.Sprintf("%.2f%%", st.GcCPUFraction*100)),
 			"GC/sec", m.colorStat(c, gcPerSec, 10, 50, p.Sprintf("%.1f", gcPerSec)),
@@ -133,18 +135,18 @@ func (m *InspectorModel) updateInputColumnWidths(rows []table.Row) {
 }
 
 func tableHeaderColors(c *theme.AppStyle) (bg, fg string) {
-	bg = colorHex(c.Styles.SelectedItem.GetBackground())
-	fg = colorHex(c.Styles.SelectedItem.GetForeground())
+	bg = theme.ColorHex(c.Styles.SelectedItem.GetBackground())
+	fg = theme.ColorHex(c.Styles.SelectedItem.GetForeground())
 	if bg == "" {
-		bg = colorHex(c.Accent)
+		bg = theme.ColorHex(c.Accent)
 	}
 	if fg == "" {
-		fg = colorHex(c.Bg)
+		fg = theme.ColorHex(c.Bg)
 	}
 	if strings.EqualFold(bg, fg) {
-		fg = colorHex(c.Bg)
+		fg = theme.ColorHex(c.Bg)
 		if strings.EqualFold(bg, fg) {
-			fg = colorHex(c.Styles.TextOnBg.GetForeground())
+			fg = theme.ColorHex(c.Styles.TextOnBg.GetForeground())
 		}
 	}
 	return bg, fg
@@ -218,11 +220,11 @@ func (m *InspectorModel) renderDisksSection(c *theme.AppStyle, s table.Styles) s
 		var freeStr string
 		switch {
 		case d.Free < 100*1024*1024:
-			freeStr = c.Styles.Error.Bold(true).Render(formatBytes(d.Free))
+			freeStr = c.Styles.Error.Bold(true).Render(humanize.IBytes(d.Free))
 		case d.Free < 1*1024*1024*1024:
-			freeStr = c.Styles.Warning.Render(formatBytes(d.Free))
+			freeStr = c.Styles.Warning.Render(humanize.IBytes(d.Free))
 		default:
-			freeStr = c.Styles.Success.Render(formatBytes(d.Free))
+			freeStr = c.Styles.Success.Render(humanize.IBytes(d.Free))
 		}
 
 		var pctStr string
@@ -235,8 +237,8 @@ func (m *InspectorModel) renderDisksSection(c *theme.AppStyle, s table.Styles) s
 			pctStr = c.Styles.Success.Render(fmt.Sprintf("%0.0f%%", pct))
 		}
 
-		usedStr := formatBytes(d.Used)
-		totalStr := formatBytes(d.Total)
+		usedStr := humanize.IBytes(d.Used)
+		totalStr := humanize.IBytes(d.Total)
 		m.diskHeader[0].Width = max(m.diskHeader[0].Width, lipgloss.Width(d.Path))
 		m.diskHeader[1].Width = max(m.diskHeader[1].Width, lipgloss.Width(usedStr))
 		m.diskHeader[2].Width = max(m.diskHeader[2].Width, lipgloss.Width(totalStr))

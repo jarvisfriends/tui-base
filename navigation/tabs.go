@@ -1,7 +1,7 @@
 package navigation
 
 import (
-	"github.com/jarvisfriends/tui-base/theme"
+	"github.com/jarvisfriends/tui-base/page"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -13,20 +13,7 @@ type Tabs struct {
 	HoverIndex  int
 	width       int
 	height      int
-	colors      *theme.AppStyle
-}
-
-// SetColors stores a shared AppColors pointer so the router can update the
-// theme in one place and all components see the change immediately.
-func (m *Tabs) SetColors(c *theme.AppStyle) { m.colors = c }
-
-// resolveColors returns the current palette from the shared pointer, falling
-// back to theme.Active() when no pointer has been set (e.g. in tests).
-func (m *Tabs) resolveColors() *theme.AppStyle {
-	if m.colors != nil {
-		return m.colors
-	}
-	return theme.Active()
+	page.Base
 }
 
 func NewTabs() *Tabs {
@@ -88,7 +75,7 @@ func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
 }
 
 func (m *Tabs) View() tea.View {
-	c := m.resolveColors()
+	c := m.Colors()
 
 	inactiveTabBorder := tabBorderWithBottom("┴", "─", "┴")
 	activeTabBorder := tabBorderWithBottom("┘", " ", "└")

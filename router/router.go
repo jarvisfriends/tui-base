@@ -1,8 +1,6 @@
 package router
 
 import (
-	"fmt"
-	"image/color"
 	"os"
 	"path/filepath"
 	"strings"
@@ -967,7 +965,7 @@ func (m *RouterModel) View() tea.View {
 	// Child components can emit ANSI resets mid-line; over SSH those resets
 	// expose the terminal default background in unstyled gaps. Re-apply the
 	// page background after each reset for the shared main layout area.
-	layout = reapplyBg(layout, m.colors.Styles.TextOnBg.GetBackground())
+	layout = theme.ReapplyBg(layout, m.colors.Styles.TextOnBg.GetBackground())
 
 	contentStr := layout
 	if statusHeight > 0 {
@@ -1089,38 +1087,12 @@ func (m *RouterModel) View() tea.View {
 	return v
 }
 
-// reapplyBg replaces every ANSI reset (\x1b[m or \x1b[0m) with that reset
-// immediately followed by the given background escape code.
-func reapplyBg(s string, bg color.Color) string {
-	bgCode := firstEscapeFromStyle(lipgloss.NewStyle().Background(bg).Render("X"))
-	if bgCode == "" {
-		return s
-	}
-	s = strings.ReplaceAll(s, "\x1b[0m", "\x1b[0m"+bgCode)
-	s = strings.ReplaceAll(s, "\x1b[m", "\x1b[m"+bgCode)
-	return s
-}
-
-// firstEscapeFromStyle extracts the first ANSI escape sequence from a lipgloss
-// render result.
-func firstEscapeFromStyle(s string) string {
-	i := strings.Index(s, "\x1b[")
-	if i < 0 {
-		return ""
-	}
-	j := strings.Index(s[i:], "m")
-	if j < 0 {
-		return ""
-	}
-	return s[i : i+j+1]
-}
-
 // syncTerminalColorsCmd force-applies terminal default foreground/background
 // colors via OSC, even when the renderer thinks the values are unchanged.
 // This keeps terminal frame/tab edge colors in sync with the active theme.
 func (m *RouterModel) syncTerminalColorsCmd() tea.Cmd {
-	bg := colorHex(m.colorProfile.Convert(m.colors.Styles.TextOnBg.GetBackground()))
-	fg := colorHex(m.colorProfile.Convert(m.colors.Styles.TextOnBg.GetForeground()))
+	bg := theme.ColorHex(m.colorProfile.Convert(m.colors.Styles.TextOnBg.GetBackground()))
+	fg := theme.ColorHex(m.colorProfile.Convert(m.colors.Styles.TextOnBg.GetForeground()))
 	seq := ansi.SetBackgroundColor(bg) + ansi.SetForegroundColor(fg)
 	return tea.Raw(seq)
 }
@@ -1129,14 +1101,6 @@ func (m *RouterModel) syncTerminalColorsAfterCmd(delay time.Duration) tea.Cmd {
 	return tea.Tick(delay, func(time.Time) tea.Msg {
 		return syncTerminalColorsMsg{}
 	})
-}
-
-func colorHex(c color.Color) string {
-	if c == nil {
-		return "#000000"
-	}
-	r, g, b, _ := c.RGBA()
-	return fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)
 }
 
 var _ tea.Model = (*RouterModel)(nil)

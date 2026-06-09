@@ -24,6 +24,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/dustin/go-humanize"
 	"github.com/jarvisfriends/tui-base/notifications"
 	"github.com/jarvisfriends/tui-base/page"
 	"github.com/jarvisfriends/tui-base/theme"
@@ -989,19 +991,6 @@ func collectSnapshot(startTime time.Time) runtimeStatsSnapshot {
 	return snap
 }
 
-// formatBytes formats a byte count as a human-readable IEC string (KiB, MiB, …).
-func formatBytes(b uint64) string {
-	if b < 1024 {
-		return fmt.Sprintf("%d B", b)
-	}
-	div, exp := uint64(1024), 0
-	for n := b / 1024; n >= 1024; n /= 1024 {
-		div *= 1024
-		exp++
-	}
-	return fmt.Sprintf("%.1f %ciB", float64(b)/float64(div), "KMGTPE"[exp])
-}
-
 func (m *InspectorModel) View() tea.View {
 	if !m.dirty {
 		return m.view
@@ -1158,7 +1147,7 @@ func (m *InspectorModel) buildTermSection(c *theme.AppStyle, width int) string {
 	isDarkStr := "-"
 	bgSwatch := ""
 	if m.termDiagSet && m.termDiag != nil {
-		bgDetStr = colorHex(m.termDiag.DetectedBg)
+		bgDetStr = theme.ColorHex(m.termDiag.DetectedBg)
 		isDarkStr = fmt.Sprintf("%v", m.termDiag.BgIsDark)
 		bgSwatch = lipgloss.NewStyle().
 			Background(m.termDiag.DetectedBg).
@@ -1273,8 +1262,8 @@ func (m *InspectorModel) renderSettingsSection(c *theme.AppStyle) string {
 			out = append(out, c.Styles.Subtitle.Render(row.Field))
 			continue
 		}
-		field := truncate(row.Field, fieldW)
-		value := truncate(row.Value, valueW)
+		field := ansi.Truncate(row.Field, fieldW, "…")
+		value := ansi.Truncate(row.Value, valueW, "…")
 		if i == m.settingsCursor {
 			prefix := "▶ "
 			if row.ActionOnly {
@@ -1685,7 +1674,7 @@ func (m *InspectorModel) StatusLineSummary() string {
 		parts = append(parts, fmt.Sprintf("term %dx%d", m.Width(), m.Height()))
 	}
 	if m.statusSummary.ShowHeap {
-		parts = append(parts, "heap "+formatBytes(st.HeapAllocBytes))
+		parts = append(parts, "heap "+humanize.IBytes(st.HeapAllocBytes))
 	}
 	if m.statusSummary.ShowGC {
 		dt := st.CapturedAt.Sub(pr.CapturedAt).Seconds()
@@ -1717,30 +1706,6 @@ func getEnvOr(key, fallback string) string {
 		return v
 	}
 	return fallback
-}
-
-// colorHex returns a #rrggbb hex string for any color.Color.
-func colorHex(col color.Color) string {
-	if col == nil {
-		return "(nil)"
-	}
-	type hexer interface{ Hex() string }
-	if h, ok := col.(hexer); ok {
-		return "#" + h.Hex()
-	}
-	r, g, b, _ := col.RGBA()
-	return fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)
-}
-
-func truncate(s string, maxW int) string {
-	r := []rune(s)
-	if len(r) <= maxW {
-		return s
-	}
-	if maxW <= 1 {
-		return "…"
-	}
-	return string(r[:maxW-1]) + "…"
 }
 
 // renderRuntimeFlat renders all metric+value pairs from the runtime profiling

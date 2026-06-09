@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/jarvisfriends/tui-base/page"
 	"github.com/jarvisfriends/tui-base/theme"
 
 	"charm.land/bubbles/v2/key"
@@ -105,17 +106,7 @@ type Sidebar struct {
 
 	width  int
 	height int
-	colors *theme.AppStyle
-}
-
-// SetColors stores a shared AppStyle pointer for theme-aware rendering.
-func (m *Sidebar) SetColors(c *theme.AppStyle) { m.colors = c }
-
-func (m *Sidebar) resolveColors() *theme.AppStyle {
-	if m.colors != nil {
-		return m.colors
-	}
-	return theme.Active()
+	page.Base
 }
 
 // New creates a Sidebar with the standard Home / Inspector / Settings pages.
@@ -264,7 +255,7 @@ func (m *Sidebar) emitSelected() tea.Cmd {
 // ─── View ─────────────────────────────────────────────────────────────────────
 
 func (m *Sidebar) View() tea.View {
-	c := m.resolveColors()
+	c := m.Colors()
 	if m.collapsed {
 		return m.collapsedView(c)
 	}
