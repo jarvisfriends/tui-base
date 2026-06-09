@@ -8,8 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	tint "github.com/lrstanley/bubbletint/v2"
 	"github.com/lucasb-eyer/go-colorful"
 )
@@ -394,5 +396,261 @@ func TestStyleComboShortlistJSON(t *testing.T) {
 	}
 	if string(gotJSON) != string(want) {
 		t.Fatalf("style combo shortlist out of date; run with UPDATE_STYLE_SHORTLIST=1 to refresh %s", shortlistPath)
+	}
+}
+
+func TestThemeGlobalStateAndAccessors(t *testing.T) {
+	// 1. NormalizeMode
+	if NormalizeMode("light") != ThemeModeLight {
+		t.Errorf("NormalizeMode(light) = %q; want %q", NormalizeMode("light"), ThemeModeLight)
+	}
+	if NormalizeMode("LIGHT  ") != ThemeModeLight {
+		t.Errorf("expected LIGHT to normalize to light")
+	}
+	if NormalizeMode("dark") != ThemeModeDark {
+		t.Errorf("NormalizeMode(dark) = %q; want %q", NormalizeMode("dark"), ThemeModeDark)
+	}
+	if NormalizeMode("invalid") != ThemeModeDark {
+		t.Errorf("expected invalid mode to normalize to dark")
+	}
+
+	// 2. SetThemePreferences & ThemePreferencesSnapshot
+	SetThemePreferences("light", true, PresetDracula)
+	snap := ThemePreferencesSnapshot()
+	if snap.Mode != ThemeModeLight || !snap.Accessibility || snap.Style != PresetDracula {
+		t.Errorf("unexpected preferences snapshot: %+v", snap)
+	}
+
+	// 3. ResolveTintIDForMode
+	tints := tint.Tints()
+	if len(tints) > 0 {
+		firstDark := ""
+		firstLight := ""
+		for _, tm := range tints {
+			if tm.Dark && firstDark == "" {
+				firstDark = tm.ID
+			} else if !tm.Dark && firstLight == "" {
+				firstLight = tm.ID
+			}
+		}
+
+		if firstDark != "" {
+			res := ResolveTintIDForMode(firstDark, "dark")
+			if res != firstDark {
+				t.Errorf("ResolveTintIDForMode(%s, dark) = %q; want %s", firstDark, res, firstDark)
+			}
+			res2 := ResolveTintIDForMode("", "dark")
+			if res2 != firstDark {
+				t.Errorf("ResolveTintIDForMode('', dark) = %q; want %s", res2, firstDark)
+			}
+			res3 := ResolveTintIDForMode("some-invalid-id", "dark")
+			if res3 != firstDark {
+				t.Errorf("expected fallback for invalid id to first dark tint, got %s", res3)
+			}
+		}
+		if firstLight != "" {
+			res := ResolveTintIDForMode(firstLight, "light")
+			if res != firstLight {
+				t.Errorf("ResolveTintIDForMode(%s, light) = %q; want %s", firstLight, res, firstLight)
+			}
+		}
+	}
+
+	// 4. SetCurrentTint
+	err := SetCurrentTint("dracula")
+	if err != nil {
+		t.Errorf("SetCurrentTint(dracula) failed: %v", err)
+	}
+	err = SetCurrentTint("invalid-tint-id")
+	if err == nil {
+		t.Error("expected SetCurrentTint to fail for invalid tint id")
+	}
+	err = SetCurrentTint("")
+	if err != nil {
+		t.Errorf("expected no-op for empty tint id, got: %v", err)
+	}
+
+	// 5. Active
+	activeStyle := Active()
+	if activeStyle == nil {
+		t.Fatal("expected non-nil active style")
+	}
+
+	// col and borderColor
+	cVal := col(nil, "240")
+	if cVal != lipgloss.Color("240") {
+		t.Errorf("col(nil, 240) = %v; want 240", cVal)
+	}
+
+	testTintDark := &tint.Tint{
+		ID:   "test-dark",
+		Dark: true,
+	}
+	bcDark := borderColor(testTintDark)
+	if bcDark == nil {
+		t.Error("expected non-nil dark border color")
+	}
+
+	testTintLight := &tint.Tint{
+		ID:   "test-light",
+		Dark: false,
+	}
+	bcLight := borderColor(testTintLight)
+	if bcLight == nil {
+		t.Error("expected non-nil light border color")
+	}
+
+	// 6. render.go helpers
+	// ColorHex
+	h := ColorHex(lipgloss.Color("#ff0000"))
+	if h != "#ff0000" {
+		t.Errorf("ColorHex(#ff0000) = %q; want #ff0000", h)
+	}
+	hNil := ColorHex(nil)
+	if hNil != "#000000" {
+		t.Errorf("ColorHex(nil) = %q; want #000000", hNil)
+	}
+
+	// ReapplyBg
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff"))
+	reapplied := ReapplyBg("hello\x1b[0mworld\x1b[m", style.GetForeground())
+	if !strings.Contains(reapplied, "\x1b[0m") || !strings.Contains(reapplied, "\x1b[m") {
+		t.Errorf("expected escape sequences to be preserved: %q", reapplied)
+	}
+	// Also test ReapplyBg with bg color returning empty bgCode
+	if got := ReapplyBg("hello", nil); got != "hello" {
+		t.Errorf("expected original string when bg is nil, got %q", got)
+	}
+
+	// firstEscapeFromStyle boundary
+	if got := firstEscapeFromStyle("no-escape"); got != "" {
+		t.Errorf("expected empty for no-escape, got %q", got)
+	}
+	if got := firstEscapeFromStyle("\x1b[no-ending"); got != "" {
+		t.Errorf("expected empty for no-ending escape, got %q", got)
+	}
+}
+
+func TestThemeStatus(t *testing.T) {
+	// Set theme to a known one first
+	_ = SetCurrentTint("dracula")
+
+	// BoxStyle, BoxTitleStyle, SubtleStyle
+	bs := BoxStyle()
+	if bs.GetPaddingLeft() <= 0 {
+		t.Errorf("expected BoxStyle padding")
+	}
+	bts := BoxTitleStyle()
+	if bts.GetForeground() == nil {
+		t.Errorf("expected BoxTitleStyle foreground")
+	}
+	ss := SubtleStyle()
+	if ss.GetForeground() == nil {
+		t.Errorf("expected SubtleStyle foreground")
+	}
+
+	// RenderStatusBar
+	bar1 := RenderStatusBar(0, "left", "right")
+	if !strings.Contains(bar1, "left") || !strings.Contains(bar1, "right") {
+		t.Errorf("RenderStatusBar(0) = %q; missing left/right", bar1)
+	}
+
+	bar2 := RenderStatusBar(80, "left", "right")
+	if lipgloss.Width(bar2) != 80 {
+		t.Errorf("expected RenderStatusBar(80) width to be 80; got %d", lipgloss.Width(bar2))
+	}
+
+	bar3 := RenderStatusBarStyled(80, "left", "right", 9)
+	if !strings.Contains(bar3, "left") {
+		t.Errorf("RenderStatusBarStyled = %q; missing left", bar3)
+	}
+
+	// DefaultKeys
+	km := DefaultKeys()
+	if len(km.Up.Keys()) == 0 {
+		t.Errorf("expected Up keys")
+	}
+
+	// Preset DisplayNames
+	if got := PresetBase.DisplayName(); got != "Base" {
+		t.Errorf("expected Base, got %s", got)
+	}
+	if got := PresetCharm.DisplayName(); got != "Charm" {
+		t.Errorf("expected Charm, got %s", got)
+	}
+	if got := PresetDracula.DisplayName(); got != "Dracula" {
+		t.Errorf("expected Dracula, got %s", got)
+	}
+	if got := PresetBase16.DisplayName(); got != "Base16" {
+		t.Errorf("expected Base16, got %s", got)
+	}
+	if got := PresetCatppuccin.DisplayName(); got != "Catppuccin" {
+		t.Errorf("expected Catppuccin, got %s", got)
+	}
+	if got := StylePreset("invalid").DisplayName(); got != "invalid" {
+		t.Errorf("expected invalid, got %s", got)
+	}
+
+	// HuhThemeFunc
+	tf := HuhThemeFunc()
+	if tf == nil {
+		t.Error("expected non-nil HuhThemeFunc")
+	}
+	styles := tf(true)
+	if styles == nil {
+		t.Error("expected non-nil styles from theme function")
+	}
+
+	// AccessiblePairsFromTint
+	tints2 := tint.Tints()
+	if len(tints2) > 0 {
+		pairs := AccessiblePairsFromTint(tints2[0])
+		if len(pairs) == 0 {
+			t.Error("expected non-empty accessible pairs")
+		}
+	}
+
+	// colorPairsFromSimple with nil Tint
+	pairsNil := colorPairsFromTint(nil, false)
+	if len(pairsNil) == 0 {
+		t.Error("expected non-empty simple pairs")
+	}
+}
+
+func TestThemeContrastSafeguards(t *testing.T) {
+	tint.NewDefaultRegistry()
+	tints := tint.DefaultTints()
+	if len(tints) == 0 {
+		t.Fatal("no default tints available")
+	}
+
+	for _, tm := range tints {
+		app := FromTint(tm)
+
+		// 1. Primary Fg vs Bg must not be identical
+		if app.Fg == app.Bg {
+			t.Errorf("theme %s: primary Fg and Bg are identical", tm.ID)
+		}
+
+		// 2. SelectionBg and Bg must not be identical
+		if app.SelectionBg == app.Bg {
+			t.Errorf("theme %s: SelectionBg and Bg are identical", tm.ID)
+		}
+
+		// 3. SelectionBg and Bg luminance must be sufficiently far apart
+		bgL := colorLuminance(app.Bg)
+		selL := colorLuminance(app.SelectionBg)
+		diff := math.Abs(bgL - selL)
+		// We expect the adjustment code in theme.go to shift selection bg away by at least 15% (scaled out of 255)
+		// which means a difference of at least ~15 units.
+		if diff < 10.0 {
+			t.Errorf("theme %s: selection bg %v and background %v are too close (luminance diff %.2f)", tm.ID, app.SelectionBg, app.Bg, diff)
+		}
+
+		// 4. Accessibility mode adjustments verification
+		adjusted := FromTintWithOptions(tm, true)
+		if adjusted.Fg == adjusted.Bg {
+			t.Errorf("theme %s: adjusted Fg and Bg are identical", tm.ID)
+		}
 	}
 }

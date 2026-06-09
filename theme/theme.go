@@ -19,6 +19,7 @@ package theme
 import (
 	"fmt"
 	"image/color"
+	"math"
 	"strings"
 	"sync"
 
@@ -318,6 +319,18 @@ func fromTint(t *tint.Tint, accessibility bool, preset StylePreset) *AppStyle {
 		// explicit callers (for example, the debug accessibility panel).
 		AccessiblePairs: o,
 	}
+
+	// Dynamic selection contrast adjustment
+	bgL := colorLuminance(colors.Bg)
+	selL := colorLuminance(colors.SelectionBg)
+	if math.Abs(bgL-selL) < 25.0 {
+		if t.Dark {
+			colors.SelectionBg = lipgloss.Lighten(colors.Bg, 0.15)
+		} else {
+			colors.SelectionBg = lipgloss.Darken(colors.Bg, 0.15)
+		}
+	}
+
 	if accessibility {
 		applyAccessibilityAdjustments(colors)
 		colors.AccessiblePairs = colorPairsFromTint(t, true)
@@ -329,4 +342,9 @@ func fromTint(t *tint.Tint, accessibility bool, preset StylePreset) *AppStyle {
 	appStyleCache[cacheKey] = colors
 	appStyleCacheMu.Unlock()
 	return colors
+}
+
+func colorLuminance(c color.Color) float64 {
+	r, g, b, _ := c.RGBA()
+	return 0.299*float64(r>>8) + 0.587*float64(g>>8) + 0.114*float64(b>>8)
 }
