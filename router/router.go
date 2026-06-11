@@ -52,7 +52,7 @@ type ReplaceAppPagesMsg struct {
 // Options controls router startup behavior for embedding applications.
 type Options struct {
 	// AppName is the display name shown in the terminal window title and the
-	// info modal (ℹ overlay). Defaults to "TUI Base" when empty.
+	// info modal (â„¹ overlay). Defaults to "TUI Base" when empty.
 	AppName string
 	// AppVersion overrides the version string shown in the info modal.
 	// When empty, common.AppVersion() (set via -ldflags at build time) is used.
@@ -73,13 +73,13 @@ type Options struct {
 }
 
 // pageIDFromTitle derives a stable navigation ID from a human-readable title
-// by lower-casing and replacing spaces with hyphens (e.g. "My Page" → "my-page").
+// by lower-casing and replacing spaces with hyphens (e.g. "My Page" â†’ "my-page").
 func pageIDFromTitle(title string) string {
 	return strings.ToLower(strings.ReplaceAll(title, " ", "-"))
 }
 
 // screamingSnake converts a human-readable app name to a SCREAMING_SNAKE_CASE
-// env-var prefix, e.g. "TUI Base" → "TUI_BASE", "My Cool App" → "MY_COOL_APP".
+// env-var prefix, e.g. "TUI Base" â†’ "TUI_BASE", "My Cool App" â†’ "MY_COOL_APP".
 // Non-alphanumeric runes are collapsed to underscores and duplicates removed.
 func screamingSnake(name string) string {
 	var b strings.Builder
@@ -106,7 +106,7 @@ type RouterModel struct {
 	nav     navigation.Navigator
 	appName string
 	// appEnvPrefix is the SCREAMING_SNAKE_CASE env-var prefix derived from the
-	// app name (e.g. "TUI Base" → "TUI_BASE"). Used to derive env var names
+	// app name (e.g. "TUI Base" â†’ "TUI_BASE"). Used to derive env var names
 	// so consumer apps get branded env vars instead of the framework defaults.
 	appEnvPrefix       string
 	colorProfileEnvVar string
@@ -177,7 +177,7 @@ func NewWithRegisteredPages(extraPages []RegisteredPage) *RouterModel {
 // NewWithOptions creates a router with built-in pages and optional app pages.
 // When DefaultPageID is set and found, that page is selected on startup.
 func NewWithOptions(opts Options) *RouterModel {
-	// Resolve app name and config dir name early — both are used below.
+	// Resolve app name and config dir name early â€” both are used below.
 	appName := opts.AppName
 	if appName == "" {
 		appName = DefaultAppName
@@ -273,7 +273,7 @@ func NewWithOptions(opts Options) *RouterModel {
 	m.inspector = inspector.New()
 
 	// Derive env-var names from the app name so consumers get branded vars
-	// (e.g. "My App" → MY_APP_COLOR_PROFILE, MY_APP_DEBUG) instead of the
+	// (e.g. "My App" â†’ MY_APP_COLOR_PROFILE, MY_APP_DEBUG) instead of the
 	// generic TUI_BASE_* names.
 	m.appEnvPrefix = appPrefix
 	m.colorProfileEnvVar = appColorProfileEnvVar
@@ -289,7 +289,7 @@ func NewWithOptions(opts Options) *RouterModel {
 		m.inspector.AddLog(level, ts, msg)
 	})
 	// Collect valid extra pages. When the caller supplies extra pages they come
-	// first in the nav list (Home is omitted — the app provides its own landing
+	// first in the nav list (Home is omitted â€” the app provides its own landing
 	// page). Settings is always appended last. Inspector is available globally
 	// as an overlay via Ctrl+D.
 	// When no extra pages are supplied the default is Home + Settings.
@@ -543,7 +543,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, m.handleResizeCmd()
-	case notifications.AddMsg, notifications.DismissMsg, notifications.DismissAllMsg, notifications.ExpireMsg:
+	case notifications.AddMsg, notifications.DismissMsg, notifications.DismissKeyMsg, notifications.DismissAllMsg, notifications.ExpireMsg:
 		if cmd := m.notifMgr.Handle(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -647,14 +647,14 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			case key.Matches(keyMsg, m.keys.ToggleNav):
 				if !m.navigationVisible {
-					// Hidden → show (unfocused).
+					// Hidden â†’ show (unfocused).
 					m.navigationVisible = true
 				} else if !m.sidebarFocused {
-					// Visible, unfocused → focus it so keyboard can navigate.
+					// Visible, unfocused â†’ focus it so keyboard can navigate.
 					m.sidebarFocused = true
 					m.setNavFocused(true)
 				} else {
-					// Visible and focused → hide it and drop focus.
+					// Visible and focused â†’ hide it and drop focus.
 					m.navigationVisible = false
 					m.sidebarFocused = false
 					m.setNavFocused(false)
@@ -994,7 +994,7 @@ func (m *RouterModel) View() tea.View {
 	// Convert them through the active profile ourselves so the terminal-default
 	// fill matches the quantized SGR backgrounds of the rendered content. Without
 	// this, over ANSI256 (e.g. SSH) the OSC background stays exact 24-bit while
-	// content cells are quantized — two visibly different shades of one color.
+	// content cells are quantized â€” two visibly different shades of one color.
 	v := tea.View{
 		Content:         contentStr,
 		AltScreen:       true,
@@ -1083,7 +1083,7 @@ func (m *RouterModel) View() tea.View {
 			}
 		}
 
-		// status area (at bottom) — delegate entirely to the status view's own
+		// status area (at bottom) â€” delegate entirely to the status view's own
 		// OnMouse handler which uses pre-computed lipgloss.Width regions and the
 		// correct row index. Avoids parsing ANSI-encoded rendered strings with
 		// strings.Index which is unreliable when lipgloss injects resets mid-glyph.

@@ -25,6 +25,10 @@ func TestManager_AddAndActive(t *testing.T) {
 	if len(active) != 1 || active[0].Content != "hello" {
 		t.Fatalf("unexpected active list: %+v", active)
 	}
+	visible := m.Visible()
+	if len(visible) != 1 || visible[0].Content != "hello" {
+		t.Fatalf("unexpected visible list: %+v", visible)
+	}
 }
 
 func TestManager_Dismiss(t *testing.T) {
@@ -92,7 +96,6 @@ func TestManager_Persistence(t *testing.T) {
 	tmpDir := t.TempDir()
 	m := notifications.NewManager()
 
-	// 1. Initial Load from empty dir should do nothing
 	if err := m.Load(tmpDir); err != nil {
 		t.Fatalf("load failed: %v", err)
 	}
@@ -100,15 +103,13 @@ func TestManager_Persistence(t *testing.T) {
 		t.Errorf("expected 0 loaded notifications, got %d", m.Count())
 	}
 
-	// 2. Add notification and Save
 	m.Add("notif1", notifications.SeverityInfo, 0)
-	time.Sleep(10 * time.Millisecond) // ensure different timestamps
+	time.Sleep(10 * time.Millisecond)
 	m.Add("notif2", notifications.SeverityWarning, 0)
 	if err := m.Save(tmpDir); err != nil {
 		t.Fatalf("save failed: %v", err)
 	}
 
-	// 3. Load in a new manager
 	m2 := notifications.NewManager()
 	if err := m2.Load(tmpDir); err != nil {
 		t.Fatalf("load m2 failed: %v", err)
@@ -121,15 +122,12 @@ func TestManager_Persistence(t *testing.T) {
 		t.Errorf("unexpected loaded order or contents: %+v", active)
 	}
 
-	// 4. Test SetPersistPath auto-saves on Add/Dismiss
-	// Using filepath.Join with "notifications.json" since Load(dir) expects that exact filename.
 	autoFile := filepath.Join(tmpDir, "notifications.json")
 
 	m3 := notifications.NewManager()
 	m3.SetPersistPath(autoFile)
 	n, _ := m3.Add("auto-save", notifications.SeverityError, 0)
 
-	// Load back in m4 from path
 	m4 := notifications.NewManager()
 	m4.SetPersistPath(autoFile)
 	if err := m4.Load(tmpDir); err != nil {
@@ -139,7 +137,6 @@ func TestManager_Persistence(t *testing.T) {
 		t.Errorf("auto-save failed to persist to autoFile: %+v", m4.Active())
 	}
 
-	// Dismiss and verify auto-save
 	m3.Dismiss(n.ID)
 	m5 := notifications.NewManager()
 	m5.SetPersistPath(autoFile)
@@ -172,10 +169,68 @@ func TestSeverity_StringAndBadge(t *testing.T) {
 	}
 }
 
+func TestManager_KeyedPendingNotificationReplacesOlderEntry(t *testing.T) {
+	m := notifications.NewManager()
+	first, _ := m.AddWithOptions("first", notifications.SeverityWarning, time.Second, notifications.AddOptions{
+		Key:     "stopwatch-credentials",
+		Pending: true,
+	})
+	second, _ := m.AddWithOptions("second", notifications.SeverityWarning, time.Second, notifications.AddOptions{
+		Key:     "stopwatch-credentials",
+		Pending: true,
+	})
+
+	if first.ID == second.ID {
+		t.Fatal("expected replacement entry to get a new ID")
+	}
+	active := m.Active()
+	if len(active) != 1 {
+		t.Fatalf("expected 1 active keyed notification, got %d", len(active))
+	}
+	if active[0].Content != "second" {
+		t.Fatalf("active content = %q; want second", active[0].Content)
+	}
+	if got := m.PendingCount(); got != 1 {
+		t.Fatalf("pending count = %d; want 1", got)
+	}
+}
+
+func TestManager_DismissKey(t *testing.T) {
+	m := notifications.NewManager()
+	m.AddWithOptions("first", notifications.SeverityWarning, 0, notifications.AddOptions{Key: "alpha", Pending: true})
+	m.AddWithOptions("second", notifications.SeverityInfo, 0, notifications.AddOptions{Key: "beta"})
+	m.DismissKey("alpha")
+	if got := m.PendingCount(); got != 0 {
+		t.Fatalf("pending count = %d; want 0", got)
+	}
+	if got := m.Count(); got != 1 {
+		t.Fatalf("active count = %d; want 1", got)
+	}
+}
+
+func TestManager_ExpireRetainsPendingHistoryButHidesToast(t *testing.T) {
+	m := notifications.NewManager()
+	n, _ := m.AddWithOptions("needs action", notifications.SeverityWarning, time.Second, notifications.AddOptions{
+		Key:     "stopwatch-credentials",
+		Pending: true,
+	})
+
+	m.Handle(notifications.ExpireMsg{ID: n.ID})
+	if got := len(m.Visible()); got != 0 {
+		t.Fatalf("visible count = %d; want 0", got)
+	}
+	active := m.Active()
+	if len(active) != 1 {
+		t.Fatalf("active count = %d; want 1", len(active))
+	}
+	if !active[0].Pending {
+		t.Fatal("expected expired retained notification to stay pending")
+	}
+}
+
 func TestManager_Handle(t *testing.T) {
 	m := notifications.NewManager()
 
-	// 1. Handle AddMsg
 	cmd := m.Handle(notifications.AddMsg{
 		Content:  "handle-add",
 		Severity: notifications.SeverityInfo,
@@ -189,14 +244,11 @@ func TestManager_Handle(t *testing.T) {
 	}
 
 	id := m.Active()[0].ID
-
-	// 2. Handle ExpireMsg (should dismiss)
 	m.Handle(notifications.ExpireMsg{ID: id})
 	if m.Count() != 0 {
 		t.Errorf("expected 0 active after ExpireMsg, got %d", m.Count())
 	}
 
-	// 3. Handle AddMsg and DismissMsg
 	m.Handle(notifications.AddMsg{
 		Content:  "handle-add-2",
 		Severity: notifications.SeverityWarning,
@@ -207,7 +259,6 @@ func TestManager_Handle(t *testing.T) {
 		t.Errorf("expected 0 active after DismissMsg, got %d", m.Count())
 	}
 
-	// 4. Handle AddMsg and DismissAllMsg
 	m.Handle(notifications.AddMsg{
 		Content:  "handle-add-3",
 		Severity: notifications.SeverityError,
@@ -218,7 +269,6 @@ func TestManager_Handle(t *testing.T) {
 		t.Errorf("expected 0 active after DismissAllMsg, got %d", m.Count())
 	}
 
-	// 5. Enabled check
 	if !m.Enabled() {
 		t.Error("expected manager enabled by default")
 	}

@@ -30,9 +30,9 @@ The following milestone capabilities are already implemented:
 - Live theme preview while editing settings.
 - Runtime logging configuration and level updates.
 - Inspector message log with deduplication and runtime log streaming.
-- Notification manager with severity, TTL, persistence, and history panel.
-- Status bar integrations for settings and notification controls.
-- Compositor-based overlays for toast/history rendering.
+- Notification manager with severity, TTL, persistence, keyed action items, and history panel.
+- Status bar integrations for settings and notification controls, including pending-action counts.
+- Compositor-based overlays for toast/history rendering plus router-registered action prompts.
 - Modern Go cleanup workflow using `modernize -fix`.
 
 ## Project Layout
@@ -67,7 +67,7 @@ The roadmap now tracks only open work. See [.github/ROADMAP.md](.github/ROADMAP.
 Install these once to match the full CI gate locally:
 
 ```bash
-# Go (1.26+) — https://go.dev/dl/
+# Go (1.26+) - https://go.dev/dl/
 
 # golangci-lint
 curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
