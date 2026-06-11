@@ -72,24 +72,39 @@ func (s Severity) DefaultTTL() time.Duration {
 
 // Notification is one user-facing notification entry.
 type Notification struct {
-	ID        int64     `json:"id"`
-	Content   string    `json:"content"`
-	Severity  Severity  `json:"severity"`
-	CreatedAt time.Time `json:"created_at"`
-	Dismissed bool      `json:"dismissed"`
+	ID              int64     `json:"id"`
+	Key             string    `json:"key,omitempty"`
+	Content         string    `json:"content"`
+	Severity        Severity  `json:"severity"`
+	CreatedAt       time.Time `json:"created_at"`
+	Dismissed       bool      `json:"dismissed"`
+	Pending         bool      `json:"pending,omitempty"`
+	RetainInHistory bool      `json:"retain_in_history,omitempty"`
+	ToastHidden     bool      `json:"toast_hidden,omitempty"`
 }
 
-// ─── Messages ──────────────────────────────────────────────────────────────
+// AddOptions extends Add with metadata used by pending/action-item notifications.
+type AddOptions struct {
+	Key             string
+	Pending         bool
+	RetainInHistory bool
+}
 
 // AddMsg requests a new notification. TTL=0 means no auto-dismiss.
 type AddMsg struct {
-	Content  string
-	Severity Severity
-	TTL      time.Duration
+	Key             string
+	Content         string
+	Severity        Severity
+	TTL             time.Duration
+	Pending         bool
+	RetainInHistory bool
 }
 
 // DismissMsg dismisses a specific notification by ID.
 type DismissMsg struct{ ID int64 }
+
+// DismissKeyMsg dismisses a specific notification by stable key.
+type DismissKeyMsg struct{ Key string }
 
 // DismissAllMsg dismisses all notifications matching the given severity.
 // Leave Severity as nil to dismiss everything.
@@ -99,7 +114,11 @@ type DismissAllMsg struct{ Severity *Severity }
 // It is exported so the router can route it through notifMgr.Handle().
 type ExpireMsg struct{ ID int64 }
 
-// ─── Manager ───────────────────────────────────────────────────────────────
+// ActivateMsg is emitted when the user chooses a pending notification from the history UI.
+type ActivateMsg struct {
+	ID  int64
+	Key string
+}
 
 // Manager is a goroutine-safe notification store.
 // Pass a single *Manager pointer to all components that need to read or write
@@ -109,7 +128,7 @@ type Manager struct {
 	items       []Notification
 	enabled     bool
 	nextID      int64
-	persistPath string // empty → no file persistence
+	persistPath string // empty means no file persistence
 }
 
 // NewManager creates a Manager with notifications enabled.
@@ -125,7 +144,7 @@ func (m *Manager) Enabled() bool {
 }
 
 // SetEnabled enables or disables the notification system.
-// When disabled, Add() is a no-op and the bell icon changes to 🔕.
+// When disabled, Add() is a no-op and the bell icon changes to disabled.
 func (m *Manager) SetEnabled(v bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -140,20 +159,43 @@ func (m *Manager) SetPersistPath(path string) {
 	m.persistPath = path
 }
 
-// Add inserts a notification and returns a Cmd that expires it after ttl.
+// Add inserts a notification and returns a Cmd that expires its toast after ttl.
 // If notifications are disabled, both return values are zero/nil.
 func (m *Manager) Add(content string, sev Severity, ttl time.Duration) (Notification, tea.Cmd) {
+	return m.AddWithOptions(content, sev, ttl, AddOptions{})
+}
+
+// AddWithOptions inserts a notification and returns a Cmd that expires its toast after ttl.
+// When opts.Key is set, any earlier notifications with the same key are replaced so only the
+// latest state remains visible in toast/history.
+func (m *Manager) AddWithOptions(content string, sev Severity, ttl time.Duration, opts AddOptions) (Notification, tea.Cmd) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.enabled {
 		return Notification{}, nil
 	}
+	if opts.Pending {
+		opts.RetainInHistory = true
+	}
+	if key := opts.Key; key != "" {
+		filtered := m.items[:0]
+		for _, item := range m.items {
+			if item.Key == key {
+				continue
+			}
+			filtered = append(filtered, item)
+		}
+		m.items = filtered
+	}
 	m.nextID++
 	n := Notification{
-		ID:        m.nextID,
-		Content:   content,
-		Severity:  sev,
-		CreatedAt: time.Now(),
+		ID:              m.nextID,
+		Key:             opts.Key,
+		Content:         content,
+		Severity:        sev,
+		CreatedAt:       time.Now(),
+		Pending:         opts.Pending,
+		RetainInHistory: opts.RetainInHistory,
 	}
 	m.items = append(m.items, n)
 	m.sortUnsafe()
@@ -176,6 +218,7 @@ func (m *Manager) Dismiss(id int64) {
 	for i := range m.items {
 		if m.items[i].ID == id {
 			m.items[i].Dismissed = true
+			m.items[i].ToastHidden = true
 			break
 		}
 	}
@@ -191,7 +234,23 @@ func (m *Manager) DismissAll(sev *Severity) {
 	for i := range m.items {
 		if sev == nil || m.items[i].Severity == *sev {
 			m.items[i].Dismissed = true
+			m.items[i].ToastHidden = true
 		}
+	}
+	m.sortUnsafe()
+	m.persistUnsafe()
+}
+
+// DismissKey marks every notification with the given key as dismissed.
+func (m *Manager) DismissKey(key string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.items {
+		if m.items[i].Key != key {
+			continue
+		}
+		m.items[i].Dismissed = true
+		m.items[i].ToastHidden = true
 	}
 	m.sortUnsafe()
 	m.persistUnsafe()
@@ -206,6 +265,34 @@ func (m *Manager) Active() []Notification {
 		if !n.Dismissed {
 			out = append(out, n)
 		}
+	}
+	return out
+}
+
+// Visible returns undismissed notifications whose toast should still be shown, newest first.
+func (m *Manager) Visible() []Notification {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []Notification
+	for _, n := range m.items {
+		if n.Dismissed || n.ToastHidden {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+// Pending returns unresolved pending notifications, newest first.
+func (m *Manager) Pending() []Notification {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []Notification
+	for _, item := range m.items {
+		if item.Dismissed || !item.Pending {
+			continue
+		}
+		out = append(out, item)
 	}
 	return out
 }
@@ -232,24 +319,42 @@ func (m *Manager) Count() int {
 	return n
 }
 
+// PendingCount returns the number of unresolved pending notifications.
+func (m *Manager) PendingCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for _, item := range m.items {
+		if item.Dismissed || !item.Pending {
+			continue
+		}
+		n++
+	}
+	return n
+}
+
 // Handle processes notification-related tea messages.
 // Call this from the router's Update() so the manager stays in sync.
 func (m *Manager) Handle(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case AddMsg:
-		_, cmd := m.Add(msg.Content, msg.Severity, msg.TTL)
+		_, cmd := m.AddWithOptions(msg.Content, msg.Severity, msg.TTL, AddOptions{
+			Key:             msg.Key,
+			Pending:         msg.Pending,
+			RetainInHistory: msg.RetainInHistory,
+		})
 		return cmd
 	case DismissMsg:
 		m.Dismiss(msg.ID)
+	case DismissKeyMsg:
+		m.DismissKey(msg.Key)
 	case DismissAllMsg:
 		m.DismissAll(msg.Severity)
 	case ExpireMsg:
-		m.Dismiss(msg.ID)
+		m.expire(msg.ID)
 	}
 	return nil
 }
-
-// ─── Persistence ───────────────────────────────────────────────────────────
 
 // Save writes the full notification list to a JSON file inside dir.
 // The directory is created if it does not exist.
@@ -286,19 +391,37 @@ func (m *Manager) Load(dir string) error {
 	}
 	m.items = items
 	m.persistPath = path
+	m.sortUnsafe()
 	return nil
 }
-
-// ─── internal helpers ──────────────────────────────────────────────────────
 
 // sortUnsafe sorts items: undismissed first, then newest first. Caller holds mu.
 func (m *Manager) sortUnsafe() {
 	sort.SliceStable(m.items, func(i, j int) bool {
 		if m.items[i].Dismissed != m.items[j].Dismissed {
-			return !m.items[i].Dismissed // undismissed first
+			return !m.items[i].Dismissed
 		}
 		return m.items[i].CreatedAt.After(m.items[j].CreatedAt)
 	})
+}
+
+// expire hides an expired toast and keeps it in history only when configured.
+// Caller holds no lock.
+func (m *Manager) expire(id int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.items {
+		if m.items[i].ID != id {
+			continue
+		}
+		m.items[i].ToastHidden = true
+		if !m.items[i].RetainInHistory {
+			m.items[i].Dismissed = true
+		}
+		break
+	}
+	m.sortUnsafe()
+	m.persistUnsafe()
 }
 
 // persistUnsafe saves to persistPath if configured. Caller holds mu.

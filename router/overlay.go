@@ -169,12 +169,12 @@ func (o *toastOverlay) Bounds() Rect { return o.rect }
 
 func (o *toastOverlay) Visible() bool {
 	m := o.m
-	return m.notifMgr != nil && !m.status.IsHistoryVisible() && len(m.notifMgr.Active()) > 0
+	return m.notifMgr != nil && !m.status.IsHistoryVisible() && len(m.notifMgr.Visible()) > 0
 }
 
 func (o *toastOverlay) Render(ctx layoutContext) string {
 	m := o.m
-	active := m.notifMgr.Active()
+	active := m.notifMgr.Visible()
 	if len(active) == 0 {
 		o.rect = Rect{}
 		return ""
@@ -248,7 +248,13 @@ func (o *historyOverlay) OverlayKey(k tea.KeyPressMsg) tea.Cmd {
 		if m.notifMgr != nil {
 			active := m.notifMgr.Active()
 			if cursor >= 0 && cursor < len(active) {
-				m.notifMgr.Dismiss(active[cursor].ID)
+				selected := active[cursor]
+				if selected.Pending {
+					return tea.Batch(func() tea.Msg {
+						return notifications.ActivateMsg{ID: selected.ID, Key: selected.Key}
+					}, m.handleResizeCmd())
+				}
+				m.notifMgr.Dismiss(selected.ID)
 			}
 		}
 	case key.Matches(k, m.keys.DismissAll), key.Matches(k, m.keys.Dismiss):

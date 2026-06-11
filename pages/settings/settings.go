@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 
 	"github.com/charmbracelet/x/ansi"
@@ -181,6 +182,11 @@ type SettingsModel struct {
 	LogLevel             string `json:"log_level"`
 	NotificationsEnabled bool   `json:"notifications_enabled"`
 	NotificationsPersist bool   `json:"notifications_persist"`
+	// defaultTerminal holds the current machine default terminal handling on
+	// Windows. It is intentionally unexported so it's not persisted to the
+	// JSON settings file; the value is always read from / written to the
+	// registry directly.
+	defaultTerminal string
 
 	// intermediate string forms for huh selects (not persisted directly)
 	notifEnabledStr  string
@@ -239,6 +245,7 @@ func New(extraSections ...config.Section) *SettingsModel {
 		LogLevel:             "INFO",
 		NotificationsEnabled: true,
 		NotificationsPersist: false,
+		defaultTerminal:      "let_windows",
 		extraSections:        extraSections,
 		keys:                 DefaultKeys(),
 	}
@@ -268,6 +275,12 @@ func New(extraSections ...config.Section) *SettingsModel {
 	theme.SetThemePreferences(m.ThemeMode, m.AccessibilityColors, theme.StylePreset(m.StylePreset))
 	if m.ColorThemeID != "" {
 		_ = theme.SetCurrentTint(m.ColorThemeID)
+	}
+
+	// Always detect the current system default terminal so the UI reflects
+	// the real machine state. Detection is a no-op on non-Windows builds.
+	if det, err := detectDefaultTerminal(); err == nil && det != "" {
+		m.defaultTerminal = det
 	}
 
 	m.buildItems()
@@ -338,6 +351,17 @@ func (m *SettingsModel) buildItems() {
 		huh.NewOption("Info (normal)", "INFO"),
 		huh.NewOption("Warn (warnings only)", "WARN"),
 		huh.NewOption("Error (errors only)", "ERROR"),
+	}
+
+	// Terminal options only apply on Windows. On other platforms we omit the
+	// setting entirely to avoid confusing users with irrelevant OS controls.
+	var terminalOpts []huh.Option[string]
+	if runtime.GOOS == "windows" {
+		terminalOpts = []huh.Option[string]{
+			huh.NewOption("Let Windows Decide (system default)", "let_windows"),
+			huh.NewOption("Windows Console Host (Classic ConHost) — legacy", "classic"),
+			huh.NewOption("Windows Terminal (Modern) — recommended", "modern"),
+		}
 	}
 
 	for _, sec := range m.extraSections {
@@ -519,6 +543,34 @@ func (m *SettingsModel) buildItems() {
 		},
 	},
 	)
+
+	if runtime.GOOS == "windows" {
+		addItem("System", settingItem{
+			title: "Default Terminal",
+			value: func() string { return labelFor(m.defaultTerminal, terminalOpts) },
+			buildForm: func() *huh.Form {
+				return huh.NewForm(huh.NewGroup(
+					huh.NewSelect[string]().
+						Title("Default Terminal").
+						Description("Choose the OS default terminal delegation (Windows only).").
+						Options(terminalOpts...).
+						Value(&m.defaultTerminal),
+				).WithTheme(theme.HuhThemeFunc()))
+			},
+			apply: func() error {
+				switch m.defaultTerminal {
+				case "let_windows":
+					return applyTerminalSetting("{00000000-0000-0000-0000-000000000000}", "{00000000-0000-0000-0000-000000000000}")
+				case "classic":
+					return applyTerminalSetting("{B23D10C0-E52E-411E-9D5B-C09FDF709C7D}", "{B23D10C0-E52E-411E-9D5B-C09FDF709C7D}")
+				case "modern":
+					return applyTerminalSetting("{2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69}", "{E12CFF52-A866-4C77-9A90-F570A7AA2C6B}")
+				default:
+					return nil
+				}
+			},
+		})
+	}
 }
 
 // itemFromDef builds a settingItem from a config.FieldDef for extra sections.
@@ -662,6 +714,13 @@ func (m *SettingsModel) startEdit() tea.Cmd {
 		return nil
 	}
 	m.editIndex = m.cursor
+	// For the system default terminal, refresh the value from the OS so the
+	// edit form always reflects the current registry state.
+	if m.items[m.cursor].title == "Default Terminal" {
+		if det, err := detectDefaultTerminal(); err == nil && det != "" {
+			m.defaultTerminal = det
+		}
+	}
 	f := m.items[m.cursor].buildForm()
 	if f == nil {
 		return nil
@@ -690,6 +749,17 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Esc closes the overlay and reverts any unsaved/live-preview changes.
 	if km, ok := msg.(tea.KeyMsg); ok && key.Matches(km, m.keys.Dismiss) {
 		return m, m.abortEdit()
+	}
+
+	// Translate mouse wheel events to key presses for the edit overlay so
+	// users can scroll select controls with a mouse wheel even though huh
+	// lacks mouse support. Wheel up -> KeyUp, Wheel down -> KeyDown.
+	if wm, ok := msg.(tea.MouseWheelMsg); ok {
+		if wm.Mouse().Button == tea.MouseWheelUp {
+			msg = tea.KeyPressMsg{Code: tea.KeyUp}
+		} else {
+			msg = tea.KeyPressMsg{Code: tea.KeyDown}
+		}
 	}
 
 	prevTheme := m.ColorThemeID

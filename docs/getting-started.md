@@ -52,7 +52,23 @@ Useful global shortcuts during development:
 - `ctrl+h` toggles expanded help.
 - `ctrl+j` toggles status bar visibility.
 
-## 6. Add a New Page Safely
+## 6. Build Pending Action Prompts
+
+Use the shared notification manager for anything that should briefly toast but stay pending until resolved.
+
+Pattern:
+
+1. Emit `notifications.AddMsg{Key, Pending: true, TTL: ..., Content: ...}`.
+2. Register a router overlay for the actual prompt UI.
+3. Handle `notifications.ActivateMsg` to open that overlay when the user selects the pending item from 
+   notification history.
+4. On resolve, emit `notifications.DismissMsg` or `notifications.DismissKeyMsg` and persist whatever decision 
+   hash/state prevents repeated prompts.
+
+The status bar bell automatically shows the pending count, while the toast can expire independently of the item 
+remaining selectable in history.
+
+## 7. Add a New Page Safely
 
 Checklist:
 
@@ -62,7 +78,7 @@ Checklist:
 4. Register page in router startup path.
 5. Add tests for update/view behavior and event handling.
 
-## 7. Verify Before Commit
+## 8. Verify Before Commit
 
 ```bash
 go test ./... -v
@@ -83,7 +99,7 @@ If available in your environment, also run:
 modernize -fix ./...
 ```
 
-## 8. What to Read Next
+## 9. What to Read Next
 
 - [docs/architecture-decisions.md](architecture-decisions.md)
 - [docs/mouse-routing.md](mouse-routing.md)
