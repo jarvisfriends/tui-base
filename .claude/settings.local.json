@@ -18,7 +18,8 @@
       "Bash(cd /e/code/home/go/src/github.com/jarvisfriends/dash && cat main.go)",
       "Read(//e/e/code/home/go/src/github.com/jarvisfriends/dash/**)",
       "Bash(cd /e/code/home/go/src/github.com/jarvisfriends/tui-base && grep -n \"Subtitle\\\\|OverlayBorder\" theme/theme.go | head -20)",
-      "Read(//e/e/code/home/go/src/github.com/jarvisfriends/tui-base/theme/**)"
+      "Read(//e/e/code/home/go/src/github.com/jarvisfriends/tui-base/theme/**)",
+      "Bash(git --no-pager diff HEAD)"
     ]
   }
 }

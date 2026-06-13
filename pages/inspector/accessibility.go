@@ -1,13 +1,15 @@
 package inspector
 
 // accessibility.go — filterable color-accessibility theme browser panel.
-// Implements tea.Model. Embedded in debug.Model; toggle with the 'a' key.
+// Implements tea.Model. Embedded in debug.Model; shown when the inspector's
+// Accessibility tab is active (visibility follows the tab via switchTab).
 //
-// Key bindings (when panel is visible):
-//   up/down  navigate theme list
-//   1/2/3    toggle Protanopia / Deuteranopia / Tritanopia filter
-//   d / l    toggle Dark / Light theme inclusion
-//   enter    apply highlighted theme to all pages (settings.ThemeMsg)
+// Key bindings (when the Accessibility tab is active):
+//   left/right  switch inspector tab (handled by the parent, not the panel)
+//   up/down     navigate theme list
+//   1/2/3       toggle Protanopia / Deuteranopia / Tritanopia filter
+//   d / l       toggle Dark / Light theme inclusion
+//   enter       apply highlighted theme to all pages (settings.ThemeMsg)
 //
 // Filter semantics: with 0 CVD filters, only fully-accessible themes are shown.
 // Each additional CVD filter adds themes that fail for that deficiency type,
@@ -243,7 +245,7 @@ func (p *AccessibilityPanel) View() tea.View {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s  %s\n",
 		accent.Render("COLOR ACCESSIBILITY BROWSER"),
-		muted.Render("[a] close  [↑↓] navigate  [enter] apply theme"),
+		muted.Render("[←/→] switch tab  [↑↓] navigate  [enter] apply theme"),
 	)
 	fmt.Fprintf(&b, "%s   %s    %s   %s   %s\n",
 		checkbox(p.showDark, "d", "Dark"),

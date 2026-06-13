@@ -323,6 +323,11 @@ func (m *InspectorModel) sectionForActiveTab(c *theme.AppStyle, availW int, s ta
 		return "Disks", m.renderDisksSection(c, s)
 	case debugTabTerminal:
 		return "Terminal & Theme", m.buildTermSection(c, availW)
+	case debugTabAccessibility:
+		if m.acPanel != nil {
+			return "Accessibility", m.acPanel.View().Content
+		}
+		return "Accessibility", "(accessibility panel not available)"
 	case debugTabLog:
 		return "Message Log", logContent
 	case debugTabSettings:
