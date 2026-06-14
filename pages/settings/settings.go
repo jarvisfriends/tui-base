@@ -71,6 +71,10 @@ func settingsFilePath() string {
 // NavStyleMsg is emitted when the user selects a different navigation style.
 type NavStyleMsg struct{ Style string }
 
+// NavShowNumbersMsg is emitted when the user toggles the leading per-item number
+// prefix on number-capable navs (the minimal top nav).
+type NavShowNumbersMsg struct{ Show bool }
+
 // ThemeMsg is emitted when the user selects a different color theme.
 type ThemeMsg struct {
 	ID               string
@@ -173,6 +177,7 @@ type SettingsModel struct {
 
 	// Persisted fields (exported so JSON encoding works).
 	NavStyle             string `json:"nav_style"`
+	NavShowNumbers       bool   `json:"nav_show_numbers"`
 	ColorThemeID         string `json:"theme_id"`
 	ThemeMode            string `json:"theme_mode"`
 	StylePreset          string `json:"style_preset"`
@@ -192,6 +197,7 @@ type SettingsModel struct {
 	notifEnabledStr  string
 	notifPersistStr  string
 	accessibilityStr string
+	navNumbersStr    string
 
 	extraSections []config.Section
 	items         []settingItem
@@ -236,6 +242,7 @@ func (m *SettingsModel) Save() error {
 func New(extraSections ...config.Section) *SettingsModel {
 	m := &SettingsModel{
 		NavStyle:             "sidebar",
+		NavShowNumbers:       false,
 		ColorThemeID:         "dracula_plus",
 		ThemeMode:            theme.ThemeModeDark,
 		StylePreset:          string(theme.DefaultStylePreset),
@@ -322,12 +329,22 @@ func (m *SettingsModel) buildItems() {
 	} else {
 		m.accessibilityStr = "false"
 	}
+	if m.NavShowNumbers {
+		m.navNumbersStr = "true"
+	} else {
+		m.navNumbersStr = "false"
+	}
 	m.ThemeMode = theme.NormalizeMode(m.ThemeMode)
 	m.StylePreset = string(theme.NormalizePreset(m.StylePreset))
 	m.ColorThemeID = theme.ResolveTintIDForMode(m.ColorThemeID, m.ThemeMode)
 	navOpts := []huh.Option[string]{
 		huh.NewOption("Sidebar - vertical panel on the left", "sidebar"),
 		huh.NewOption("Tabs    - horizontal bar at the top", "tabs"),
+		huh.NewOption("Top Nav - minimal horizontal bar (inspector-style)", "topnav"),
+	}
+	navNumbersOpts := []huh.Option[string]{
+		huh.NewOption("Off", "false"),
+		huh.NewOption("On", "true"),
 	}
 	modeOpts := []huh.Option[string]{
 		huh.NewOption("Dark", theme.ThemeModeDark),
@@ -384,6 +401,24 @@ func (m *SettingsModel) buildItems() {
 					Description("How the navigation chrome is displayed").
 					Options(navOpts...).
 					Value(&m.NavStyle),
+			).WithTheme(theme.HuhThemeFunc()))
+		},
+	})
+	addItem("Navigation", settingItem{
+		title: "Show Nav Numbers",
+		value: func() string {
+			if m.NavShowNumbers {
+				return "On"
+			}
+			return "Off"
+		},
+		buildForm: func() *huh.Form {
+			return huh.NewForm(huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Show Nav Numbers").
+					Description("Show a leading number on each Top Nav item (the digits 1–9 always switch pages regardless)").
+					Options(navNumbersOpts...).
+					Value(&m.navNumbersStr),
 			).WithTheme(theme.HuhThemeFunc()))
 		},
 	})
@@ -768,6 +803,7 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 	prevAccessibility := m.AccessibilityColors
 	prevLevel := m.LogLevel
 	prevNav := m.NavStyle
+	prevNavNumbers := m.NavShowNumbers
 
 	state, cmd := m.editOverlay.Update(msg)
 	var cmds []tea.Cmd
@@ -797,6 +833,11 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		nav := m.NavStyle
 		cmds = append(cmds, func() tea.Msg { return NavStyleMsg{Style: nav} })
 	}
+	m.NavShowNumbers = m.navNumbersStr == "true"
+	if m.NavShowNumbers != prevNavNumbers {
+		show := m.NavShowNumbers
+		cmds = append(cmds, func() tea.Msg { return NavShowNumbersMsg{Show: show} })
+	}
 
 	switch state {
 	case huh.StateCompleted:
@@ -811,6 +852,7 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.NotificationsEnabled = m.notifEnabledStr == "true"
 		m.NotificationsPersist = m.notifPersistStr == "true"
 		m.AccessibilityColors = m.accessibilityStr == "true"
+		m.NavShowNumbers = m.navNumbersStr == "true"
 		m.ThemeMode = theme.NormalizeMode(m.ThemeMode)
 		m.ColorThemeID = theme.ResolveTintIDForMode(m.ColorThemeID, m.ThemeMode)
 		// propagate notification settings to the shared manager at runtime

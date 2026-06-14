@@ -54,3 +54,5 @@ tui_settings.json
 # Scratch / experimental code not ready for the repo
 tmp/
 *.code-workspace
+*/settings.local.json
+
