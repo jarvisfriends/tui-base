@@ -148,6 +148,16 @@ type RouterModel struct {
 	// active page). When true, key events are routed to the sidebar instead.
 	sidebarFocused bool
 
+	// navShowNumbers is the user's preference for showing a leading per-item
+	// number prefix on number-capable navs (the minimal top nav). Re-applied
+	// whenever the nav is (re)built so it survives a nav-style switch.
+	navShowNumbers bool
+
+	// konamiProgress tracks how far the user is through the secret key sequence.
+	// The sequence is observed passively (keys still do their normal job); only
+	// completing it fires the hidden easter egg.
+	konamiProgress int
+
 	width  int
 	height int
 
@@ -237,10 +247,16 @@ func NewWithOptions(opts Options) *RouterModel {
 	}
 	// choose nav implementation from persisted settings
 	var nav navigation.Navigator
-	if settingsModel.NavStyle == "tabs" {
+	switch settingsModel.NavStyle {
+	case "tabs":
 		nav = navigation.NewTabs()
-	} else {
+	case "topnav":
+		nav = navigation.NewMinimalTopNav()
+	default:
 		nav = navigation.New()
+	}
+	if nl, ok := nav.(navigation.NumberLabeled); ok {
+		nl.SetShowNumbers(settingsModel.NavShowNumbers)
 	}
 
 	// Compute the initial palette from the active tint and store it as a shared
@@ -264,6 +280,7 @@ func NewWithOptions(opts Options) *RouterModel {
 		keys:              keys.DefaultKeyMap(),
 		colors:            initialColors,
 		navigationVisible: true,
+		navShowNumbers:    settingsModel.NavShowNumbers,
 		colorProfile:      initialColorProfile,
 		settingsPage:      settingsModel,
 		homePage:          home.New(),
@@ -523,10 +540,16 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			oldPages = m.nav.GetPages()
 			oldIdx = m.nav.GetActiveIndex()
 		}
-		if msg.Style == "tabs" {
+		switch msg.Style {
+		case "tabs":
 			m.nav = navigation.NewTabs()
-		} else {
+		case "topnav":
+			m.nav = navigation.NewMinimalTopNav()
+		default:
 			m.nav = navigation.New()
+		}
+		if nl, ok := m.nav.(navigation.NumberLabeled); ok {
+			nl.SetShowNumbers(m.navShowNumbers)
 		}
 		if m.nav != nil {
 			if oldPages != nil {
@@ -543,6 +566,16 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, m.handleResizeCmd()
+
+	case settings.NavShowNumbersMsg:
+		// Persist the preference and apply it to the current nav if it supports
+		// number prefixes (the minimal top nav).
+		m.navShowNumbers = msg.Show
+		if nl, ok := m.nav.(navigation.NumberLabeled); ok {
+			nl.SetShowNumbers(msg.Show)
+		}
+		return m, m.handleResizeCmd()
+
 	case notifications.AddMsg, notifications.DismissMsg, notifications.DismissKeyMsg, notifications.DismissAllMsg, notifications.ExpireMsg:
 		if cmd := m.notifMgr.Handle(msg); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -634,6 +667,13 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch keyMsg := msg.(type) {
 		case tea.KeyPressMsg:
+			// Observe the secret key sequence. Intermediate keys are NOT consumed
+			// (they still navigate, etc.); only completing the sequence fires the
+			// hidden easter egg and consumes that final key.
+			if cmd := m.advanceKonami(keyMsg.String()); cmd != nil {
+				return m, cmd
+			}
+
 			// A visible modal overlay (inspector, info modal, history panel)
 			// intercepts all keys. The topmost visible KeyConsumer wins; passive
 			// overlays (the toast) are not KeyConsumers and never block keys.
@@ -678,13 +718,64 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.handleResizeCmd()
 			}
 			// When the active page has captured keyboard focus, bypass global
-			// shortcuts (quit, page-cycling) so every key reaches the form.
+			// shortcuts (region/focus moves, page-cycling) so every key reaches
+			// the form.
 			if !activeCapturesKeys {
-				switch {
-				case key.Matches(keyMsg, m.keys.Tab):
-					return m, m.cyclePage(1)
-				case key.Matches(keyMsg, m.keys.ShiftTab):
-					return m, m.cyclePage(-1)
+				_, isSidebar := m.nav.(navigation.Focusable)
+				if isSidebar {
+					// Region focus model for the sidebar (the recommended UX):
+					//   • Up/Down navigate within the sidebar and never move focus
+					//     out of it (handled by the sidebar when focused).
+					//   • Right / Enter / Tab / Shift+Tab move focus to the page.
+					//   • Left / Esc / Tab / Shift+Tab return focus to the sidebar.
+					// Tab/Shift+Tab therefore toggle focus between the two regions
+					// rather than cycling pages (page selection is Up/Down in the
+					// sidebar). Pages that need Left/Esc must implement
+					// KeyCapturer so those keys reach them instead.
+					switch keyMsg.String() {
+					case "right", "enter", "tab", "shift+tab":
+						if m.sidebarFocused {
+							m.sidebarFocused = false
+							m.setNavFocused(false)
+							m.updatePageKeys()
+							return m, m.handleResizeCmd()
+						}
+					case "left", "esc":
+						if !m.sidebarFocused {
+							m.sidebarFocused = true
+							m.setNavFocused(true)
+							m.updatePageKeys()
+							return m, m.handleResizeCmd()
+						}
+					}
+					// Tab/Shift+Tab while the page is focused return to the sidebar
+					// (the "prev/next region" half not covered above).
+					if !m.sidebarFocused {
+						switch {
+						case key.Matches(keyMsg, m.keys.Tab), key.Matches(keyMsg, m.keys.ShiftTab):
+							m.sidebarFocused = true
+							m.setNavFocused(true)
+							m.updatePageKeys()
+							return m, m.handleResizeCmd()
+						}
+					}
+					// Up/Down (and Esc while focused) fall through to the sidebar
+					// via the normal key-forwarding path below.
+				} else {
+					// Top-docked nav (tabs / minimal top nav): Tab/Shift+Tab cycle
+					// pages, number keys 1–9 jump directly. Works whether or not
+					// the nav shows a number prefix.
+					switch {
+					case key.Matches(keyMsg, m.keys.Tab):
+						return m, m.cyclePage(1)
+					case key.Matches(keyMsg, m.keys.ShiftTab):
+						return m, m.cyclePage(-1)
+					}
+					if m.nav != nil && m.nav.Dock() == navigation.DockTop {
+						if i, ok := navDigitIndex(keyMsg); ok && i < len(m.nav.GetPages()) {
+							return m, m.cyclePageTo(i)
+						}
+					}
 				}
 			}
 		}
@@ -714,10 +805,10 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.handleResizeCmd()
 		}
 		m.nav.SetActiveIndex(msg.PageIndex)
-		// After selecting a page, return keyboard focus to content so per-page
-		// controls (like table up/down navigation) work immediately.
-		m.sidebarFocused = false
-		m.setNavFocused(false)
+		// Keyboard focus is NOT changed here: navigating the sidebar with Up/Down
+		// keeps focus on the sidebar (live page switch). Focus moves to the page
+		// content only on an explicit Right/Enter/Tab (see the key handler). A
+		// mouse click manages focus via NavFocusMsg separately.
 		// Update status bar key hints to reflect the newly active page.
 		m.updatePageKeys()
 		// Schedule a resize for children but continue to forward the
@@ -864,6 +955,79 @@ func (m *RouterModel) cyclePage(delta int) tea.Cmd {
 	m.setNavFocused(false)
 	m.updatePageKeys()
 	return m.handleResizeCmd()
+}
+
+// cyclePageTo switches directly to an absolute page index, moving keyboard focus
+// back to the page content. Used by the top-nav number-key shortcuts.
+func (m *RouterModel) cyclePageTo(index int) tea.Cmd {
+	if m.nav == nil || index < 0 || index >= len(m.nav.GetPages()) {
+		return nil
+	}
+	m.nav.SetActiveIndex(index)
+	m.sidebarFocused = false
+	m.setNavFocused(false)
+	m.updatePageKeys()
+	return m.handleResizeCmd()
+}
+
+// navDigitIndex maps a "1".."9" key press to a zero-based page index.
+func navDigitIndex(keyMsg tea.KeyMsg) (int, bool) {
+	s := keyMsg.String()
+	if len(s) == 1 && s[0] >= '1' && s[0] <= '9' {
+		return int(s[0] - '1'), true
+	}
+	return 0, false
+}
+
+// StatusBarContent reports the status bar's currently rendered text and whether
+// it is visible. Exposed as an introspection seam so conformance tests
+// (testutil.CheckStatusBarVisible) can assert the status bar is present in every
+// rendered frame — on every page and with overlays open. Satisfies
+// testutil.StatusProvider structurally.
+func (m *RouterModel) StatusBarContent() (string, bool) {
+	return m.status.View().Content, m.status.IsVisible()
+}
+
+// konamiSequence is the classic cheat code. Completing it triggers the hidden
+// "secret menu" — for now just a fun notification; games or other surprises may
+// live here later.
+var konamiSequence = []string{"up", "up", "down", "down", "left", "right", "left", "right", "b", "a"}
+
+var konamiMessages = []string{
+	"🕹️  Konami code accepted! 30 extra lives… just kidding. (Secret menu coming soon.)",
+	"⬆⬆⬇⬇⬅➡⬅➡🅱🅰 — you found the secret menu! It's gloriously empty for now.",
+	"🎮 Achievement unlocked: pressed 10 keys in a very specific order.",
+	"👾 The cake is a lie, but the easter egg is real. Stay tuned…",
+}
+
+var konamiPick int
+
+// advanceKonami observes one key press toward the secret sequence. It returns a
+// non-nil command (the easter-egg notification) only when the full sequence has
+// just completed; otherwise nil, so the key continues to its normal handling.
+// A wrong key restarts progress (and still counts if it's the sequence's first key).
+func (m *RouterModel) advanceKonami(k string) tea.Cmd {
+	switch k {
+	case konamiSequence[m.konamiProgress]:
+		m.konamiProgress++
+	case konamiSequence[0]:
+		m.konamiProgress = 1 // wrong key, but it restarts the sequence
+	default:
+		m.konamiProgress = 0
+	}
+	if m.konamiProgress < len(konamiSequence) {
+		return nil
+	}
+	m.konamiProgress = 0
+	content := konamiMessages[konamiPick%len(konamiMessages)]
+	konamiPick++
+	return func() tea.Msg {
+		return notifications.AddMsg{
+			Content:  content,
+			Severity: notifications.SeverityInfo,
+			TTL:      notifications.SeverityInfo.DefaultTTL(),
+		}
+	}
 }
 
 // debugEnabled reports whether verbose router debug logging is active. The env

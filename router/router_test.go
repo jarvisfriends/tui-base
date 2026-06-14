@@ -990,3 +990,57 @@ func BenchmarkRouterViewNoSidebar(b *testing.B) {
 		_ = m.View().Content
 	}
 }
+
+// TestSidebarRegionFocusModel verifies the recommended sidebar focus model:
+// Up/Down keep focus on the sidebar; Right/Enter/Tab hand focus to the page;
+// Left/Esc/(Shift+)Tab return focus to the sidebar. (Tests default to tabs nav
+// when no config is present, so this forces the focusable sidebar nav.)
+func TestSidebarRegionFocusModel(t *testing.T) {
+	m := New()
+	m.nav = navigation.New() // focusable sidebar
+	if _, ok := m.nav.(navigation.Focusable); !ok {
+		t.Fatal("expected a focusable sidebar nav")
+	}
+
+	// Focus the sidebar to start.
+	m.sidebarFocused = true
+	m.setNavFocused(true)
+
+	// Down navigates within the sidebar and must NOT move focus out of it.
+	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if !m.sidebarFocused {
+		t.Fatal("Down should keep focus on the sidebar")
+	}
+
+	// Right hands focus to the page content.
+	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	if m.sidebarFocused {
+		t.Fatal("Right should move focus to the page content")
+	}
+
+	// Left returns focus to the sidebar.
+	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	if !m.sidebarFocused {
+		t.Fatal("Left should return focus to the sidebar")
+	}
+
+	// Enter (while focused) → content; Esc → back to the sidebar.
+	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if m.sidebarFocused {
+		t.Fatal("Enter should move focus to the page content")
+	}
+	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if !m.sidebarFocused {
+		t.Fatal("Esc should return focus to the sidebar")
+	}
+
+	// Tab toggles the focused region: sidebar → content → sidebar.
+	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if m.sidebarFocused {
+		t.Fatal("Tab from the sidebar should move focus to the page content")
+	}
+	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if !m.sidebarFocused {
+		t.Fatal("Tab from the page should return focus to the sidebar")
+	}
+}

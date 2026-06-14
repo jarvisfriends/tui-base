@@ -58,7 +58,6 @@ type MsgLog struct {
 // DebugKeyMap holds key bindings for the debug inspector page. All bindings
 // are exported so consumers can rebind them without forking the package.
 type DebugKeyMap struct {
-	Accessibility key.Binding // toggle accessibility panel
 	Highlight     key.Binding // toggle mouse-highlight overlay
 	NotifyInfo    key.Binding // fire a test info notification
 	NotifyWarning key.Binding // fire a test warning notification
@@ -68,7 +67,6 @@ type DebugKeyMap struct {
 // DefaultDebugKeys returns the default key bindings for the debug inspector.
 func DefaultDebugKeys() DebugKeyMap {
 	return DebugKeyMap{
-		Accessibility: key.NewBinding(key.WithKeys("a", "A"), key.WithHelp("a", "accessibility panel")),
 		Highlight:     key.NewBinding(key.WithKeys("h", "H"), key.WithHelp("h", "highlight toggle")),
 		NotifyInfo:    key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "test info notification")),
 		NotifyWarning: key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "test warning notification")),
@@ -83,11 +81,12 @@ const (
 	debugTabInput
 	debugTabDisks
 	debugTabTerminal
+	debugTabAccessibility
 	debugTabLog
 	debugTabSettings
 )
 
-var debugTabTitles = []string{"Runtime", "Input", "Disks", "Terminal", "Log", "Settings"}
+var debugTabTitles = []string{"Runtime", "Input", "Disks", "Terminal", "Accessibility", "Log", "Settings"}
 
 // pprof address constants — used in New() and handleSettingsKey to avoid
 // magic string literals scattered across the function.
@@ -202,7 +201,7 @@ type InspectorModel struct {
 	sectionViewport viewport.Model
 	inputViewport   viewport.Model
 	scrollToBottom  bool
-	// Accessibility panel — toggled with 'a'
+	// Accessibility panel — shown when its tab is active
 	acPanel *AccessibilityPanel
 	// highlight when stable values change, Change background color
 	ShowHighlight    bool
@@ -282,8 +281,8 @@ func (m *InspectorModel) ToggleVisible()  { m.visible = !m.visible }
 // the current tab shown in the status bar one-liner.
 func (m *InspectorModel) ShortHelp() []key.Binding {
 	tabSwitch := key.NewBinding(
-		key.WithKeys("left", "right", "1", "2", "3", "4", "5", "6"),
-		key.WithHelp("←/→ 1-6", "switch tab"),
+		key.WithKeys("left", "right", "1", "2", "3", "4", "5", "6", "7"),
+		key.WithHelp("←/→ 1-7", "switch tab"),
 	)
 	scroll := key.NewBinding(
 		key.WithKeys("up", "down"),
@@ -300,7 +299,6 @@ func (m *InspectorModel) ShortHelp() []key.Binding {
 		return []key.Binding{
 			tabSwitch, scroll,
 			m.keys.NotifyInfo, m.keys.NotifyWarning, m.keys.NotifyError,
-			m.keys.Accessibility,
 		}
 	default:
 		return []key.Binding{tabSwitch, scroll, m.keys.Highlight}
@@ -360,6 +358,18 @@ func (m *InspectorModel) switchTab(tab debugTab) {
 	}
 	m.saveActiveTabScroll()
 	m.activeTab = tab
+	// Ensure Accessibility panel visibility follows the active tab.
+	if m.acPanel != nil {
+		if m.activeTab == debugTabAccessibility {
+			if !m.acPanel.IsVisible() {
+				m.acPanel.Toggle()
+			}
+		} else {
+			if m.acPanel.IsVisible() {
+				m.acPanel.Toggle()
+			}
+		}
+	}
 	m.restoreActiveTabScroll()
 	m.dirty = true
 }
@@ -620,15 +630,16 @@ func (m *InspectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.logViewport.SetHeight(msg.Height)
 		return m, preCmd // size changes are silent — do not log
 	case tea.KeyMsg:
-		// When the accessibility panel is open it handles its own navigation;
-		// only 'a' is intercepted here to toggle it.
-		if m.acPanel != nil && m.acPanel.IsVisible() {
-			if press, ok := msg.(tea.KeyPressMsg); ok && key.Matches(press, m.keys.Accessibility) {
-				m.acPanel.Toggle()
-				return m, preCmd
+		// When the accessibility tab is active, let the panel handle keys —
+		// except left/right, which always switch tabs so the user can never
+		// get stuck on this tab. (The panel claims 1/2/3 for CVD filters, so
+		// arrows are the reliable way out.)
+		if m.activeTab == debugTabAccessibility && m.acPanel != nil {
+			press, isPress := msg.(tea.KeyPressMsg)
+			if !isPress || (press.Code != tea.KeyLeft && press.Code != tea.KeyRight) {
+				_, cmd := m.acPanel.Update(msg)
+				return m, tea.Batch(preCmd, cmd)
 			}
-			_, cmd := m.acPanel.Update(msg)
-			return m, tea.Batch(preCmd, cmd)
 		}
 		switch km := msg.(type) {
 		case tea.KeyPressMsg:
@@ -663,17 +674,12 @@ func (m *InspectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.switchTab(debugTab((int(m.activeTab) + 1) % len(debugTabTitles)))
 				return m, preCmd
 			}
-			if km.Text >= "1" && km.Text <= "6" {
+			if km.Text >= "1" && km.Text <= "7" {
 				m.switchTab(debugTab(int(km.Text[0] - '1')))
 				return m, preCmd
 			}
 			switch {
-			case key.Matches(km, m.keys.Accessibility):
-				if m.acPanel != nil {
-					m.acPanel.Toggle()
-				}
-				m.dirty = true
-				return m, preCmd
+			// Accessibility key removed; no-op
 			case key.Matches(km, m.keys.Highlight):
 				m.ShowHighlight = !m.ShowHighlight
 				m.dirty = true
@@ -1008,24 +1014,6 @@ func (m *InspectorModel) View() tea.View {
 	rawTabsLine := m.buildTabsLine(c)
 	sectionTitle, sectionContent := m.sectionForActiveTab(c, availW, tblStyles, runtimeSection, inputRows, logContent)
 
-	// When the accessibility panel is open, render it in place of the section content.
-	if m.acPanel != nil && m.acPanel.IsVisible() {
-		panelH := max(m.Height()-4, 6)
-		m.acPanel.SetSize(m.Width(), panelH)
-		acStr := c.Styles.TextOnBg.
-			Width(m.Width()).
-			Height(panelH).
-			MaxHeight(panelH).
-			Render(m.acPanel.View().Content)
-		titleLine := c.Styles.Title.Padding(0, 1).Render("MESSAGE INSPECTOR (Inspector)")
-		tabsLine := ansi.Truncate(rawTabsLine, m.Width(), "…")
-		m.view.SetContent(lipgloss.JoinVertical(lipgloss.Left, titleLine, tabsLine, acStr))
-		m.view.BackgroundColor = c.Styles.TextOnBg.GetBackground()
-		m.view.ForegroundColor = c.Styles.TextOnBg.GetForeground()
-		m.dirty = false
-		return m.view
-	}
-
 	titleText := sectionTitle + " (Inspector)"
 	titleLine := lipgloss.PlaceHorizontal(availW, lipgloss.Center, c.Styles.Title.Bold(true).Render(titleText))
 	sep := c.Styles.Title.Render(strings.Repeat("─", availW))
@@ -1076,7 +1064,7 @@ func (m *InspectorModel) View() tea.View {
 			my := rel.Mouse().Y
 			if my >= m.tabsOriginY && my < m.tabsOriginY+m.tabsHeight {
 				m.selectTabByX(rel.Mouse().X)
-				return nil
+				return func() tea.Msg { return mm }
 			}
 			if m.activeTab == debugTabSettings {
 				return m.activateSettingsRowByClick(my)

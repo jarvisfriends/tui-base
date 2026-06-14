@@ -340,7 +340,7 @@ func TestPerTabScrollPreservedAcrossSwitches(t *testing.T) {
 		t.Fatalf("expected runtime tab to scroll with KeyDown; got offset=%d", before)
 	}
 
-	_, _ = m.Update(tea.KeyPressMsg{Text: "5"}) // Log tab
+	_, _ = m.Update(tea.KeyPressMsg{Text: "6"}) // Log tab (accessibility tab inserted at position 5)
 	_, _ = m.Update(tea.KeyPressMsg{Text: "1"}) // Runtime tab
 
 	if got := m.sectionViewport.YOffset(); got != before {

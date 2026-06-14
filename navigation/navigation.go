@@ -44,6 +44,13 @@ type Focusable interface {
 	SetFocused(bool)
 }
 
+// NumberLabeled is implemented by navigators that can optionally show a leading
+// per-item number prefix (the minimal top nav). The router applies the user's
+// preference via this capability without asserting a concrete type.
+type NumberLabeled interface {
+	SetShowNumbers(bool)
+}
+
 // SelectedMsg is emitted when a navigation item is selected (via click or key).
 type SelectedMsg struct {
 	PageIndex int
