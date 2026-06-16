@@ -144,10 +144,6 @@ func (m *UserNotificationOverlay) Render(width int, left, right string) (string,
 }
 
 func (m *UserNotificationOverlay) RenderHistoryOverlay(maxW, maxH int) string {
-	return m.renderHistoryOverlay(maxW, maxH)
-}
-
-func (m *UserNotificationOverlay) renderHistoryOverlay(maxW, maxH int) string {
 	if !m.showHistory || m.notifMgr == nil {
 		return ""
 	}
@@ -278,15 +274,15 @@ func RenderStyled(width int, left, right string, colorIndex int, notifEnabled bo
 		fg = lipgloss.Color(strconv.Itoa(colorIndex))
 	}
 
-	settingsIcon := "\u2699\ufe0f"
-	notificationIcon := "\U0001F514"
+	settingsIcon := "⚙️"
+	notificationIcon := "🔔"
 	if pendingCount > 0 {
-		notificationIcon = fmt.Sprintf("\U0001F514 %d", pendingCount)
+		notificationIcon = fmt.Sprintf("🔔 %d", pendingCount)
 	}
 	if !notifEnabled {
-		notificationIcon = "\U0001F515"
+		notificationIcon = "🔕"
 	}
-	infoIcon := "\u2139\ufe0f"
+	infoIcon := "ℹ️"
 
 	baseStyle := c.Styles.StatusBase.Foreground(fg)
 	iconStyle := c.Styles.StatusBase.Foreground(fg).Padding(0, 1)

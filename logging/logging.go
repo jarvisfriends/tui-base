@@ -30,7 +30,7 @@ var (
 	logAppName = "tui-base" // overridden by SetAppName before InitFromSettings; guarded by appNameMu
 
 	// minLevel is the minimum accepted log level: DEBUG=0, INFO=1, WARN=2, ERROR=3
-	minLevel       = 1
+	minLevel       = 3
 	levelNameToInt = map[string]int{
 		"DEBUG": 0,
 		"INFO":  1,

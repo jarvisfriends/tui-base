@@ -1,6 +1,7 @@
 package navigation
 
 import (
+	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 )
@@ -78,22 +79,25 @@ type CollapseToggleMsg struct{}
 
 // NavKeyMap defines key bindings used when the sidebar has keyboard focus.
 type NavKeyMap struct {
-	Up      key.Binding
-	Down    key.Binding
-	Select  key.Binding
-	Dismiss key.Binding
+	PreviousPage key.Binding
+	NextPage     key.Binding
+	Select       key.Binding
+	Dismiss      key.Binding
 }
 
 // DefaultNavKeyMap returns the default key bindings for sidebar navigation.
 func DefaultNavKeyMap() NavKeyMap {
 	return NavKeyMap{
-		Up: key.NewBinding(
-			key.WithKeys("up", "k"),
-			key.WithHelp("↑/k", "move up"),
+		// Arrow-centric primary bindings (shown in help) with vim j/k/h/l as
+		// secondary keys so both paradigms work out of the box. See ROADMAP KB-1
+		// for the planned runtime arrow↔vim swap setting.
+		PreviousPage: key.NewBinding(
+			key.WithKeys("up", "left", "k", "h", "shift+tab"),
+			key.WithHelp("↑/←", "prev page"),
 		),
-		Down: key.NewBinding(
-			key.WithKeys("down", "j"),
-			key.WithHelp("↓/j", "move down"),
+		NextPage: key.NewBinding(
+			key.WithKeys("down", "right", "j", "l", "tab"),
+			key.WithHelp("↓/→", "next page"),
 		),
 		Select: key.NewBinding(
 			key.WithKeys("enter"),
@@ -105,3 +109,18 @@ func DefaultNavKeyMap() NavKeyMap {
 		),
 	}
 }
+
+// ShortHelp implements help.KeyMap.
+func (km NavKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{km.PreviousPage, km.NextPage, km.Select, km.Dismiss}
+}
+
+// FullHelp implements help.KeyMap.
+func (km NavKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{km.PreviousPage, km.NextPage},
+		{km.Select, km.Dismiss},
+	}
+}
+
+var _ help.KeyMap = (*NavKeyMap)(nil)

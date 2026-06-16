@@ -57,7 +57,7 @@
 | ✅ Done | I-4 | Replace `MaxHeight` clipping with `bubbles/viewport` | ScrollUp/Down/PageUp/PageDown; mouse wheel; all tests passing |
 | ⬜ Planned | I-5 | Move Inspector to a Ctrl+D overlay (compositor layer) | Available from any page, not just the Inspector tab |
 | ⬜ Planned | I-6 | Level-filtered view in inspector (show only WARN+) | Toggle with key while inspector is visible |
-| ⬜ Planned | I-7 | Export inspector log to file on demand | e.g., `X` key writes snapshot, then send info user message on where it was successfully written out to |
+| ✅ Done | I-7 | Export inspector log to file on demand | e.g., `X` key writes snapshot, then send info user message on where it was successfully written out to |
 | ⬜ Planned | I-8 | Show/Hide the Snap packages from the drive view | Filter option in drive view |
 
 ---
@@ -139,7 +139,7 @@
 | ⬜ Planned | HB-1 | **Expose the help bar's rendered height** so layouts query it instead of guessing | Directly supports the no-magic-numbers goal (D6); blocks clean layout math |
 | 💡 Idea | PP-1 | **Preview Picker** component: `bubbles/filepicker` (left ⅓) + `bubbles/viewport` (right, file contents) | Reusable input/output selector; showcases two bubbles components for ~no custom code. Verify no equivalent exists before building |
 | 💡 Idea | FW-1 | **Filewatch helper** (`fsnotify` → `tea.Cmd`) for live-reloading views | Clean 65-line helper in `charming/internal/ui/filewatch/filewatch.go` (archive); port if/when a consumer needs live reload |
-| ⬜ Planned | L-7 | Change **default log level to ERROR** (currently INFO / `minLevel=1`) + expose as a setting | `charming` decided ERROR-by-default unless changed in settings/config |
+| ✅ Done | L-7 | Change **default log level to ERROR** (currently INFO / `minLevel=1`) + expose as a setting | `charming` decided ERROR-by-default unless changed in settings/config |
 
 **Confirmed OBE (already done here — discarded from `charming`):** full-screen pages +
 help + title + mouse/keyboard nav; page-per-folder model with child message routing;

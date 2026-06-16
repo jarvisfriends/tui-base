@@ -223,25 +223,24 @@ func (m *Sidebar) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		// The router controls whether key events reach the sidebar (sidebarFocused
 		// gate). We process whatever arrives so direct unit tests stay simple.
-		if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
-			switch {
-			case key.Matches(keyMsg, m.keyMap.Up):
-				m.ActiveIndex = (m.ActiveIndex - 1 + len(m.Pages)) % len(m.Pages)
-				m.syncListCursor()
-				return m, m.emitSelected()
-			case key.Matches(keyMsg, m.keyMap.Down):
-				m.ActiveIndex = (m.ActiveIndex + 1) % len(m.Pages)
-				m.syncListCursor()
-				return m, m.emitSelected()
-			case key.Matches(keyMsg, m.keyMap.Select):
-				return m, m.emitSelected()
-			case key.Matches(keyMsg, m.keyMap.Dismiss):
-				m.focused = false
-				return m, func() tea.Msg { return NavFocusMsg{Focused: false} }
-			}
+		keyMsg := msg
+		switch {
+		case key.Matches(keyMsg, m.keyMap.PreviousPage):
+			m.ActiveIndex = (m.ActiveIndex - 1 + len(m.Pages)) % len(m.Pages)
+			m.syncListCursor()
+			return m, m.emitSelected()
+		case key.Matches(keyMsg, m.keyMap.NextPage):
+			m.ActiveIndex = (m.ActiveIndex + 1) % len(m.Pages)
+			m.syncListCursor()
+			return m, m.emitSelected()
+		case key.Matches(keyMsg, m.keyMap.Select):
+			return m, m.emitSelected()
+		case key.Matches(keyMsg, m.keyMap.Dismiss):
+			m.focused = false
+			return m, func() tea.Msg { return NavFocusMsg{Focused: false} }
 		}
 	}
 	return m, nil

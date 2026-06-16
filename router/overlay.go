@@ -298,6 +298,14 @@ func (o *inspectorOverlay) Z() int        { return zInspector }
 func (o *inspectorOverlay) Bounds() Rect  { return o.rect }
 func (o *inspectorOverlay) Visible() bool { return o.m.inspector != nil && o.m.inspector.IsVisible() }
 
+func (o *inspectorOverlay) ShortHelp() []key.Binding {
+	return o.m.inspector.ShortHelp()
+}
+
+func (o *inspectorOverlay) FullHelp() [][]key.Binding {
+	return o.m.inspector.FullHelp()
+}
+
 func (o *inspectorOverlay) Render(ctx layoutContext) string {
 	m := o.m
 	ow, oh := m.inspectorOverlayOuterSize()
@@ -314,6 +322,7 @@ func (o *inspectorOverlay) OverlayKey(k tea.KeyPressMsg) tea.Cmd {
 	switch {
 	case key.Matches(k, m.keys.Debug), key.Matches(k, m.keys.Dismiss):
 		m.inspector.ToggleVisible()
+		m.updatePageKeys()
 		return m.handleResizeCmd()
 	default:
 		_, cmd := m.inspector.Update(k)
@@ -345,6 +354,7 @@ func (o *inspectorOverlay) OverlayMouse(mm tea.MouseMsg) tea.Cmd {
 
 func (o *inspectorOverlay) CloseOnOutsideClick() tea.Cmd {
 	o.m.inspector.ToggleVisible()
+	o.m.updatePageKeys()
 	return o.m.handleResizeCmd()
 }
 

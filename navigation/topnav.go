@@ -3,6 +3,7 @@ package navigation
 import (
 	"fmt"
 
+	"charm.land/bubbles/v2/key"
 	"github.com/jarvisfriends/tui-base/page"
 
 	tea "charm.land/bubbletea/v2"
@@ -12,12 +13,14 @@ import (
 // MinimalTopNav is a compact top-docked navigator styled like the inspector's
 // tab line: a single horizontal row of labels, the active one highlighted, with
 // no borders. A leading per-tab number ("1:", "2:", …) is optional and defaults
-// to hidden; the number keys 1–9 always select the corresponding tab regardless
-// of whether the prefix is shown (the router maps the digits for top-docked navs).
+// to hidden. The number keys 1–9 select a tab directly only when the user has
+// enabled "Number Key Select" in Settings (off by default); the router maps the
+// digits for top-docked navs independently of whether the prefix is shown.
 type MinimalTopNav struct {
 	Pages       []Page
 	ActiveIndex int
 	ShowNumbers bool
+	KeyMap      NavKeyMap
 
 	width  int
 	height int
@@ -37,6 +40,7 @@ func NewMinimalTopNav() *MinimalTopNav {
 		},
 		ActiveIndex: 0,
 		ShowNumbers: false,
+		KeyMap:      DefaultNavKeyMap(),
 	}
 }
 
@@ -51,18 +55,18 @@ func (m *MinimalTopNav) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.Pages) == 0 {
 			return m, nil
 		}
-		switch msg.String() {
-		case "left", "shift+tab":
+		switch {
+		case key.Matches(msg, m.KeyMap.PreviousPage):
 			m.ActiveIndex = (m.ActiveIndex - 1 + len(m.Pages)) % len(m.Pages)
 			return m, m.selectCmd()
-		case "right", "tab":
+		case key.Matches(msg, m.KeyMap.NextPage):
 			m.ActiveIndex = (m.ActiveIndex + 1) % len(m.Pages)
 			return m, m.selectCmd()
-		case "enter":
+		case key.Matches(msg, m.KeyMap.Select):
 			return m, m.selectCmd()
 		default:
 			// Number keys select directly (always active, even when prefixes hidden).
-			if i, ok := digitIndex(msg.String()); ok && i < len(m.Pages) {
+			if i, ok := digitIndex(msg.Text); ok && i < len(m.Pages) {
 				m.ActiveIndex = i
 				return m, m.selectCmd()
 			}

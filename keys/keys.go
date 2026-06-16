@@ -9,8 +9,8 @@ import (
 type AppKeyMap struct {
 	viewport.KeyMap
 	Quit           key.Binding // Quit the application
-	Tab            key.Binding // Next tab
-	ShiftTab       key.Binding // Previous tab
+	NextPage       key.Binding // Next tab
+	PreviousPage   key.Binding // Previous tab
 	OpenSettings   key.Binding // Jump directly to the Settings tab
 	ToggleNav      key.Binding // Toggle Nav view
 	ToggleStatus   key.Binding // Toggle Help view
@@ -63,13 +63,13 @@ func DefaultKeyMap() *AppKeyMap {
 			key.WithKeys("q", "ctrl+c"),
 			key.WithHelp("q", "quit"),
 		),
-		Tab: key.NewBinding(
+		NextPage: key.NewBinding(
 			key.WithKeys("tab"),
-			key.WithHelp("tab", "next tab"),
+			key.WithHelp("tab", "next page"),
 		),
-		ShiftTab: key.NewBinding(
+		PreviousPage: key.NewBinding(
 			key.WithKeys("shift+tab"),
-			key.WithHelp("shift+tab", "prev tab"),
+			key.WithHelp("shift+tab", "prev page"),
 		),
 		OpenSettings: key.NewBinding(
 			key.WithKeys("ctrl+,"),
@@ -121,7 +121,7 @@ func DefaultKeyMap() *AppKeyMap {
 // It returns the key bindings arranged into rows for display.
 func (km *AppKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{km.Quit, km.Tab, km.ShiftTab, km.OpenSettings, km.ToggleFullHelp},
+		{km.Quit, km.NextPage, km.PreviousPage, km.OpenSettings, km.ToggleFullHelp},
 		{km.ToggleNav, km.ToggleStatus, km.Debug},
 	}
 }

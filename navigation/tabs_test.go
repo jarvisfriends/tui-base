@@ -1,11 +1,13 @@
 package navigation
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/jarvisfriends/tui-base/theme"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
@@ -140,6 +142,80 @@ func TestTabsUpdateKeyPresses(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Fatal("expected non-nil cmd on Enter")
+	}
+}
+
+func TestComputeTabWindow(t *testing.T) {
+	widths := []int{10, 10, 10, 10, 10} // 5 tabs, 50 cols total
+
+	// All tabs fit: full range, no arrows.
+	first, last, sl, sr := computeTabWindow(widths, 60, 2, 3, 3)
+	if first != 0 || last != 4 || sl || sr {
+		t.Errorf("fit-all: got first=%d last=%d showLeft=%v showRight=%v; want 0,4,false,false", first, last, sl, sr)
+	}
+
+	// Overflow with active at the far left: no left arrow, right arrow shown,
+	// and the active tab is within the window.
+	first, last, sl, sr = computeTabWindow(widths, 25, 0, 3, 3)
+	if sl {
+		t.Errorf("active-left: expected no left arrow")
+	}
+	if !sr {
+		t.Errorf("active-left: expected right arrow (tabs clipped on the right)")
+	}
+	if first > 0 || last < 0 {
+		t.Errorf("active-left: active 0 not visible (first=%d last=%d)", first, last)
+	}
+
+	// Overflow with active at the far right: left arrow shown, no right arrow,
+	// and the last tab is the active one.
+	first, last, sl, sr = computeTabWindow(widths, 25, 4, 3, 3)
+	if !sl {
+		t.Errorf("active-right: expected left arrow (tabs clipped on the left)")
+	}
+	if sr {
+		t.Errorf("active-right: expected no right arrow")
+	}
+	if last != 4 || first > 4 {
+		t.Errorf("active-right: active 4 not the last visible (first=%d last=%d)", first, last)
+	}
+
+	// Empty page set is handled gracefully.
+	if f, l, _, _ := computeTabWindow(nil, 25, 0, 3, 3); f != 0 || l != -1 {
+		t.Errorf("empty: got first=%d last=%d; want 0,-1", f, l)
+	}
+}
+
+// TestTabsHorizontalScrollNoWrap verifies that with more tabs than fit, the row
+// scrolls horizontally (stays a single tab-height tall) instead of wrapping onto
+// extra lines, and that the active tab remains rendered.
+func TestTabsHorizontalScrollNoWrap(t *testing.T) {
+	tabs := NewTabs()
+	tabs.Pages = []Page{
+		{ID: "p1", Title: "Alpha"},
+		{ID: "p2", Title: "Bravo"},
+		{ID: "p3", Title: "Charlie"},
+		{ID: "p4", Title: "Delta"},
+		{ID: "p5", Title: "Echo"},
+		{ID: "p6", Title: "Foxtrot"},
+	}
+	_ = theme.SetCurrentTint("dracula")
+	tabs.SetColors(theme.Active())
+	tabs.width = 24 // deliberately too narrow for all six tabs
+
+	// Height of a single rendered tab (the row must never exceed this).
+	singleTabHeight := lipgloss.Height(theme.Active().Styles.TabInactive.
+		Border(lipgloss.RoundedBorder(), true).Padding(0, 1).Render("X"))
+
+	for _, active := range []int{0, 3, 5} {
+		tabs.ActiveIndex = active
+		v := tabs.View()
+		if got := lipgloss.Height(v.Content); got != singleTabHeight {
+			t.Errorf("active=%d: row height %d; want %d (the row wrapped instead of scrolling)", active, got, singleTabHeight)
+		}
+		if !strings.Contains(v.Content, tabs.Pages[active].Title) {
+			t.Errorf("active=%d: active tab %q not visible in scrolled row", active, tabs.Pages[active].Title)
+		}
 	}
 }
 
