@@ -47,10 +47,10 @@ func TestMyAppConforms(t *testing.T) {
 
 | Check | Catches |
 |---|---|
-| `CheckFitsViewport` | Content larger than the screen that is **not clipped or scrolled** (frame taller than the terminal, or any line wider than it) at every standard size — the most common TUI corruption bug. |
+| `CheckFitsViewport` / `AssertBounds` | Content larger than the screen that is **not clipped or scrolled** (frame taller than the terminal, or any line wider than it) at every standard size — the most common TUI corruption bug. Use `testutil.AssertBounds(t, model, w, h)` in your unit tests to prove a component properly paginates or truncates its content. |
 | `CheckStatusBarVisible` | The **status bar disappearing** on some page, overlay, or prompt. Drive it with page switches + overlay/prompt toggles; it asserts the status bar's text is still in the frame whenever visible. Requires the model to implement `testutil.StatusProvider` (the router does, via `StatusBarContent()`). |
 | `CheckThemeResponsive` | Pages using **hard-coded colors** instead of the shared theme — switching to a drastically different theme must change the rendered ANSI colors. |
-| `CheckNoLineOverflow` / `CheckNoBorderOverflow` (existing) | Lines / bordered boxes overflowing at narrow widths (wrapping). |
+| `CheckNoLineOverflow` / `CheckNoBorderOverflow` (legacy) | Lines / bordered boxes overflowing at narrow widths. Superseded by `testutil.AssertBounds`. |
 
 ## Notes
 - These exercise messages **at different layers** (window-size, theme, navigation,

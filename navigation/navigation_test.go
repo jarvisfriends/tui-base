@@ -14,16 +14,16 @@ func TestKeyNavigation(t *testing.T) {
 		t.Fatalf("initial ActiveIndex = %d; want 0", m.ActiveIndex)
 	}
 
-	// 'j' should move down one
-	_, _ = m.Update(tea.KeyPressMsg{Text: "j"})
+	// Test NextPage (was 'j', now 'down' or 'right' or 'tab')
+	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	if m.ActiveIndex != 1 {
-		t.Fatalf("after 'j' ActiveIndex = %d; want 1", m.ActiveIndex)
+		t.Errorf("after 'down' ActiveIndex = %d; want 1", m.ActiveIndex)
 	}
 
-	// 'k' should move up one
-	_, _ = m.Update(tea.KeyPressMsg{Text: "k"})
+	// Test PreviousPage (was 'k', now 'up' or 'left' or 'shift+tab')
+	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	if m.ActiveIndex != 0 {
-		t.Fatalf("after 'k' ActiveIndex = %d; want 0", m.ActiveIndex)
+		t.Errorf("after 'up' ActiveIndex = %d; want 0", m.ActiveIndex)
 	}
 }
 

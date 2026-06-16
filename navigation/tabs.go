@@ -201,8 +201,11 @@ func (m *Tabs) View() tea.View {
 
 	row := lipgloss.JoinHorizontal(lipgloss.Top, segments...)
 	rowWidth := lipgloss.Width(row)
-	rightStyle := inactiveTabStyle.Width(max(0, m.width-rowWidth)).Border(inactiveTabBorder, false, false, true, false)
-	styled := lipgloss.JoinHorizontal(lipgloss.Top, row, rightStyle.Render("\n"))
+	styled := row
+	if rowWidth < m.width {
+		rightStyle := c.Styles.TabInactive.Width(m.width-rowWidth).Border(inactiveTabBorder, false, false, true, false)
+		styled = lipgloss.JoinHorizontal(lipgloss.Top, row, rightStyle.Render("\n"))
+	}
 
 	v := tea.NewView(styled)
 	v.BackgroundColor = c.Styles.TextOnBg.GetBackground()

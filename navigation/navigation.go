@@ -92,11 +92,11 @@ func DefaultNavKeyMap() NavKeyMap {
 		// secondary keys so both paradigms work out of the box. See ROADMAP KB-1
 		// for the planned runtime arrow↔vim swap setting.
 		PreviousPage: key.NewBinding(
-			key.WithKeys("up", "left", "k", "h", "shift+tab"),
+			key.WithKeys("up", "left", "shift+tab"),
 			key.WithHelp("↑/←", "prev page"),
 		),
 		NextPage: key.NewBinding(
-			key.WithKeys("down", "right", "j", "l", "tab"),
+			key.WithKeys("down", "right", "tab"),
 			key.WithHelp("↓/→", "next page"),
 		),
 		Select: key.NewBinding(

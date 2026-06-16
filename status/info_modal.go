@@ -3,6 +3,7 @@ package status
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/jarvisfriends/tui-base/common"
 	"github.com/jarvisfriends/tui-base/keys"
@@ -195,8 +196,8 @@ func (m *InfoModal) rebuildContent() {
 	info := common.ExpandedBuildInfo()
 	if info != nil {
 		rev := info.VCS.Revision
-		if len(rev) > 8 {
-			rev = rev[:8]
+		if utf8.RuneCountInString(rev) > 8 {
+			rev = string([]rune(rev)[:8])
 		}
 		builtAt := ""
 		if info.VCS.Time != nil {

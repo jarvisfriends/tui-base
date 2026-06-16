@@ -60,6 +60,53 @@ func TestStackingAndTrim(t *testing.T) {
 	}
 }
 
+func TestLogLevelFilterWarnPlus(t *testing.T) {
+	t.Parallel()
+	m := New()
+	_ = theme.SetCurrentTint("dracula")
+	m.SetColors(theme.Active())
+
+	m.Logs = []MsgLog{
+		{Timestamp: time.Now(), Type: "DEBUG", Content: "dbg-msg", Count: 1},
+		{Timestamp: time.Now(), Type: "INFO", Content: "info-msg", Count: 1},
+		{Timestamp: time.Now(), Type: "WARN", Content: "warn-msg", Count: 1},
+		{Timestamp: time.Now(), Type: "ERROR", Content: "err-msg", Count: 1},
+		{Timestamp: time.Now(), Type: "tea.KeyPressMsg", Content: "intercepted-msg", Count: 1},
+	}
+	c := m.Colors()
+
+	// Unfiltered: every entry is rendered.
+	all := m.renderLogContent(c)
+	for _, want := range []string{"dbg-msg", "info-msg", "warn-msg", "err-msg", "intercepted-msg"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("unfiltered log missing %q", want)
+		}
+	}
+
+	// Pressing 'f' enables the WARN+ filter.
+	_, _ = m.Update(tea.KeyPressMsg{Text: "f"})
+	if !m.logWarnPlus {
+		t.Fatal("expected logWarnPlus=true after pressing 'f'")
+	}
+	filtered := m.renderLogContent(c)
+	for _, want := range []string{"warn-msg", "err-msg"} {
+		if !strings.Contains(filtered, want) {
+			t.Errorf("filtered log should keep %q", want)
+		}
+	}
+	for _, gone := range []string{"dbg-msg", "info-msg", "intercepted-msg"} {
+		if strings.Contains(filtered, gone) {
+			t.Errorf("filtered log should drop %q", gone)
+		}
+	}
+
+	// Pressing 'f' again disables it.
+	_, _ = m.Update(tea.KeyPressMsg{Text: "f"})
+	if m.logWarnPlus {
+		t.Fatal("expected logWarnPlus=false after second 'f'")
+	}
+}
+
 func TestWindowSizeIgnored(t *testing.T) {
 	t.Parallel()
 	m := New()

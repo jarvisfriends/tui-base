@@ -63,6 +63,7 @@ type DebugKeyMap struct {
 	NotifyWarning key.Binding // fire a test warning notification
 	NotifyError   key.Binding // fire a test error notification
 	ExportLog     key.Binding // export inspector log to file
+	LevelFilter   key.Binding // toggle the Log tab's WARN+ only filter
 
 	// Help-only composite bindings
 	TabSwitch key.Binding
@@ -78,6 +79,7 @@ func DefaultDebugKeys() DebugKeyMap {
 		NotifyWarning: key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "test warning notification")),
 		NotifyError:   key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "test error notification")),
 		ExportLog:     key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "export log to file")),
+		LevelFilter:   key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter WARN+ only")),
 		TabSwitch:     key.NewBinding(key.WithKeys("left", "right", "1", "2", "3", "4", "5", "6", "7"), key.WithHelp("←/→ 1-7", "switch tab")),
 		Scroll:        key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "scroll")),
 		EnterRun:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "change/run")),
@@ -211,6 +213,9 @@ type InspectorModel struct {
 	sectionViewport viewport.Model
 	inputViewport   viewport.Model
 	scrollToBottom  bool
+	// logWarnPlus filters the Log tab to WARN+ entries only when true (I-6).
+	// Intercepted (non-level) messages are hidden while it is active.
+	logWarnPlus bool
 	// Accessibility panel — shown when its tab is active
 	acPanel *AccessibilityPanel
 	// highlight when stable values change, Change background color
@@ -295,7 +300,7 @@ func (m *InspectorModel) ShortHelp() []key.Binding {
 		return []key.Binding{m.keys.TabSwitch, m.keys.Scroll, m.keys.EnterRun}
 	case debugTabLog:
 		return []key.Binding{
-			m.keys.TabSwitch, m.keys.Scroll,
+			m.keys.TabSwitch, m.keys.Scroll, m.keys.LevelFilter,
 			m.keys.NotifyInfo, m.keys.NotifyWarning, m.keys.NotifyError, m.keys.ExportLog,
 		}
 	default:
@@ -696,6 +701,11 @@ func (m *InspectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				})
 			case key.Matches(km, m.keys.ExportLog):
 				return m, tea.Batch(preCmd, m.exportLogCmd())
+			case key.Matches(km, m.keys.LevelFilter):
+				m.logWarnPlus = !m.logWarnPlus
+				m.scrollToBottom = true
+				m.dirty = true
+				return m, preCmd
 			}
 		}
 	case TermDiagMsg:
@@ -747,7 +757,7 @@ func (m *InspectorModel) LogMessageForDebugging(msg tea.Msg) tea.Cmd {
 		msgContent = ""
 		for _, kv := range mt {
 			// Ex. [ACLOCAL_PATH=C:\Program Files\Git\mingw64\share\aclocal;C:\Program Files\Git\usr\share\aclocal ALLUSERSPROFILE=C:\ProgramData APPDATA=C:\Users
-			if len(msgContent) > 0 {
+			if msgContent != "" {
 				msgContent += "\n  "
 			}
 			if pair := strings.SplitN(kv, "=", 2); len(pair) == 2 {
@@ -1242,9 +1252,11 @@ func (m *InspectorModel) renderSettingsSection(c *theme.AppStyle) string {
 
 	normalField := c.Styles.Item.Width(fieldW)
 	normalValue := c.Styles.TextOnBg.Width(valueW)
-	selectedField := c.Styles.Title.Width(fieldW)
-	selectedValue := c.Styles.TextOnBg.Width(valueW)
-	selectedRow := c.Styles.Row.Background(c.Styles.TabHover.GetBackground()).Width(availW)
+	// Use the theme's semantic selection colors (SelectionBg/Fg), matching the
+	// table, sidebar, and settings page, rather than the tab-hover affordance.
+	selectedField := c.Styles.SelectedItem.Width(fieldW)
+	selectedValue := c.Styles.TextOnBg.Foreground(c.SelectionFg).Background(c.SelectionBg).Width(valueW)
+	selectedRow := c.Styles.Row.Background(c.SelectionBg).Width(availW)
 
 	var out []string
 	for i, row := range items {

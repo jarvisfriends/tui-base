@@ -258,9 +258,32 @@ func (m *InspectorModel) renderDisksSection(c *theme.AppStyle, s table.Styles) s
 	return m.diskTbl.View()
 }
 
+// logLevelRank maps a log entry's Type to an ordered severity rank. Entries from
+// the runtime logger carry a level name (DEBUG/INFO/WARN/ERROR); intercepted
+// tea-message entries carry a Go type name and rank -1 (not a level).
+func logLevelRank(t string) int {
+	switch strings.ToUpper(t) {
+	case "DEBUG":
+		return 0
+	case "INFO":
+		return 1
+	case "WARN", "WARNING":
+		return 2
+	case "ERROR":
+		return 3
+	}
+	return -1
+}
+
+// logLevelRankWarn is the threshold used by the WARN+ filter (I-6).
+const logLevelRankWarn = 2
+
 func (m *InspectorModel) renderLogContent(c *theme.AppStyle) string {
 	var b strings.Builder
 	for _, log := range m.Logs {
+		if m.logWarnPlus && logLevelRank(log.Type) < logLevelRankWarn {
+			continue
+		}
 		timestamp := log.Timestamp.Format("15:04:05")
 		countStr := ""
 		if log.Count > 1 {
@@ -277,6 +300,9 @@ func (m *InspectorModel) renderLogContent(c *theme.AppStyle) string {
 		b.WriteString("\n\n")
 	}
 	if b.Len() == 0 {
+		if m.logWarnPlus {
+			return "No WARN+ messages. Press 'f' to show all."
+		}
 		return "No messages intercepted yet..."
 	}
 	return b.String()
@@ -329,7 +355,11 @@ func (m *InspectorModel) sectionForActiveTab(c *theme.AppStyle, availW int, s ta
 		}
 		return "Accessibility", "(accessibility panel not available)"
 	case debugTabLog:
-		return "Message Log", logContent
+		title := "Message Log"
+		if m.logWarnPlus {
+			title += " [WARN+ only]"
+		}
+		return title, logContent
 	case debugTabSettings:
 		return "Debug Settings", m.renderSettingsSection(c)
 	default:

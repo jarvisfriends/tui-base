@@ -226,7 +226,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.filtering = false
 		case msg.Code == tea.KeyBackspace:
 			if m.filter != "" {
-				m.filter = m.filter[:len(m.filter)-1]
+				runes := []rune(m.filter)
+				m.filter = string(runes[:len(runes)-1])
 				m.rebuildFilter()
 			}
 		case msg.Code == tea.KeySpace:

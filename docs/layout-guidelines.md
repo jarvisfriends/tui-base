@@ -183,14 +183,40 @@ every widget box to be 2 cells narrower than its allocated grid column, leaving 
 
 ---
 
-## 7. Always test rendered widths at multiple terminal sizes
+## 7. Always test rendered widths and use the AST linter
 
-Every page/component should have a test that:
-1. Calls `Update(tea.WindowSizeMsg{Width: w, Height: h})`
-2. Calls `View()` and splits the result by `"\n"`
-3. Asserts `lipgloss.Width(line) <= w` for every line
+Visual width miscalculations are the #1 cause of TUI corruption (e.g., borders breaking, layouts wrapping). 
+To prevent this, `tui-base` provides two powerful safety nets that **must** be used:
 
-See `common/layout_constraints_test.go` for the shared test helpers.
+### A. The `TestLayoutCalculations` AST Linter
+Our `tui-base/keys/standards_test.go` contains an AST-based linter that scans all UI packages across the workspaces. 
+It enforces that you never use `len("string")` or `strings.Count(s, "\n")` for layout math (which only measures bytes),
+and forces the use of `lipgloss.Width()` and `lipgloss.Height()` instead. 
+
+**How to use:** It runs automatically with `go test ./keys/...` in `tui-base`. If it flags your code, replace `len(x)`
+with `lipgloss.Width(x)` (for layout) or `utf8.RuneCountInString(x)` (for slicing/iteration).
+
+### B. The `AssertBounds` Layout Stress Test
+Static analysis can't catch dynamic text overflowing the window. Every UI component should have a test that calls 
+`testutil.AssertBounds(t, model, width, height)`.
+
+This helper automatically:
+1. Sends a `tea.WindowSizeMsg` to your model.
+2. Captures the output of `m.View()`.
+3. Verifies `lipgloss.Height(view) <= height`.
+4. Splits the view by `\n` and asserts `lipgloss.Width(line) <= width` for every single line.
+
+**How to use:**
+```go
+func TestMyComponentBounds(t *testing.T) {
+    m := NewMyComponent()
+    // Test normal sizes
+    testutil.AssertBounds(t, m, 80, 24)
+    // Stress test extreme edge cases!
+    testutil.AssertBounds(t, m, 200, 50)
+    testutil.AssertBounds(t, m, 10, 5)
+}
+```
 
 ---
 
