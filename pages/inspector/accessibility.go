@@ -149,8 +149,8 @@ type AccessibilityKeyMap struct {
 // DefaultAccessibilityKeyMap returns the default keys.
 func DefaultAccessibilityKeyMap() AccessibilityKeyMap {
 	return AccessibilityKeyMap{
-		Up:          key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑", "up")),
-		Down:        key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓", "down")),
+		Up:          key.NewBinding(key.WithKeys("up"), key.WithHelp("↑", "up")),
+		Down:        key.NewBinding(key.WithKeys("down"), key.WithHelp("↓", "down")),
 		ToggleCVD1:  key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "toggle protanopia")),
 		ToggleCVD2:  key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "toggle deuteranopia")),
 		ToggleCVD3:  key.NewBinding(key.WithKeys("3"), key.WithHelp("3", "toggle tritanopia")),

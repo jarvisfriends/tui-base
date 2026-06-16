@@ -2,6 +2,7 @@ package navigation
 
 import (
 	"fmt"
+	"unicode/utf8"
 
 	"charm.land/bubbles/v2/key"
 	"github.com/jarvisfriends/tui-base/page"
@@ -163,7 +164,7 @@ func (m *MinimalTopNav) GetActiveIndex() int  { return m.ActiveIndex }
 
 // digitIndex maps a single key string "1".."9" to a zero-based index.
 func digitIndex(s string) (int, bool) {
-	if len(s) == 1 && s[0] >= '1' && s[0] <= '9' {
+	if utf8.RuneCountInString(s) == 1 && s[0] >= '1' && s[0] <= '9' {
 		return int(s[0] - '1'), true
 	}
 	return 0, false

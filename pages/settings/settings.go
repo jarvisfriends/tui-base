@@ -988,12 +988,17 @@ func (m *SettingsModel) renderOverview() string {
 	labelW := min(24, max(12, layout.colWidth/2))
 	valueW := max(layout.colWidth-labelW-3, 1)
 
-	hoverBg := c.Styles.TabHover.GetBackground()
+	// The selected row uses the theme's semantic, contrast-guarded selection
+	// colors (SelectionBg/Fg) so it matches the sidebar and table widgets, rather
+	// than borrowing the tab-hover affordance background (which is a hover hint,
+	// not a selection indicator).
+	selBg := c.SelectionBg
+	selFg := c.SelectionFg
 	normalLabel := c.Styles.TextOnBg.Width(labelW)
 	normalValue := c.Styles.Subtitle.Width(valueW)
-	cursorLabel := c.Styles.Title.Background(hoverBg).Width(labelW)
-	cursorValue := c.Styles.TextOnBg.Background(hoverBg).Width(valueW)
-	cursorBg := c.Styles.Row.Background(hoverBg).Width(layout.colWidth)
+	cursorLabel := c.Styles.SelectedItem.Width(labelW)
+	cursorValue := c.Styles.TextOnBg.Foreground(selFg).Background(selBg).Width(valueW)
+	cursorBg := c.Styles.Row.Background(selBg).Width(layout.colWidth)
 	headerStyle := c.Styles.Subtitle.Bold(true).Width(layout.colWidth)
 	emptyRow := lipgloss.NewStyle().Width(layout.colWidth).Render("")
 	titleStyle := c.Styles.Title
@@ -1028,8 +1033,8 @@ func (m *SettingsModel) renderOverview() string {
 				val = ansi.TruncateLeft(v, ansi.StringWidth(v)-valueW+1, "…")
 			}
 			if entry.itemIndex == m.cursor {
-				indicatorStyle := lipgloss.NewStyle().Foreground(c.Border).Background(hoverBg)
-				spaceStyle := lipgloss.NewStyle().Background(hoverBg)
+				indicatorStyle := lipgloss.NewStyle().Foreground(selFg).Background(selBg)
+				spaceStyle := lipgloss.NewStyle().Background(selBg)
 				rowText := indicatorStyle.Render("▶ ") + cursorLabel.Render(lbl) + spaceStyle.Render(" ") + cursorValue.Render(val)
 				colLines = append(colLines, cursorBg.Render(rowText))
 				continue
