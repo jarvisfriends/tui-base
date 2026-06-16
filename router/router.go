@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -52,7 +53,7 @@ type ReplaceAppPagesMsg struct {
 // Options controls router startup behavior for embedding applications.
 type Options struct {
 	// AppName is the display name shown in the terminal window title and the
-	// info modal (â„¹ overlay). Defaults to "TUI Base" when empty.
+	// info modal (ℹ overlay). Defaults to "TUI Base" when empty.
 	AppName string
 	// AppVersion overrides the version string shown in the info modal.
 	// When empty, common.AppVersion() (set via -ldflags at build time) is used.
@@ -73,13 +74,13 @@ type Options struct {
 }
 
 // pageIDFromTitle derives a stable navigation ID from a human-readable title
-// by lower-casing and replacing spaces with hyphens (e.g. "My Page" â†’ "my-page").
+// by lower-casing and replacing spaces with hyphens (e.g. "My Page" , "my-page").
 func pageIDFromTitle(title string) string {
 	return strings.ToLower(strings.ReplaceAll(title, " ", "-"))
 }
 
 // screamingSnake converts a human-readable app name to a SCREAMING_SNAKE_CASE
-// env-var prefix, e.g. "TUI Base" â†’ "TUI_BASE", "My Cool App" â†’ "MY_COOL_APP".
+// env-var prefix, e.g. "TUI Base", "TUI_BASE", "My Cool App", "MY_COOL_APP".
 // Non-alphanumeric runes are collapsed to underscores and duplicates removed.
 func screamingSnake(name string) string {
 	var b strings.Builder
@@ -106,7 +107,7 @@ type RouterModel struct {
 	nav     navigation.Navigator
 	appName string
 	// appEnvPrefix is the SCREAMING_SNAKE_CASE env-var prefix derived from the
-	// app name (e.g. "TUI Base" â†’ "TUI_BASE"). Used to derive env var names
+	// app name (e.g. "TUI Base" , "TUI_BASE"). Used to derive env var names
 	// so consumer apps get branded env vars instead of the framework defaults.
 	appEnvPrefix       string
 	colorProfileEnvVar string
@@ -153,6 +154,12 @@ type RouterModel struct {
 	// whenever the nav is (re)built so it survives a nav-style switch.
 	navShowNumbers bool
 
+	// navNumberSelect gates the number-key (1–9) page-selection shortcut on
+	// top-docked navs. Disabled by default; toggled live from the Settings page
+	// via NavNumberSelectMsg. Decoupled from navShowNumbers so the prefix and the
+	// shortcut can be enabled independently.
+	navNumberSelect bool
+
 	// konamiProgress tracks how far the user is through the secret key sequence.
 	// The sequence is observed passively (keys still do their normal job); only
 	// completing it fires the hidden easter egg.
@@ -187,7 +194,7 @@ func NewWithRegisteredPages(extraPages []RegisteredPage) *RouterModel {
 // NewWithOptions creates a router with built-in pages and optional app pages.
 // When DefaultPageID is set and found, that page is selected on startup.
 func NewWithOptions(opts Options) *RouterModel {
-	// Resolve app name and config dir name early â€” both are used below.
+	// Resolve app name and config dir name early — both are used below.
 	appName := opts.AppName
 	if appName == "" {
 		appName = DefaultAppName
@@ -281,6 +288,7 @@ func NewWithOptions(opts Options) *RouterModel {
 		colors:            initialColors,
 		navigationVisible: true,
 		navShowNumbers:    settingsModel.NavShowNumbers,
+		navNumberSelect:   settingsModel.NavNumberSelect,
 		colorProfile:      initialColorProfile,
 		settingsPage:      settingsModel,
 		homePage:          home.New(),
@@ -290,7 +298,7 @@ func NewWithOptions(opts Options) *RouterModel {
 	m.inspector = inspector.New()
 
 	// Derive env-var names from the app name so consumers get branded vars
-	// (e.g. "My App" â†’ MY_APP_COLOR_PROFILE, MY_APP_DEBUG) instead of the
+	// (e.g. "My App", MY_APP_COLOR_PROFILE, MY_APP_DEBUG) instead of the
 	// generic TUI_BASE_* names.
 	m.appEnvPrefix = appPrefix
 	m.colorProfileEnvVar = appColorProfileEnvVar
@@ -306,7 +314,7 @@ func NewWithOptions(opts Options) *RouterModel {
 		m.inspector.AddLog(level, ts, msg)
 	})
 	// Collect valid extra pages. When the caller supplies extra pages they come
-	// first in the nav list (Home is omitted â€” the app provides its own landing
+	// first in the nav list (Home is omitted — the app provides its own landing
 	// page). Settings is always appended last. Inspector is available globally
 	// as an overlay via Ctrl+D.
 	// When no extra pages are supplied the default is Home + Settings.
@@ -352,6 +360,16 @@ func NewWithOptions(opts Options) *RouterModel {
 // and, if so, pushes its key bindings to the status bar so the bar shows
 // page-specific hints instead of the global router shortcuts.
 func (m *RouterModel) updatePageKeys() {
+	// If a visible modal overlay provides key bindings, they take precedence.
+	for _, o := range slices.Backward(m.overlays) {
+		if o.Visible() {
+			if km, ok := o.(help.KeyMap); ok {
+				m.status.SetPageBindings(km)
+				return
+			}
+		}
+	}
+
 	idx := 0
 	if m.nav != nil {
 		idx = m.nav.GetActiveIndex()
@@ -576,6 +594,12 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.handleResizeCmd()
 
+	case settings.NavNumberSelectMsg:
+		// Enable/disable the number-key (1–9) page-selection shortcut. No layout
+		// change, so no resize is needed.
+		m.navNumberSelect = msg.Enabled
+		return m, nil
+
 	case notifications.AddMsg, notifications.DismissMsg, notifications.DismissKeyMsg, notifications.DismissAllMsg, notifications.ExpireMsg:
 		if cmd := m.notifMgr.Handle(msg); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -664,117 +688,117 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// using an out-of-date width (which can make center vs left-aligned
 		// rendering appear briefly).
 		return m, tea.Batch(m.handleResizeCmd(), m.syncTerminalColorsAfterCmd(20*time.Millisecond))
-	case tea.KeyMsg:
-		switch keyMsg := msg.(type) {
-		case tea.KeyPressMsg:
-			// Observe the secret key sequence. Intermediate keys are NOT consumed
-			// (they still navigate, etc.); only completing the sequence fires the
-			// hidden easter egg and consumes that final key.
-			if cmd := m.advanceKonami(keyMsg.String()); cmd != nil {
-				return m, cmd
-			}
+	case tea.KeyPressMsg:
+		keyMsg := msg
+		// Observe the secret key sequence. Intermediate keys are NOT consumed
+		// (they still navigate, etc.); only completing the sequence fires the
+		// hidden easter egg and consumes that final key.
+		if cmd := m.advanceKonami(keyMsg.String()); cmd != nil {
+			return m, cmd
+		}
 
-			// A visible modal overlay (inspector, info modal, history panel)
-			// intercepts all keys. The topmost visible KeyConsumer wins; passive
-			// overlays (the toast) are not KeyConsumers and never block keys.
-			if cmd, ok := m.overlayHandleKey(keyMsg); ok {
-				return m, cmd
-			}
+		// A visible modal overlay (inspector, info modal, history panel)
+		// intercepts all keys. The topmost visible KeyConsumer wins; passive
+		// overlays (the toast) are not KeyConsumers and never block keys.
+		if cmd, ok := m.overlayHandleKey(keyMsg); ok {
+			return m, cmd
+		}
 
-			// Layout-toggle shortcuts are always active, even when a form has focus.
-			switch {
-			case key.Matches(keyMsg, m.keys.Quit):
-				return m, tea.Quit
-			case key.Matches(keyMsg, m.keys.ToggleNav):
-				if !m.navigationVisible {
-					// Hidden â†’ show (unfocused).
-					m.navigationVisible = true
-				} else if !m.sidebarFocused {
-					// Visible, unfocused â†’ focus it so keyboard can navigate.
-					m.sidebarFocused = true
-					m.setNavFocused(true)
-				} else {
-					// Visible and focused â†’ hide it and drop focus.
-					m.navigationVisible = false
-					m.sidebarFocused = false
-					m.setNavFocused(false)
-				}
-				return m, m.handleResizeCmd()
-			case key.Matches(keyMsg, m.keys.ToggleFullHelp):
-				m.status.ToggleFullHelpVisible()
-				return m, m.handleResizeCmd()
-			case key.Matches(keyMsg, m.keys.OpenSettings):
-				if m.activatePageByID("settings") {
-					return m, m.handleResizeCmd()
-				}
-				return m, nil
-			case key.Matches(keyMsg, m.keys.ToggleStatus):
-				m.status.ToggleVisible()
-				return m, m.handleResizeCmd()
-			case key.Matches(keyMsg, m.keys.Debug):
-				// Only reached when the inspector is not already visible (a visible
-				// inspector consumes keys via overlayHandleKey above), so this opens it.
-				m.inspector.ToggleVisible()
+		// Layout-toggle shortcuts are always active, even when a form has focus.
+		switch {
+		case key.Matches(keyMsg, m.keys.Quit):
+			return m, tea.Quit
+		case key.Matches(keyMsg, m.keys.ToggleNav):
+			if !m.navigationVisible {
+				// Hidden, show (unfocused).
+				m.navigationVisible = true
+			} else if !m.sidebarFocused {
+				// Visible, unfocused, focus it so keyboard can navigate.
+				m.sidebarFocused = true
+				m.setNavFocused(true)
+			} else {
+				// Visible and focused, hide it and drop focus.
+				m.navigationVisible = false
+				m.sidebarFocused = false
+				m.setNavFocused(false)
+			}
+			return m, m.handleResizeCmd()
+		case key.Matches(keyMsg, m.keys.ToggleFullHelp):
+			m.status.ToggleFullHelpVisible()
+			return m, m.handleResizeCmd()
+		case key.Matches(keyMsg, m.keys.OpenSettings):
+			if m.activatePageByID("settings") {
 				return m, m.handleResizeCmd()
 			}
-			// When the active page has captured keyboard focus, bypass global
-			// shortcuts (region/focus moves, page-cycling) so every key reaches
-			// the form.
-			if !activeCapturesKeys {
-				_, isSidebar := m.nav.(navigation.Focusable)
-				if isSidebar {
-					// Region focus model for the sidebar (the recommended UX):
-					//   • Up/Down navigate within the sidebar and never move focus
-					//     out of it (handled by the sidebar when focused).
-					//   • Right / Enter / Tab / Shift+Tab move focus to the page.
-					//   • Left / Esc / Tab / Shift+Tab return focus to the sidebar.
-					// Tab/Shift+Tab therefore toggle focus between the two regions
-					// rather than cycling pages (page selection is Up/Down in the
-					// sidebar). Pages that need Left/Esc must implement
-					// KeyCapturer so those keys reach them instead.
-					switch keyMsg.String() {
-					case "right", "enter", "tab", "shift+tab":
-						if m.sidebarFocused {
-							m.sidebarFocused = false
-							m.setNavFocused(false)
-							m.updatePageKeys()
-							return m, m.handleResizeCmd()
-						}
-					case "left", "esc":
-						if !m.sidebarFocused {
-							m.sidebarFocused = true
-							m.setNavFocused(true)
-							m.updatePageKeys()
-							return m, m.handleResizeCmd()
-						}
+			return m, nil
+		case key.Matches(keyMsg, m.keys.ToggleStatus):
+			m.status.ToggleVisible()
+			return m, m.handleResizeCmd()
+		case key.Matches(keyMsg, m.keys.Debug):
+			// Only reached when the inspector is not already visible (a visible
+			// inspector consumes keys via overlayHandleKey above), so this opens it.
+			m.inspector.ToggleVisible()
+			m.updatePageKeys()
+			return m, m.handleResizeCmd()
+		}
+		// When the active page has captured keyboard focus, bypass global
+		// shortcuts (region/focus moves, page-cycling) so every key reaches
+		// the form.
+		if !activeCapturesKeys {
+			_, isSidebar := m.nav.(navigation.Focusable)
+			if isSidebar {
+				// Region focus model for the sidebar (the recommended UX):
+				//   • Up/Down navigate within the sidebar and never move focus
+				//     out of it (handled by the sidebar when focused).
+				//   • Right / Enter / Tab / Shift+Tab move focus to the page.
+				//   • Left / Esc / Tab / Shift+Tab return focus to the sidebar.
+				// Tab/Shift+Tab therefore toggle focus between the two regions
+				// rather than cycling pages (page selection is Up/Down in the
+				// sidebar). Pages that need Left/Esc must implement
+				// KeyCapturer so those keys reach them instead.
+				switch {
+				case msg.Code == tea.KeyRight || msg.Code == tea.KeyEnter || msg.Code == tea.KeyTab || msg.String() == "shift+tab":
+					if m.sidebarFocused {
+						m.sidebarFocused = false
+						m.setNavFocused(false)
+						m.updatePageKeys()
+						return m, m.handleResizeCmd()
 					}
-					// Tab/Shift+Tab while the page is focused return to the sidebar
-					// (the "prev/next region" half not covered above).
+				case msg.Code == tea.KeyLeft || msg.Code == tea.KeyEscape:
 					if !m.sidebarFocused {
-						switch {
-						case key.Matches(keyMsg, m.keys.Tab), key.Matches(keyMsg, m.keys.ShiftTab):
-							m.sidebarFocused = true
-							m.setNavFocused(true)
-							m.updatePageKeys()
-							return m, m.handleResizeCmd()
-						}
+						m.sidebarFocused = true
+						m.setNavFocused(true)
+						m.updatePageKeys()
+						return m, m.handleResizeCmd()
 					}
-					// Up/Down (and Esc while focused) fall through to the sidebar
-					// via the normal key-forwarding path below.
-				} else {
-					// Top-docked nav (tabs / minimal top nav): Tab/Shift+Tab cycle
-					// pages, number keys 1–9 jump directly. Works whether or not
-					// the nav shows a number prefix.
+				}
+				// Tab/Shift+Tab while the page is focused return to the sidebar
+				// (the "prev/next region" half not covered above).
+				if !m.sidebarFocused {
 					switch {
-					case key.Matches(keyMsg, m.keys.Tab):
-						return m, m.cyclePage(1)
-					case key.Matches(keyMsg, m.keys.ShiftTab):
-						return m, m.cyclePage(-1)
+					case key.Matches(keyMsg, m.keys.NextPage), key.Matches(keyMsg, m.keys.PreviousPage):
+						m.sidebarFocused = true
+						m.setNavFocused(true)
+						m.updatePageKeys()
+						return m, m.handleResizeCmd()
 					}
-					if m.nav != nil && m.nav.Dock() == navigation.DockTop {
-						if i, ok := navDigitIndex(keyMsg); ok && i < len(m.nav.GetPages()) {
-							return m, m.cyclePageTo(i)
-						}
+				}
+				// Up/Down (and Esc while focused) fall through to the sidebar
+				// via the normal key-forwarding path below.
+			} else {
+				// Top-docked nav (tabs / minimal top nav): Tab/Shift+Tab cycle
+				// pages. Number keys 1–9 jump directly only when the user has
+				// enabled "Number Key Select" in Settings (off by default), and
+				// independently of whether the nav shows a number prefix.
+				switch {
+				case key.Matches(keyMsg, m.keys.NextPage):
+					return m, m.cyclePage(1)
+				case key.Matches(keyMsg, m.keys.PreviousPage):
+					return m, m.cyclePage(-1)
+				}
+				if m.navNumberSelect && m.nav != nil && m.nav.Dock() == navigation.DockTop {
+					if i, ok := navDigitIndex(keyMsg); ok && i < len(m.nav.GetPages()) {
+						return m, m.cyclePageTo(i)
 					}
 				}
 			}
@@ -864,16 +888,29 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	_, isKey := msg.(tea.KeyMsg)
 	_, isMouse := msg.(tea.MouseMsg)
+
+	modalVisible := false
+	if isKey {
+		for _, o := range m.overlays {
+			if o.Visible() {
+				if _, ok := o.(KeyConsumer); ok {
+					modalVisible = true
+					break
+				}
+			}
+		}
+	}
+
 	// Nav: always receives non-key messages (WindowSizeMsg, etc.);
 	// receives key messages only when the sidebar is focused AND the active
-	// page is not claiming exclusive keyboard focus.
+	// page is not claiming exclusive keyboard focus AND no modal overlay is visible.
 	if m.inspector.IsVisible() {
 		ow, oh := m.inspectorOverlayInnerSize()
 		_, inspectorCmd := m.inspector.Update(tea.WindowSizeMsg{Width: ow, Height: oh})
 		cmds = append(cmds, inspectorCmd)
 	}
 	if m.navigationVisible && m.nav != nil {
-		if !isKey || (m.sidebarFocused && !activeCapturesKeys) {
+		if !isKey || (!modalVisible && m.sidebarFocused && !activeCapturesKeys) {
 			_, cmd := m.nav.Update(msg)
 			cmds = append(cmds, cmd)
 		}
@@ -893,8 +930,9 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Active page: receives all messages EXCEPT key events that were claimed
-	// by the sidebar (i.e. sidebar focused and page not capturing keys).
-	if !isKey || !m.sidebarFocused || activeCapturesKeys {
+	// by the sidebar (i.e. sidebar focused and page not capturing keys) or
+	// intercepted by a modal overlay.
+	if !isKey || (!modalVisible && (!m.sidebarFocused || activeCapturesKeys)) {
 		_, cmd := m.pages[idx].Update(msg)
 		cmds = append(cmds, cmd)
 	}
@@ -971,8 +1009,8 @@ func (m *RouterModel) cyclePageTo(index int) tea.Cmd {
 }
 
 // navDigitIndex maps a "1".."9" key press to a zero-based page index.
-func navDigitIndex(keyMsg tea.KeyMsg) (int, bool) {
-	s := keyMsg.String()
+func navDigitIndex(keyMsg tea.KeyPressMsg) (int, bool) {
+	s := keyMsg.Text
 	if len(s) == 1 && s[0] >= '1' && s[0] <= '9' {
 		return int(s[0] - '1'), true
 	}
@@ -1158,7 +1196,7 @@ func (m *RouterModel) View() tea.View {
 	// Convert them through the active profile ourselves so the terminal-default
 	// fill matches the quantized SGR backgrounds of the rendered content. Without
 	// this, over ANSI256 (e.g. SSH) the OSC background stays exact 24-bit while
-	// content cells are quantized â€” two visibly different shades of one color.
+	// content cells are quantized — two visibly different shades of one color.
 	v := tea.View{
 		Content:         contentStr,
 		AltScreen:       true,
@@ -1247,7 +1285,7 @@ func (m *RouterModel) View() tea.View {
 			}
 		}
 
-		// status area (at bottom) â€” delegate entirely to the status view's own
+		// status area (at bottom) — delegate entirely to the status view's own
 		// OnMouse handler which uses pre-computed lipgloss.Width regions and the
 		// correct row index. Avoids parsing ANSI-encoded rendered strings with
 		// strings.Index which is unreliable when lipgloss injects resets mid-glyph.

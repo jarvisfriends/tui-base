@@ -62,6 +62,12 @@ type DebugKeyMap struct {
 	NotifyInfo    key.Binding // fire a test info notification
 	NotifyWarning key.Binding // fire a test warning notification
 	NotifyError   key.Binding // fire a test error notification
+	ExportLog     key.Binding // export inspector log to file
+
+	// Help-only composite bindings
+	TabSwitch key.Binding
+	Scroll    key.Binding
+	EnterRun  key.Binding
 }
 
 // DefaultDebugKeys returns the default key bindings for the debug inspector.
@@ -71,6 +77,10 @@ func DefaultDebugKeys() DebugKeyMap {
 		NotifyInfo:    key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "test info notification")),
 		NotifyWarning: key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "test warning notification")),
 		NotifyError:   key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "test error notification")),
+		ExportLog:     key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "export log to file")),
+		TabSwitch:     key.NewBinding(key.WithKeys("left", "right", "1", "2", "3", "4", "5", "6", "7"), key.WithHelp("←/→ 1-7", "switch tab")),
+		Scroll:        key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "scroll")),
+		EnterRun:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "change/run")),
 	}
 }
 
@@ -280,28 +290,16 @@ func (m *InspectorModel) ToggleVisible()  { m.visible = !m.visible }
 // ShortHelp implements [help.KeyMap]. Returns a compact list of bindings for
 // the current tab shown in the status bar one-liner.
 func (m *InspectorModel) ShortHelp() []key.Binding {
-	tabSwitch := key.NewBinding(
-		key.WithKeys("left", "right", "1", "2", "3", "4", "5", "6", "7"),
-		key.WithHelp("←/→ 1-7", "switch tab"),
-	)
-	scroll := key.NewBinding(
-		key.WithKeys("up", "down"),
-		key.WithHelp("↑/↓", "scroll"),
-	)
 	switch m.activeTab {
 	case debugTabSettings:
-		enterRun := key.NewBinding(
-			key.WithKeys("enter"),
-			key.WithHelp("enter", "change/run"),
-		)
-		return []key.Binding{tabSwitch, scroll, enterRun}
+		return []key.Binding{m.keys.TabSwitch, m.keys.Scroll, m.keys.EnterRun}
 	case debugTabLog:
 		return []key.Binding{
-			tabSwitch, scroll,
-			m.keys.NotifyInfo, m.keys.NotifyWarning, m.keys.NotifyError,
+			m.keys.TabSwitch, m.keys.Scroll,
+			m.keys.NotifyInfo, m.keys.NotifyWarning, m.keys.NotifyError, m.keys.ExportLog,
 		}
 	default:
-		return []key.Binding{tabSwitch, scroll, m.keys.Highlight}
+		return []key.Binding{m.keys.TabSwitch, m.keys.Scroll, m.keys.Highlight}
 	}
 }
 
@@ -696,6 +694,8 @@ func (m *InspectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(preCmd, func() tea.Msg {
 					return notifications.AddMsg{Content: "Test: Error notification from Inspector", Severity: notifications.SeverityError, TTL: notifications.SeverityError.DefaultTTL()}
 				})
+			case key.Matches(km, m.keys.ExportLog):
+				return m, tea.Batch(preCmd, m.exportLogCmd())
 			}
 		}
 	case TermDiagMsg:
@@ -1602,6 +1602,46 @@ func (m *InspectorModel) openGoToolPprofLiveHeapCmd() tea.Cmd {
 		}
 		url := "http://" + uiAddr
 		return pprofActionMsg{Kind: "go tool pprof", Text: "go pprof UI started: " + url + " (source: " + heapURL + ")"}
+	}
+}
+
+// exportLogCmd writes a snapshot of the current inspector log to a temporary file
+// and triggers an info notification with the resulting path.
+func (m *InspectorModel) exportLogCmd() tea.Cmd {
+	logs := make([]MsgLog, len(m.Logs))
+	copy(logs, m.Logs)
+
+	return func() tea.Msg {
+		outDir := filepath.Join(os.TempDir(), "tui-base", "logs")
+		if err := os.MkdirAll(outDir, 0o755); err != nil {
+			return notifications.AddMsg{
+				Content:  "Failed to create log dir: " + err.Error(),
+				Severity: notifications.SeverityError,
+				TTL:      notifications.SeverityError.DefaultTTL(),
+			}
+		}
+
+		ts := time.Now().Format("20060102-150405")
+		logPath := filepath.Join(outDir, "inspector-"+ts+".log")
+		f, err := os.Create(logPath)
+		if err != nil {
+			return notifications.AddMsg{
+				Content:  "Failed to create log file: " + err.Error(),
+				Severity: notifications.SeverityError,
+				TTL:      notifications.SeverityError.DefaultTTL(),
+			}
+		}
+		defer func() { _ = f.Close() }()
+
+		for _, l := range logs {
+			_, _ = fmt.Fprintf(f, "[%s] %s: %s (count: %d)\n", l.Timestamp.Format(time.RFC3339), l.Type, l.Content, l.Count)
+		}
+
+		return notifications.AddMsg{
+			Content:  "Inspector log exported to " + logPath,
+			Severity: notifications.SeverityInfo,
+			TTL:      notifications.SeverityInfo.DefaultTTL(),
+		}
 	}
 }
 

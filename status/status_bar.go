@@ -105,17 +105,6 @@ func (b *BarModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		b.SetWidth(m.Width)
 		return b, nil
-		// case tea.KeyMsg:
-		// 	// switch keyMsg := msg.(type) {
-		// 	// case tea.KeyPressMsg:
-		// 	switch {
-		// 	case key.Matches(m, b.keys.ToggleFullHelp):
-		// 		b.help.ShowAll = !b.help.ShowAll
-		// 		return b, nil
-		// 	case key.Matches(m, b.keys.ToggleHelp):
-		// 		return b, b.sb.ToggleVisibility()
-		// 	}
-		// 	// }
 	}
 	// Allow the internal statusbar to handle other control messages like
 	// TickMsg, ToggleVisibilityMsg, AddMessageMsg, etc.

@@ -167,7 +167,7 @@ func TestHistoryOverlayAllRowsCarryStatusBg(t *testing.T) {
 	nm.Add("test notification", notifications.SeverityInfo, 5*time.Second)
 	overlay.showHistory = true
 
-	rendered := overlay.renderHistoryOverlay(80, 20)
+	rendered := overlay.RenderHistoryOverlay(80, 20)
 	if rendered == "" {
 		t.Fatal("expected non-empty history overlay")
 	}
@@ -283,7 +283,7 @@ func TestHistoryOverlayHeaderNoTrailingUnstyled(t *testing.T) {
 	overlay.SetNotifManager(nm)
 	overlay.showHistory = true
 
-	rendered := overlay.renderHistoryOverlay(80, 20)
+	rendered := overlay.RenderHistoryOverlay(80, 20)
 	lines := nonBlankLines(rendered)
 	if len(lines) < 3 {
 		t.Fatal("overlay too short")
@@ -313,7 +313,7 @@ func TestHistoryOverlayNotifRowNoTrailingUnstyled(t *testing.T) {
 	nm.Add("test notification", notifications.SeverityInfo, 5*time.Second)
 	overlay.showHistory = true
 
-	rendered := overlay.renderHistoryOverlay(80, 20)
+	rendered := overlay.RenderHistoryOverlay(80, 20)
 	lines := nonBlankLines(rendered)
 	// row 0=border, row 1=header, row 2=notification row, row 3=footer, row 4=border
 	if len(lines) < 4 {

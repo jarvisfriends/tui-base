@@ -248,33 +248,31 @@ func (m *InfoModal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.Resize(msg.Width, msg.Height)
 		return m, nil
-	case tea.KeyMsg:
-		switch keyMsg := msg.(type) {
-		case tea.KeyPressMsg:
-			switch {
-			case key.Matches(keyMsg, m.keys.Dismiss):
-				m.Close()
-				return m, func() tea.Msg { return CloseInfoModalMsg{} }
-			case key.Matches(keyMsg, m.keys.Up):
-				m.ScrollUp()
-				return m, nil
-			case key.Matches(keyMsg, m.keys.Down):
-				m.ScrollDown()
-				return m, nil
-			case key.Matches(keyMsg, m.keys.PageUp):
-				m.PageUp()
-				return m, nil
-			case key.Matches(keyMsg, m.keys.PageDown):
-				m.PageDown()
-				return m, nil
-			case key.Matches(keyMsg, m.keys.Top):
-				m.GotoTop()
-				return m, nil
-			case key.Matches(keyMsg, m.keys.Bottom):
-				m.GotoBottom()
-				return m, nil
+	case tea.KeyPressMsg:
+		keyMsg := msg
+		switch {
+		case key.Matches(keyMsg, m.keys.Dismiss):
+			m.Close()
+			return m, func() tea.Msg { return CloseInfoModalMsg{} }
+		case key.Matches(keyMsg, m.keys.Up):
+			m.ScrollUp()
+			return m, nil
+		case key.Matches(keyMsg, m.keys.Down):
+			m.ScrollDown()
+			return m, nil
+		case key.Matches(keyMsg, m.keys.PageUp):
+			m.PageUp()
+			return m, nil
+		case key.Matches(keyMsg, m.keys.PageDown):
+			m.PageDown()
+			return m, nil
+		case key.Matches(keyMsg, m.keys.Top):
+			m.GotoTop()
+			return m, nil
+		case key.Matches(keyMsg, m.keys.Bottom):
+			m.GotoBottom()
+			return m, nil
 
-			}
 		}
 	}
 

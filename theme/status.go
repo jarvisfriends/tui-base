@@ -70,8 +70,8 @@ type CommonKeyMap struct {
 
 func DefaultKeys() CommonKeyMap {
 	return CommonKeyMap{
-		Up:           key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
-		Down:         key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
+		Up:           key.NewBinding(key.WithKeys("up"), key.WithHelp("↑", "up")),
+		Down:         key.NewBinding(key.WithKeys("down"), key.WithHelp("↓", "down")),
 		Quit:         key.NewBinding(key.WithKeys("q", "esc"), key.WithHelp("q/esc", "quit")),
 		ToggleDetail: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "toggle details")),
 	}

@@ -75,6 +75,11 @@ type NavStyleMsg struct{ Style string }
 // prefix on number-capable navs (the minimal top nav).
 type NavShowNumbersMsg struct{ Show bool }
 
+// NavNumberSelectMsg is emitted when the user toggles number-key page selection
+// (pressing 1–9 to jump directly to a page) on top-docked navs. It is disabled
+// by default; the router only honors digit shortcuts while it is enabled.
+type NavNumberSelectMsg struct{ Enabled bool }
+
 // ThemeMsg is emitted when the user selects a different color theme.
 type ThemeMsg struct {
 	ID               string
@@ -147,12 +152,12 @@ func (k *Keys) FullHelp() [][]key.Binding {
 func DefaultKeys() *Keys {
 	return &Keys{
 		Up: key.NewBinding(
-			key.WithKeys("up", "k"),
-			key.WithHelp("↑/k", "move up"),
+			key.WithKeys("up"),
+			key.WithHelp("↑", "move up"),
 		),
 		Down: key.NewBinding(
-			key.WithKeys("down", "j"),
-			key.WithHelp("↓/j", "move down"),
+			key.WithKeys("down"),
+			key.WithHelp("↓", "move down"),
 		),
 		Select: key.NewBinding(
 			key.WithKeys("enter"),
@@ -178,6 +183,7 @@ type SettingsModel struct {
 	// Persisted fields (exported so JSON encoding works).
 	NavStyle             string `json:"nav_style"`
 	NavShowNumbers       bool   `json:"nav_show_numbers"`
+	NavNumberSelect      bool   `json:"nav_number_select"`
 	ColorThemeID         string `json:"theme_id"`
 	ThemeMode            string `json:"theme_mode"`
 	StylePreset          string `json:"style_preset"`
@@ -194,10 +200,11 @@ type SettingsModel struct {
 	defaultTerminal string
 
 	// intermediate string forms for huh selects (not persisted directly)
-	notifEnabledStr  string
-	notifPersistStr  string
-	accessibilityStr string
-	navNumbersStr    string
+	notifEnabledStr    string
+	notifPersistStr    string
+	accessibilityStr   string
+	navNumbersStr      string
+	navNumberSelectStr string
 
 	extraSections []config.Section
 	items         []settingItem
@@ -243,13 +250,14 @@ func New(extraSections ...config.Section) *SettingsModel {
 	m := &SettingsModel{
 		NavStyle:             "sidebar",
 		NavShowNumbers:       false,
+		NavNumberSelect:      false,
 		ColorThemeID:         "dracula_plus",
 		ThemeMode:            theme.ThemeModeDark,
 		StylePreset:          string(theme.DefaultStylePreset),
 		AccessibilityColors:  false,
 		LogOutput:            "temp",
 		LogPath:              "",
-		LogLevel:             "INFO",
+		LogLevel:             "ERROR",
 		NotificationsEnabled: true,
 		NotificationsPersist: false,
 		defaultTerminal:      "let_windows",
@@ -334,6 +342,11 @@ func (m *SettingsModel) buildItems() {
 	} else {
 		m.navNumbersStr = "false"
 	}
+	if m.NavNumberSelect {
+		m.navNumberSelectStr = "true"
+	} else {
+		m.navNumberSelectStr = "false"
+	}
 	m.ThemeMode = theme.NormalizeMode(m.ThemeMode)
 	m.StylePreset = string(theme.NormalizePreset(m.StylePreset))
 	m.ColorThemeID = theme.ResolveTintIDForMode(m.ColorThemeID, m.ThemeMode)
@@ -416,9 +429,27 @@ func (m *SettingsModel) buildItems() {
 			return huh.NewForm(huh.NewGroup(
 				huh.NewSelect[string]().
 					Title("Show Nav Numbers").
-					Description("Show a leading number on each Top Nav item (the digits 1–9 always switch pages regardless)").
+					Description("Show a leading number on each Top Nav item (pairs well with Number Key Select)").
 					Options(navNumbersOpts...).
 					Value(&m.navNumbersStr),
+			).WithTheme(theme.HuhThemeFunc()))
+		},
+	})
+	addItem("Navigation", settingItem{
+		title: "Number Key Select",
+		value: func() string {
+			if m.NavNumberSelect {
+				return "On"
+			}
+			return "Off"
+		},
+		buildForm: func() *huh.Form {
+			return huh.NewForm(huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Number Key Select").
+					Description("Press 1–9 to jump directly to a Tabs / Top Nav page (off by default)").
+					Options(navNumbersOpts...).
+					Value(&m.navNumberSelectStr),
 			).WithTheme(theme.HuhThemeFunc()))
 		},
 	})
@@ -719,19 +750,17 @@ func (m *SettingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *SettingsModel) updateOverview(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch keyMsg := msg.(type) {
-		case tea.KeyPressMsg:
-			switch {
-			case key.Matches(keyMsg, m.keys.Up):
-				m.cursor = max(m.cursor-1, 0)
-				m.ensureCursorVisible()
-			case key.Matches(keyMsg, m.keys.Down):
-				m.cursor = min(m.cursor+1, max(len(m.items)-1, 0))
-				m.ensureCursorVisible()
-			case key.Matches(keyMsg, m.keys.Select):
-				return m, m.startEdit()
-			}
+	case tea.KeyPressMsg:
+		keyMsg := msg
+		switch {
+		case key.Matches(keyMsg, m.keys.Up):
+			m.cursor = max(m.cursor-1, 0)
+			m.ensureCursorVisible()
+		case key.Matches(keyMsg, m.keys.Down):
+			m.cursor = min(m.cursor+1, max(len(m.items)-1, 0))
+			m.ensureCursorVisible()
+		case key.Matches(keyMsg, m.keys.Select):
+			return m, m.startEdit()
 		}
 	case tea.MouseWheelMsg:
 		if msg.Mouse().Button == tea.MouseWheelUp {
@@ -804,6 +833,7 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 	prevLevel := m.LogLevel
 	prevNav := m.NavStyle
 	prevNavNumbers := m.NavShowNumbers
+	prevNavNumberSelect := m.NavNumberSelect
 
 	state, cmd := m.editOverlay.Update(msg)
 	var cmds []tea.Cmd
@@ -838,6 +868,11 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		show := m.NavShowNumbers
 		cmds = append(cmds, func() tea.Msg { return NavShowNumbersMsg{Show: show} })
 	}
+	m.NavNumberSelect = m.navNumberSelectStr == "true"
+	if m.NavNumberSelect != prevNavNumberSelect {
+		enabled := m.NavNumberSelect
+		cmds = append(cmds, func() tea.Msg { return NavNumberSelectMsg{Enabled: enabled} })
+	}
 
 	switch state {
 	case huh.StateCompleted:
@@ -853,6 +888,7 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.NotificationsPersist = m.notifPersistStr == "true"
 		m.AccessibilityColors = m.accessibilityStr == "true"
 		m.NavShowNumbers = m.navNumbersStr == "true"
+		m.NavNumberSelect = m.navNumberSelectStr == "true"
 		m.ThemeMode = theme.NormalizeMode(m.ThemeMode)
 		m.ColorThemeID = theme.ResolveTintIDForMode(m.ColorThemeID, m.ThemeMode)
 		// propagate notification settings to the shared manager at runtime
@@ -1233,7 +1269,7 @@ func themeOptionKey(t *tint.Tint, baseSwatch lipgloss.Style) string {
 		if fg == nil {
 			return dotStyle.Foreground(lipgloss.Color(hex)).Render("  ")
 		}
-		return dotStyle.Foreground(fg).Render("\u25cf ")
+		return dotStyle.Foreground(fg).Render("● ")
 	}
 	sBgColor := t.Bg
 	if t.SelectionBg != nil {

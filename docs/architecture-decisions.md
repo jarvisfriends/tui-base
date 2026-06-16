@@ -83,4 +83,20 @@ Decision:
 
 Why:
 - `tui-base` is intended as a reusable foundation, not only an app-local code dump.
-- These types should be periodically reviewed for real external value.
+	- These types should be periodically reviewed for real external value.
+
+## ADR-011: Standardized Key Mapping & Help System
+
+Decision:
+- All custom components must define their bindings directly in a `KeyMap` struct.
+- `help.KeyMap` methods (`ShortHelp()`, `FullHelp()`) must **never** instantiate `key.NewBinding` inline. They must 
+  only return bindings from the predefined struct.
+- Vim fallback navigation keys (`j`, `k`, `h`, `l`) are prohibited in UI components to prevent mapping conflicts.
+  Always use standardized `PreviousPage`/`NextPage` and `Up`/`Down` fields.
+- Legacy pop-up string-based help menus are prohibited. Components must expose their options natively via the 
+  standard Bubbletea `help.KeyMap` integration in the status bar.
+
+Why:
+- Ensures consistent keyboard navigation across all applications.
+- Prevents memory allocations on every frame render when generating help menus.
+- Centralizes help rendering into a single predictable UI element.

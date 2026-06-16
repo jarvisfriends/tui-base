@@ -24,6 +24,8 @@ import (
 	"github.com/jarvisfriends/tui-base/pages/settings"
 	"github.com/jarvisfriends/tui-base/theme"
 
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	tint "github.com/lrstanley/bubbletint/v2"
 	"github.com/lucasb-eyer/go-colorful"
@@ -69,7 +71,7 @@ func acvdContrast(fg, bg colorful.Color) float64 {
 }
 
 // suggestFG blends the foreground toward black then white until it reaches
-// minContrast against bg. Returns hex string, or "" if none found.“
+// minContrast against bg. Returns hex string, or "" if none found.
 func suggestFG(fg, bg color.Color, minContrast float64) (sugFg color.Color, sugFgHex string) {
 	fgC, ok := colorful.MakeColor(fg)
 	if !ok {
@@ -132,6 +134,47 @@ type acEntry struct {
 	colorPairsAccess []theme.ColorPair // accessible color pairs (with adjustments applied)
 }
 
+// AccessibilityKeyMap defines the key bindings for the accessibility panel.
+type AccessibilityKeyMap struct {
+	Up          key.Binding
+	Down        key.Binding
+	ToggleCVD1  key.Binding
+	ToggleCVD2  key.Binding
+	ToggleCVD3  key.Binding
+	ToggleDark  key.Binding
+	ToggleLight key.Binding
+	Select      key.Binding
+}
+
+// DefaultAccessibilityKeyMap returns the default keys.
+func DefaultAccessibilityKeyMap() AccessibilityKeyMap {
+	return AccessibilityKeyMap{
+		Up:          key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑", "up")),
+		Down:        key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓", "down")),
+		ToggleCVD1:  key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "toggle protanopia")),
+		ToggleCVD2:  key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "toggle deuteranopia")),
+		ToggleCVD3:  key.NewBinding(key.WithKeys("3"), key.WithHelp("3", "toggle tritanopia")),
+		ToggleDark:  key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "toggle dark modes")),
+		ToggleLight: key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "toggle light modes")),
+		Select:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "apply theme")),
+	}
+}
+
+// ShortHelp implements help.KeyMap.
+func (km AccessibilityKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{km.Up, km.Down, km.Select}
+}
+
+// FullHelp implements help.KeyMap.
+func (km AccessibilityKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{km.Up, km.Down, km.ToggleDark, km.ToggleLight},
+		{km.ToggleCVD1, km.ToggleCVD2, km.ToggleCVD3, km.Select},
+	}
+}
+
+var _ help.KeyMap = (*AccessibilityKeyMap)(nil)
+
 // ── AccessibilityPanel model ─────────────────────────────────────────────────
 
 // AccessibilityPanel is a tea.Model embedded in the debug inspector page.
@@ -148,11 +191,16 @@ type AccessibilityPanel struct {
 	view      []int // indices into all; rebuilt by refilter()
 	cursor    int
 	offset    int
+	keyMap    AccessibilityKeyMap
 }
 
 // NewAccessibilityPanel returns a panel with dark+light themes shown.
 func NewAccessibilityPanel() *AccessibilityPanel {
-	return &AccessibilityPanel{showDark: true, showLight: true}
+	return &AccessibilityPanel{
+		showDark:  true,
+		showLight: true,
+		keyMap:    DefaultAccessibilityKeyMap(),
+	}
 }
 
 func (p *AccessibilityPanel) SetColors(c *theme.AppStyle) { p.colors = c }
@@ -181,31 +229,31 @@ func (p *AccessibilityPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return p, nil
 	}
 	refilter := false
-	switch press.String() {
-	case "up", "k":
+	switch {
+	case key.Matches(press, p.keyMap.Up):
 		if p.cursor > 0 {
 			p.cursor--
 		}
-	case "down", "j":
+	case key.Matches(press, p.keyMap.Down):
 		if p.cursor < len(p.view)-1 {
 			p.cursor++
 		}
-	case "1":
+	case key.Matches(press, p.keyMap.ToggleCVD1):
 		p.cvd[0] = !p.cvd[0]
 		refilter = true
-	case "2":
+	case key.Matches(press, p.keyMap.ToggleCVD2):
 		p.cvd[1] = !p.cvd[1]
 		refilter = true
-	case "3":
+	case key.Matches(press, p.keyMap.ToggleCVD3):
 		p.cvd[2] = !p.cvd[2]
 		refilter = true
-	case "d":
+	case key.Matches(press, p.keyMap.ToggleDark):
 		p.showDark = !p.showDark
 		refilter = true
-	case "l":
+	case key.Matches(press, p.keyMap.ToggleLight):
 		p.showLight = !p.showLight
 		refilter = true
-	case "enter":
+	case key.Matches(press, p.keyMap.Select):
 		if p.cursor >= 0 && p.cursor < len(p.view) {
 			id := p.all[p.view[p.cursor]].t.ID
 			return p, func() tea.Msg { return settings.ThemeMsg{ID: id} }
