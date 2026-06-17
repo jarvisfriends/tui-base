@@ -136,3 +136,97 @@ func TestShortAndFullHelp(t *testing.T) {
 		t.Fatal("expected editing full help rows")
 	}
 }
+
+func TestKeyRecorderValidation(t *testing.T) {
+	t.Parallel()
+
+	m := New()
+	var quitItem *settingItem
+	var nextPageItem *settingItem
+	for i, item := range m.items {
+		if item.title == "Quit Application" {
+			quitItem = &m.items[i]
+		}
+		if item.title == "Next Page" {
+			nextPageItem = &m.items[i]
+		}
+	}
+
+	if quitItem == nil || nextPageItem == nil {
+		t.Fatal("expected 'Quit Application' and 'Next Page' settings items")
+	}
+
+	model := quitItem.buildModel()
+	kr, ok := model.(*KeyRecorder)
+	if !ok {
+		t.Fatalf("expected *KeyRecorder, got %T", model)
+	}
+	if kr.Error != "" {
+		t.Fatalf("expected no initial error, got %q", kr.Error)
+	}
+
+	kr.cursor = len(kr.keys)
+	_, _ = kr.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if !kr.recording {
+		t.Fatal("expected recording mode to be active")
+	}
+	_, _ = kr.Update(tea.KeyPressMsg{Text: "q"})
+	if kr.recording {
+		t.Fatal("expected recording mode to end")
+	}
+
+	if kr.Error == "" {
+		t.Fatal("expected error for duplicate key within shortcut, got none")
+	}
+	if !strings.Contains(kr.Error, "duplicate key") {
+		t.Fatalf("expected error message to contain 'duplicate key', got %q", kr.Error)
+	}
+
+	_, _ = kr.Update(tea.KeyPressMsg{Text: "ctrl+s"})
+	if kr.Done {
+		t.Fatal("expected Done to be false when there is a validation error")
+	}
+
+	modelNP := nextPageItem.buildModel()
+	krNP, ok := modelNP.(*KeyRecorder)
+	if !ok {
+		t.Fatalf("expected *KeyRecorder, got %T", modelNP)
+	}
+
+	krNP.cursor = len(krNP.keys)
+	_, _ = krNP.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	_, _ = krNP.Update(tea.KeyPressMsg{Text: "q"})
+
+	if krNP.Error == "" {
+		t.Fatal("expected error for duplicate key across different shortcuts, got none")
+	}
+	if !strings.Contains(krNP.Error, "already assigned to") {
+		t.Fatalf("expected error message to contain 'already assigned to', got %q", krNP.Error)
+	}
+
+	_, _ = krNP.Update(tea.KeyPressMsg{Text: "ctrl+s"})
+	if krNP.Done {
+		t.Fatal("expected Done to be false when there is a conflict")
+	}
+
+	krNP.cursor = 1
+	_, _ = krNP.Update(tea.KeyPressMsg{Code: tea.KeyDelete})
+	if len(krNP.keys) != 1 {
+		t.Fatalf("expected 1 key remaining, got %d", len(krNP.keys))
+	}
+	if krNP.Error != "" {
+		t.Fatalf("expected error to be cleared after deleting the conflict, got %q", krNP.Error)
+	}
+
+	krNP.cursor = 1
+	_, _ = krNP.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	_, _ = krNP.Update(tea.KeyPressMsg{Text: "k"})
+	if krNP.Error != "" {
+		t.Fatalf("expected no error for non-conflicting key, got %q", krNP.Error)
+	}
+
+	_, _ = krNP.Update(tea.KeyPressMsg{Text: "ctrl+s"})
+	if !krNP.Done {
+		t.Fatal("expected Done to be true when saving non-conflicting key")
+	}
+}

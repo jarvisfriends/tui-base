@@ -1,6 +1,8 @@
 package keys
 
 import (
+	"strings"
+
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/viewport"
@@ -115,6 +117,49 @@ func DefaultKeyMap() *AppKeyMap {
 			key.WithHelp("ctrl+d", "quick debug"),
 		),
 	}
+}
+
+// ApplyCustomizations updates the AppKeyMap fields from a map of string values.
+func (km *AppKeyMap) ApplyCustomizations(custom map[string]string) {
+	apply := func(id string, current key.Binding) key.Binding {
+		val, ok := custom[id]
+		if !ok || val == "" || val == "(none)" {
+			return current
+		}
+
+		var keys []string
+		for p := range strings.SplitSeq(val, ",") {
+			if strings.TrimSpace(p) != "" {
+				keys = append(keys, strings.TrimSpace(p))
+			}
+		}
+		if len(keys) > 0 {
+			current.SetKeys(keys...)
+		}
+		return current
+	}
+
+	km.Quit = apply("Quit", km.Quit)
+	km.NextPage = apply("NextPage", km.NextPage)
+	km.PreviousPage = apply("PreviousPage", km.PreviousPage)
+	km.OpenSettings = apply("OpenSettings", km.OpenSettings)
+	km.ToggleNav = apply("ToggleNav", km.ToggleNav)
+	km.ToggleStatus = apply("ToggleStatus", km.ToggleStatus)
+	km.ToggleFullHelp = apply("ToggleFullHelp", km.ToggleFullHelp)
+	km.Select = apply("Select", km.Select)
+	km.Top = apply("Top", km.Top)
+	km.Bottom = apply("Bottom", km.Bottom)
+	km.Dismiss = apply("Dismiss", km.Dismiss)
+	km.DismissAll = apply("DismissAll", km.DismissAll)
+	km.Debug = apply("Debug", km.Debug)
+	km.PageDown = apply("PageDown", km.PageDown)
+	km.PageUp = apply("PageUp", km.PageUp)
+	km.HalfPageDown = apply("HalfPageDown", km.HalfPageDown)
+	km.HalfPageUp = apply("HalfPageUp", km.HalfPageUp)
+	km.Up = apply("Up", km.Up)
+	km.Down = apply("Down", km.Down)
+	km.Left = apply("Left", km.Left)
+	km.Right = apply("Right", km.Right)
 }
 
 // FullHelp implements the bubbles/help KeyMap interface.

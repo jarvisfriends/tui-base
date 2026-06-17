@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -38,6 +39,38 @@ const DefaultAppName = "TUI Base"
 type RegisteredPage struct {
 	Title string
 	Model tea.Model
+}
+
+var (
+	globalRegistry   []RegisteredPage
+	globalRegistryMu sync.Mutex
+)
+
+// RegisterPage adds a page to the global registry. This is typically called
+// from a page package's init() function so pages can self-register.
+func RegisterPage(title string, model tea.Model) {
+	globalRegistryMu.Lock()
+	defer globalRegistryMu.Unlock()
+	globalRegistry = append(globalRegistry, RegisteredPage{
+		Title: title,
+		Model: model,
+	})
+}
+
+// RegisteredPages returns a copy of all dynamically registered pages.
+func RegisteredPages() []RegisteredPage {
+	globalRegistryMu.Lock()
+	defer globalRegistryMu.Unlock()
+	out := make([]RegisteredPage, len(globalRegistry))
+	copy(out, globalRegistry)
+	return out
+}
+
+// ClearRegisteredPages clears the global page registry (primarily useful for tests).
+func ClearRegisteredPages() {
+	globalRegistryMu.Lock()
+	defer globalRegistryMu.Unlock()
+	globalRegistry = nil
 }
 
 // ReplaceAppPagesMsg replaces the app-provided pages at runtime.
@@ -72,6 +105,7 @@ type Options struct {
 	DefaultPage      string
 	InitialLogLevel  string
 	SettingsSections []cfg.Section
+	KeyMap           *keys.AppKeyMap
 }
 
 // pageIDFromTitle derives a stable navigation ID from a human-readable title
@@ -114,7 +148,8 @@ type RouterModel struct {
 	colorProfileEnvVar string
 	debugEnvVar        string
 
-	pages []tea.Model
+	pages    []tea.Model
+	appPages []RegisteredPage
 
 	// inspector is a dedicated debug model that receives all messages for
 	// logging/stats and is rendered as an overlay (Ctrl+D).
@@ -281,11 +316,19 @@ func NewWithOptions(opts Options) *RouterModel {
 	appDebugEnvVar := appPrefix + "_DEBUG"
 	initialColorProfile := effectiveColorProfileForEnvVar(appColorProfileEnvVar)
 
+	appKeys := opts.KeyMap
+	if appKeys == nil {
+		appKeys = keys.DefaultKeyMap()
+	}
+	if settingsModel.CustomKeys != nil {
+		appKeys.ApplyCustomizations(settingsModel.CustomKeys)
+	}
+
 	m := &RouterModel{
 		nav:               nav,
 		appName:           appName,
 		status:            status.New(),
-		keys:              keys.DefaultKeyMap(),
+		keys:              appKeys,
 		colors:            initialColors,
 		navigationVisible: true,
 		navShowNumbers:    settingsModel.NavShowNumbers,
@@ -320,7 +363,9 @@ func NewWithOptions(opts Options) *RouterModel {
 	// as an overlay via Ctrl+D.
 	// When no extra pages are supplied the default is Home + Settings.
 	m.status.SetKeys(m.keys)
-	m.replaceAppPages(opts.ExtraPages, opts.DefaultPage, -1)
+	allPages := append([]RegisteredPage{}, opts.ExtraPages...)
+	allPages = append(allPages, RegisteredPages()...)
+	m.replaceAppPages(allPages, opts.DefaultPage, -1)
 	// create notification manager and load persisted entries (best-effort)
 	m.notifMgr = notifications.NewManager()
 	if appConfigDir != "" {
@@ -440,6 +485,7 @@ func (m *RouterModel) activatePageByID(id string) bool {
 // replaceAppPages rebuilds the router page list from app-provided pages while
 // preserving router-owned pages (Settings).
 func (m *RouterModel) replaceAppPages(extraPages []RegisteredPage, activeTitle string, activeIndex int) {
+	m.appPages = extraPages
 	var navPages []navigation.Page
 	var pageModels []tea.Model
 
@@ -479,6 +525,18 @@ func (m *RouterModel) replaceAppPages(extraPages []RegisteredPage, activeTitle s
 	}
 	m.applyColors()
 	m.updatePageKeys()
+}
+
+// RegisterPage adds a page to the router at runtime. It initializes the new page's model,
+// updates the navigation layout, and returns the model's Init command.
+func (m *RouterModel) RegisterPage(title string, model tea.Model) tea.Cmd {
+	m.appPages = append(m.appPages, RegisteredPage{Title: title, Model: model})
+	activeIdx := 0
+	if m.nav != nil {
+		activeIdx = m.nav.GetActiveIndex()
+	}
+	m.replaceAppPages(m.appPages, "", activeIdx)
+	return model.Init()
 }
 
 func (m *RouterModel) Init() tea.Cmd {
@@ -616,6 +674,13 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.notifMgr.SetPersistPath("") // disable file persistence
 		}
+		return m, m.handleResizeCmd()
+
+	case settings.KeybindingsChangedMsg:
+		m.keys.ApplyCustomizations(msg.CustomKeys)
+		m.status.SetKeys(m.keys)
+		m.infoModal.SetKeys(m.keys)
+		m.updatePageKeys()
 		return m, m.handleResizeCmd()
 
 	case tea.BackgroundColorMsg:

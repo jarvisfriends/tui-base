@@ -8,6 +8,13 @@
       "total_count": 14
     },
     {
+      "id": "cyber_cube",
+      "display": "Cyber Cube",
+      "pass_ratio": 1,
+      "pass_count": 14,
+      "total_count": 14
+    },
+    {
       "id": "dimmed_monokai",
       "display": "DimmedMonokai",
       "pass_ratio": 1,
@@ -48,16 +55,23 @@
       "pass_ratio": 1,
       "pass_count": 14,
       "total_count": 14
-    },
-    {
-      "id": "hopscotch_256",
-      "display": "Hopscotch.256",
-      "pass_ratio": 1,
-      "pass_count": 14,
-      "total_count": 14
     }
   ],
   "light": [
+    {
+      "id": "terminal_basic",
+      "display": "Terminal Basic",
+      "pass_ratio": 0.8571428571428571,
+      "pass_count": 12,
+      "total_count": 14
+    },
+    {
+      "id": "alabaster",
+      "display": "Alabaster",
+      "pass_ratio": 0.7857142857142857,
+      "pass_count": 11,
+      "total_count": 14
+    },
     {
       "id": "gruvbox_light",
       "display": "Gruvbox Light",
@@ -98,20 +112,6 @@
       "display": "zenwritten_light",
       "pass_ratio": 0.7857142857142857,
       "pass_count": 11,
-      "total_count": 14
-    },
-    {
-      "id": "piatto_light",
-      "display": "Piatto Light",
-      "pass_ratio": 0.7142857142857143,
-      "pass_count": 10,
-      "total_count": 14
-    },
-    {
-      "id": "rose_pine_dawn",
-      "display": "rose-pine-dawn",
-      "pass_ratio": 0.7142857142857143,
-      "pass_count": 10,
       "total_count": 14
     }
   ]

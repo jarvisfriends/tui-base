@@ -111,7 +111,7 @@ func (km KeyMap) FullHelp() [][]key.Binding {
 var _ help.KeyMap = (*KeyMap)(nil)
 
 // Model is the table widget. Construct it with New.
-type Model struct {
+type TableModel struct {
 	KeyMap KeyMap
 
 	cols []Column
@@ -142,18 +142,18 @@ type Model struct {
 }
 
 // Option configures a Model at construction.
-type Option func(*Model)
+type Option func(*TableModel)
 
 // WithKeyMap overrides the default key bindings.
-func WithKeyMap(km KeyMap) Option { return func(m *Model) { m.KeyMap = km } }
+func WithKeyMap(km KeyMap) Option { return func(m *TableModel) { m.KeyMap = km } }
 
 // WithPageSize sets a fixed page size (otherwise it's derived from the height
 // passed to SetSize).
-func WithPageSize(n int) Option { return func(m *Model) { m.pageSize = n } }
+func WithPageSize(n int) Option { return func(m *TableModel) { m.pageSize = n } }
 
 // WithSort sets the initial sort column and direction.
 func WithSort(col int, asc bool) Option {
-	return func(m *Model) {
+	return func(m *TableModel) {
 		if col >= 0 {
 			m.sortCol, m.sortAsc, m.sortActive = col, asc, true
 		}
@@ -161,8 +161,8 @@ func WithSort(col int, asc bool) Option {
 }
 
 // New builds a table for the given columns.
-func New(cols []Column, opts ...Option) *Model {
-	m := &Model{
+func New(cols []Column, opts ...Option) *TableModel {
+	m := &TableModel{
 		KeyMap:       DefaultKeyMap(),
 		cols:         cols,
 		pageSize:     20,
@@ -178,7 +178,7 @@ func New(cols []Column, opts ...Option) *Model {
 // ─── data ────────────────────────────────────────────────────────────────────
 
 // SetRows replaces the data, re-applying the active sort + filter.
-func (m *Model) SetRows(rows []Row) {
+func (m *TableModel) SetRows(rows []Row) {
 	m.rows = rows
 	m.doSort()
 	m.rebuildFilter()
@@ -186,14 +186,14 @@ func (m *Model) SetRows(rows []Row) {
 
 // SetSize informs the table of its available width/height. The page size is
 // derived from height unless WithPageSize fixed it.
-func (m *Model) SetSize(w, h int) {
+func (m *TableModel) SetSize(w, h int) {
 	m.width = w
 	m.pageSize = max(h-4, 3) // reserve header, rule, footer
 	m.clampCursor()
 }
 
 // SelectedRow returns the highlighted row, if any.
-func (m *Model) SelectedRow() (Row, bool) {
+func (m *TableModel) SelectedRow() (Row, bool) {
 	if m.cursor >= 0 && m.cursor < len(m.filtered) {
 		return m.rows[m.filtered[m.cursor]], true
 	}
@@ -202,13 +202,13 @@ func (m *Model) SelectedRow() (Row, bool) {
 
 // Filtering reports whether the `/` filter input is active (the host should
 // claim keyboard focus while it is, e.g. via navigation.KeyCapturer).
-func (m *Model) Filtering() bool { return m.filtering }
+func (m *TableModel) Filtering() bool { return m.filtering }
 
 // ─── input ───────────────────────────────────────────────────────────────────
 
 // Update handles a message (currently key presses) and may return a Cmd — e.g.
 // an OpenDetailMsg-producing Cmd when the user opens a row.
-func (m *Model) Update(msg tea.Msg) tea.Cmd {
+func (m *TableModel) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
@@ -216,7 +216,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+func (m *TableModel) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if m.filtering {
 		switch {
 		case key.Matches(msg, m.KeyMap.Cancel):
@@ -270,7 +270,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 // HandleClick processes a left click at page-relative (x, y): a header click
 // sorts that column; a data-row click selects it, and a quick second click on
 // the same row opens its details.
-func (m *Model) HandleClick(x, y int) tea.Cmd {
+func (m *TableModel) HandleClick(x, y int) tea.Cmd {
 	if y == m.headerY {
 		if col := m.columnAtX(x); col >= 0 {
 			m.sortByCol(col)
@@ -297,7 +297,7 @@ func (m *Model) HandleClick(x, y int) tea.Cmd {
 }
 
 // HandleWheel scrolls the selection by a few rows.
-func (m *Model) HandleWheel(up bool) {
+func (m *TableModel) HandleWheel(up bool) {
 	if up {
 		m.moveCursor(-3)
 	} else {
@@ -305,7 +305,7 @@ func (m *Model) HandleWheel(up bool) {
 	}
 }
 
-func (m *Model) openSelected() tea.Cmd {
+func (m *TableModel) openSelected() tea.Cmd {
 	r, ok := m.SelectedRow()
 	if !ok {
 		return nil
@@ -316,7 +316,7 @@ func (m *Model) openSelected() tea.Cmd {
 
 // ─── sorting / filtering / nav ────────────────────────────────────────────────
 
-func (m *Model) doSort() {
+func (m *TableModel) doSort() {
 	if !m.sortActive || m.sortCol < 0 || m.sortCol >= len(m.cols) {
 		return
 	}
@@ -348,7 +348,7 @@ func lessCell(a, b Row, col int, asc bool) bool {
 }
 
 // sortByCol cycles a column: asc → desc → unsorted.
-func (m *Model) sortByCol(col int) {
+func (m *TableModel) sortByCol(col int) {
 	if col < 0 || col >= len(m.cols) {
 		return
 	}
@@ -365,7 +365,7 @@ func (m *Model) sortByCol(col int) {
 }
 
 // cycleSort walks the current column asc → desc, then advances to the next.
-func (m *Model) cycleSort() {
+func (m *TableModel) cycleSort() {
 	if len(m.cols) == 0 {
 		return
 	}
@@ -381,7 +381,7 @@ func (m *Model) cycleSort() {
 	}
 }
 
-func (m *Model) rebuildFilter() {
+func (m *TableModel) rebuildFilter() {
 	m.filtered = m.filtered[:0]
 	q := strings.ToLower(strings.TrimSpace(m.filter))
 	for i, r := range m.rows {
@@ -404,7 +404,7 @@ func rowMatches(r Row, cols []Column, q string) bool {
 	return false
 }
 
-func (m *Model) clampCursor() {
+func (m *TableModel) clampCursor() {
 	if m.cursor >= len(m.filtered) {
 		m.cursor = len(m.filtered) - 1
 	}
@@ -422,11 +422,11 @@ func (m *Model) clampCursor() {
 	}
 }
 
-func (m *Model) moveCursor(d int) { m.cursor += d; m.clampCursor() }
+func (m *TableModel) moveCursor(d int) { m.cursor += d; m.clampCursor() }
 
 // columnAtX maps a page-relative X to a column index using the ┬ separators
 // parsed from the rendered top border.
-func (m *Model) columnAtX(x int) int {
+func (m *TableModel) columnAtX(x int) int {
 	for i, b := range m.colBoundaries {
 		if x < b {
 			return i
@@ -443,7 +443,7 @@ func (m *Model) columnAtX(x int) int {
 // View renders the table for the given palette, at vertical origin originY
 // within the page content (the number of lines drawn above it). It records
 // geometry for HandleClick and appends a status footer below the table.
-func (m *Model) View(c *theme.AppStyle, originY int) string {
+func (m *TableModel) View(c *theme.AppStyle, originY int) string {
 	st := c.Styles
 
 	if len(m.cols) == 0 {
@@ -525,7 +525,7 @@ func (m *Model) View(c *theme.AppStyle, originY int) string {
 	return lipgloss.JoinVertical(lipgloss.Left, out, m.footer(c, lipgloss.Width(out)))
 }
 
-func (m *Model) footer(c *theme.AppStyle, w int) string {
+func (m *TableModel) footer(c *theme.AppStyle, w int) string {
 	st := c.Styles
 	var left string
 	if total := len(m.filtered); total > 0 {

@@ -329,6 +329,25 @@ func fromTint(t *tint.Tint, accessibility bool, preset StylePreset) *AppStyle {
 		} else {
 			colors.SelectionBg = lipgloss.Darken(colors.Bg, 0.15)
 		}
+		// Update selL after adjustment
+		selL = colorLuminance(colors.SelectionBg)
+	}
+
+	// Ensure SelectionFg has high contrast against SelectionBg
+	selFgL := colorLuminance(colors.SelectionFg)
+	if math.Abs(selFgL-selL) < 40.0 {
+		// Contrast is too low, invert using the main background/foreground
+		if t.Dark {
+			colors.SelectionFg = colors.Bg
+			if selL < 50 { // if SelectionBg is still quite dark, use Fg instead
+				colors.SelectionFg = colors.Fg
+			}
+		} else {
+			colors.SelectionFg = colors.Bg
+			if selL > 50 {
+				colors.SelectionFg = colors.Fg
+			}
+		}
 	}
 
 	if accessibility {

@@ -3,18 +3,25 @@ package settings
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jarvisfriends/tui-base/config"
+	"github.com/jarvisfriends/tui-base/datepicker"
+	"github.com/jarvisfriends/tui-base/envpath"
 	"github.com/jarvisfriends/tui-base/logging"
 	"github.com/jarvisfriends/tui-base/overlay"
 	"github.com/jarvisfriends/tui-base/page"
 	"github.com/jarvisfriends/tui-base/theme"
+	"github.com/jarvisfriends/tui-base/timepicker"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -96,14 +103,22 @@ type NotificationsSettingsMsg struct {
 	Persist bool
 }
 
-// settingItem describes one row in the compact overview and how to edit it.
+// KeybindingsChangedMsg is emitted when the user modifies custom keybindings
+// so the router can apply them to the shared *keys.AppKeyMap at runtime.
+type KeybindingsChangedMsg struct {
+	CustomKeys map[string]string
+}
+
+// A settingItem represents a single configurable value.
 type settingItem struct {
-	category  string
-	title     string
-	value     func() string    // returns current display value for the overview row
-	buildForm func() *huh.Form // builds a single-field overlay form for this setting
-	leftTrunc bool             // if true, show tail of value with leading … (useful for paths)
-	apply     func() error     // optional callback after submit
+	category   string
+	title      string
+	leftTrunc  bool
+	value      func() string
+	setValue   func(string)
+	buildForm  func() *huh.Form
+	buildModel func() tea.Model
+	apply      func() error
 }
 
 type settingsCategory struct {
@@ -181,18 +196,19 @@ type SettingsModel struct {
 	page.Base
 
 	// Persisted fields (exported so JSON encoding works).
-	NavStyle             string `json:"nav_style"`
-	NavShowNumbers       bool   `json:"nav_show_numbers"`
-	NavNumberSelect      bool   `json:"nav_number_select"`
-	ColorThemeID         string `json:"theme_id"`
-	ThemeMode            string `json:"theme_mode"`
-	StylePreset          string `json:"style_preset"`
-	AccessibilityColors  bool   `json:"accessibility_colors"`
-	LogOutput            string `json:"log_output"`
-	LogPath              string `json:"log_path"`
-	LogLevel             string `json:"log_level"`
-	NotificationsEnabled bool   `json:"notifications_enabled"`
-	NotificationsPersist bool   `json:"notifications_persist"`
+	NavStyle             string            `json:"nav_style"`
+	NavShowNumbers       bool              `json:"nav_show_numbers"`
+	NavNumberSelect      bool              `json:"nav_number_select"`
+	ColorThemeID         string            `json:"theme_id"`
+	ThemeMode            string            `json:"theme_mode"`
+	StylePreset          string            `json:"style_preset"`
+	AccessibilityColors  bool              `json:"accessibility_colors"`
+	LogOutput            string            `json:"log_output"`
+	LogPath              string            `json:"log_path"`
+	LogLevel             string            `json:"log_level"`
+	NotificationsEnabled bool              `json:"notifications_enabled"`
+	NotificationsPersist bool              `json:"notifications_persist"`
+	CustomKeys           map[string]string `json:"custom_keys"`
 	// defaultTerminal holds the current machine default terminal handling on
 	// Windows. It is intentionally unexported so it's not persisted to the
 	// JSON settings file; the value is always read from / written to the
@@ -223,9 +239,12 @@ type SettingsModel struct {
 
 	// editOverlay manages the centered huh form shown when the user opens a
 	// setting for editing. FormOverlayHost handles sizing, compositing, and
-	// outside-click bounds — no manual geom.Rect or compositor calls needed.
-	editOverlay overlay.FormOverlayHost
-	editIndex   int
+	// outside clicks.
+	editOverlay  overlay.FormOverlayHost
+	modelOverlay overlay.ModelOverlayHost
+
+	// editIndex is the index of the setting currently being edited, or -1.
+	editIndex int
 
 	keys *Keys
 }
@@ -260,6 +279,7 @@ func New(extraSections ...config.Section) *SettingsModel {
 		LogLevel:             "ERROR",
 		NotificationsEnabled: true,
 		NotificationsPersist: false,
+		CustomKeys:           make(map[string]string),
 		defaultTerminal:      "let_windows",
 		extraSections:        extraSections,
 		keys:                 DefaultKeys(),
@@ -290,6 +310,10 @@ func New(extraSections ...config.Section) *SettingsModel {
 	theme.SetThemePreferences(m.ThemeMode, m.AccessibilityColors, theme.StylePreset(m.StylePreset))
 	if m.ColorThemeID != "" {
 		_ = theme.SetCurrentTint(m.ColorThemeID)
+	}
+
+	if m.CustomKeys == nil {
+		m.CustomKeys = make(map[string]string)
 	}
 
 	// Always detect the current system default terminal so the UI reflects
@@ -610,6 +634,105 @@ func (m *SettingsModel) buildItems() {
 	},
 	)
 
+	keyOptions := []struct {
+		id    string
+		title string
+		def   string
+	}{
+		{"Quit", "Quit Application", "q,ctrl+c"},
+		{"NextPage", "Next Page", "tab"},
+		{"PreviousPage", "Previous Page", "shift+tab"},
+		{"OpenSettings", "Open Settings", "ctrl+,"},
+		{"ToggleNav", "Toggle Nav", "ctrl+b"},
+		{"ToggleFullHelp", "Toggle Full Help", "ctrl+h"},
+		{"ToggleStatus", "Toggle Status", "ctrl+j"},
+		{"Select", "Select", "enter"},
+		{"Top", "Go to Top", "home"},
+		{"Bottom", "Go to Bottom", "end"},
+		{"Dismiss", "Dismiss Modal", "esc"},
+		{"DismissAll", "Dismiss All Notifications", "d"},
+		{"Debug", "Quick Debug", "ctrl+d"},
+		{"PageDown", "Page Down", "pgdown"},
+		{"PageUp", "Page Up", "pgup"},
+		{"HalfPageDown", "Half Page Down", "ctrl+down"},
+		{"HalfPageUp", "Half Page Up", "ctrl+up"},
+		{"Up", "Up", "up"},
+		{"Down", "Down", "down"},
+		{"Left", "Left", "left"},
+		{"Right", "Right", "right"},
+	}
+
+	for _, kOpt := range keyOptions {
+		// Create a local copy for the closures
+		opt := kOpt
+		addItem("Keybindings", settingItem{
+			title: opt.title,
+			value: func() string {
+				val, exists := m.CustomKeys[opt.id]
+				if !exists {
+					return opt.def
+				}
+				if val == "" {
+					return "(none)"
+				}
+				return val
+			},
+			buildModel: func() tea.Model {
+				val, exists := m.CustomKeys[opt.id]
+				if !exists {
+					val = opt.def
+				}
+				kr := NewKeyRecorder(val)
+				kr.Validate = func(keys []string) error {
+					seen := make(map[string]bool)
+					for _, k := range keys {
+						kNorm := strings.ToLower(strings.TrimSpace(k))
+						if kNorm == "" {
+							continue
+						}
+						if seen[kNorm] {
+							return fmt.Errorf("duplicate key %q within this shortcut", k)
+						}
+						seen[kNorm] = true
+					}
+
+					for _, other := range keyOptions {
+						if other.id == opt.id {
+							continue
+						}
+						otherVal, otherExists := m.CustomKeys[other.id]
+						if !otherExists {
+							otherVal = other.def
+						}
+						var otherKeys []string
+						parts := strings.SplitSeq(otherVal, ",")
+						for p := range parts {
+							pTrim := strings.ToLower(strings.TrimSpace(p))
+							if pTrim != "" && pTrim != "(none)" {
+								otherKeys = append(otherKeys, pTrim)
+							}
+						}
+						for _, k := range keys {
+							kNorm := strings.ToLower(strings.TrimSpace(k))
+							if kNorm == "" {
+								continue
+							}
+							if slices.Contains(otherKeys, kNorm) {
+								return fmt.Errorf("key %q is already assigned to %q", k, other.title)
+							}
+						}
+					}
+					return nil
+				}
+				kr.validate()
+				return kr
+			},
+			setValue: func(val string) {
+				m.CustomKeys[opt.id] = val
+			},
+		})
+	}
+
 	if runtime.GOOS == "windows" {
 		addItem("System", settingItem{
 			title: "Default Terminal",
@@ -648,18 +771,54 @@ func (m *SettingsModel) itemFromDef(def config.FieldDef) settingItem {
 			if def.Value == nil {
 				return ""
 			}
-			// For Select fields, try to look up the human-readable label.
+			val := *def.Value
 			if def.Kind == config.FieldSelect {
-				return labelFor(*def.Value, def.Options)
+				return labelFor(val, def.Options)
 			}
-			return *def.Value
+			if isSecret(def.Title) {
+				runes := []rune(val)
+				if len(runes) > 4 {
+					return "****" + string(runes[len(runes)-4:])
+				} else if len(runes) > 0 {
+					return strings.Repeat("*", len(runes))
+				}
+				return ""
+			}
+			if def.Kind == config.FieldFilePicker || def.Kind == config.FieldMultiFilePicker || strings.Contains(strings.ToLower(def.Title), "path") {
+				return envpath.Collapse(val)
+			}
+			return val
+		},
+		setValue: func(val string) {
+			if def.Value != nil {
+				*def.Value = val
+			}
 		},
 		buildForm: func() *huh.Form {
+			if def.Kind == config.FieldMultiFilePicker || def.Kind == config.FieldDuration || def.Kind == config.FieldDate {
+				return nil
+			}
 			f := m.huhFieldFromDef(def)
 			if f == nil {
 				return nil
 			}
 			return huh.NewForm(huh.NewGroup(f).WithTheme(theme.HuhThemeFunc()))
+		},
+		buildModel: func() tea.Model {
+			switch def.Kind {
+			case config.FieldMultiFilePicker:
+				return NewMultiFileEditor(*def.Value)
+			case config.FieldDuration:
+				d, _ := time.ParseDuration(*def.Value)
+				return timepicker.New(d)
+			case config.FieldDate:
+				t, _ := time.Parse("2006-01-02", *def.Value)
+				if t.IsZero() {
+					t = time.Now()
+				}
+				return datepicker.New(t)
+			}
+			return nil
 		},
 		apply: func() error {
 			if def.Apply == nil || def.Value == nil {
@@ -691,6 +850,9 @@ func (m *SettingsModel) huhFieldFromDef(def config.FieldDef) huh.Field {
 			Title(def.Title).
 			Description(def.Description).
 			Value(def.Value)
+		if isSecret(def.Title) {
+			ti = ti.EchoMode(huh.EchoModePassword)
+		}
 		if def.Validate != nil {
 			ti = ti.Validate(def.Validate)
 		}
@@ -706,16 +868,21 @@ func (m *SettingsModel) huhFieldFromDef(def config.FieldDef) huh.Field {
 	return nil
 }
 
+func isSecret(title string) bool {
+	t := strings.ToLower(title)
+	return strings.Contains(t, "password") || strings.Contains(t, "pass") || strings.Contains(t, "token") || strings.Contains(t, "secret")
+}
+
 // CapturesKeys returns true while an edit overlay is open so the router hands
 // all keystrokes directly to the form.
-func (m *SettingsModel) CapturesKeys() bool { return m.editOverlay.IsOpen() }
+func (m *SettingsModel) CapturesKeys() bool { return m.editOverlay.IsOpen() || m.modelOverlay.IsOpen() }
 
 // ShortHelp implements help.KeyMap for the status bar.
 func (m *SettingsModel) ShortHelp() []key.Binding {
 	if m == nil || m.keys == nil {
 		return nil
 	}
-	if m.editOverlay.IsOpen() {
+	if m.editOverlay.IsOpen() || m.modelOverlay.IsOpen() {
 		return []key.Binding{m.keys.Dismiss, m.keys.Select}
 	}
 	return m.keys.ShortHelp()
@@ -726,7 +893,7 @@ func (m *SettingsModel) FullHelp() [][]key.Binding {
 	if m == nil || m.keys == nil {
 		return nil
 	}
-	if m.editOverlay.IsOpen() {
+	if m.editOverlay.IsOpen() || m.modelOverlay.IsOpen() {
 		return [][]key.Binding{{m.keys.Dismiss, m.keys.Select}}
 	}
 	return m.keys.FullHelp()
@@ -738,11 +905,12 @@ func (m *SettingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if wMsg, ok := msg.(tea.WindowSizeMsg); ok {
 		m.SetSize(wMsg.Width, wMsg.Height)
 		m.editOverlay.OnResize(m.Width(), m.Height())
+		m.modelOverlay.OnResize(m.Width(), m.Height())
 	}
 	if m.Width() == 0 {
 		return m, nil
 	}
-	if m.editOverlay.IsOpen() {
+	if m.editOverlay.IsOpen() || m.modelOverlay.IsOpen() {
 		return m.updateEditing(msg)
 	}
 	return m.updateOverview(msg)
@@ -785,6 +953,13 @@ func (m *SettingsModel) startEdit() tea.Cmd {
 			m.defaultTerminal = det
 		}
 	}
+	if m.items[m.cursor].buildModel != nil {
+		customModel := m.items[m.cursor].buildModel()
+		if customModel != nil {
+			return m.modelOverlay.Open(customModel, m.Width(), m.Height())
+		}
+	}
+
 	f := m.items[m.cursor].buildForm()
 	if f == nil {
 		return nil
@@ -795,6 +970,7 @@ func (m *SettingsModel) startEdit() tea.Cmd {
 // abortEdit reverts to the last persisted state and closes the overlay.
 func (m *SettingsModel) abortEdit() tea.Cmd {
 	m.editOverlay.Close()
+	m.modelOverlay.Close()
 	_ = m.LoadFromFile(settingsFilePath())
 	m.buildItems()
 	m.ThemeMode = theme.NormalizeMode(m.ThemeMode)
@@ -835,10 +1011,59 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 	prevNavNumbers := m.NavShowNumbers
 	prevNavNumberSelect := m.NavNumberSelect
 
-	state, cmd := m.editOverlay.Update(msg)
+	var state huh.FormState
+	var cmd tea.Cmd
 	var cmds []tea.Cmd
-	if cmd != nil {
-		cmds = append(cmds, cmd)
+
+	if m.modelOverlay.IsOpen() {
+		cmd = m.modelOverlay.Update(msg)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		mod := m.modelOverlay.Model()
+		switch v := mod.(type) {
+		case *MultiFileEditor:
+			if v.Done {
+				state = huh.StateCompleted
+				if m.editIndex >= 0 && m.items[m.editIndex].setValue != nil {
+					m.items[m.editIndex].setValue(v.Value())
+				}
+			} else if v.Aborted {
+				state = huh.StateAborted
+			}
+		case *KeyRecorder:
+			if v.Done {
+				state = huh.StateCompleted
+				if m.editIndex >= 0 && m.items[m.editIndex].setValue != nil {
+					m.items[m.editIndex].setValue(v.Value())
+				}
+			} else if v.Aborted {
+				state = huh.StateAborted
+			}
+		case timepicker.TimePickerModel:
+			if v.Done {
+				state = huh.StateCompleted
+				if m.editIndex >= 0 && m.items[m.editIndex].setValue != nil {
+					m.items[m.editIndex].setValue(v.Duration.String())
+				}
+			} else if v.Aborted {
+				state = huh.StateAborted
+			}
+		case datepicker.DatePickerModel:
+			if v.Selected {
+				state = huh.StateCompleted
+				if m.editIndex >= 0 && m.items[m.editIndex].setValue != nil {
+					m.items[m.editIndex].setValue(v.Time.Format("2006-01-02"))
+				}
+			} else if km, ok := msg.(tea.KeyMsg); ok && key.Matches(km, v.KeyMap.Quit) {
+				state = huh.StateAborted
+			}
+		}
+	} else {
+		state, cmd = m.editOverlay.Update(msg)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	m.AccessibilityColors = m.accessibilityStr == "true"
@@ -896,6 +1121,11 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, func() tea.Msg {
 			return NotificationsSettingsMsg{Enabled: notifEnabled, Persist: notifPersist}
 		})
+		customKeys := make(map[string]string)
+		maps.Copy(customKeys, m.CustomKeys)
+		cmds = append(cmds, func() tea.Msg {
+			return KeybindingsChangedMsg{CustomKeys: customKeys}
+		})
 		// S-13: persist asynchronously so a slow disk never blocks Update. The
 		// snapshot is taken now (on the UI goroutine) so the background write
 		// sees a consistent copy even if the user keeps editing.
@@ -909,6 +1139,7 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		_ = logging.SetLevel(m.LogLevel)
 		m.editOverlay.Close()
+		m.modelOverlay.Close()
 
 	case huh.StateAborted:
 		// huh's own abort key (ctrl+c inside the form) — same revert path.
@@ -921,7 +1152,13 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *SettingsModel) View() tea.View {
 	c := m.Colors()
 	overview := m.renderOverview()
-	content := m.editOverlay.Composite(overview, c.Styles.OverlayBorder)
+
+	var content string
+	if m.modelOverlay.IsOpen() {
+		content = m.modelOverlay.Composite(overview, c.Styles.OverlayBorder)
+	} else {
+		content = m.editOverlay.Composite(overview, c.Styles.OverlayBorder)
+	}
 
 	v := tea.NewView(content)
 	v.BackgroundColor = c.Styles.TextOnBg.GetBackground()
@@ -938,8 +1175,13 @@ func (m *SettingsModel) View() tea.View {
 			return nil
 		}
 		if m.editOverlay.IsOpen() {
-			// Click outside the overlay aborts and returns to overview.
 			if m.editOverlay.IsOutsideClick(click.X, click.Y) {
+				return m.abortEdit()
+			}
+			return nil
+		}
+		if m.modelOverlay.IsOpen() {
+			if m.modelOverlay.IsOutsideClick(click.X, click.Y) {
 				return m.abortEdit()
 			}
 			return nil
