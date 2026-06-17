@@ -47,7 +47,7 @@ func CheckCodeStandards(t *testing.T, patterns ...string) {
 }
 
 func isUIPackage(pkgPath string) bool {
-	uiDirs := []string{"/pages", "/cui", "/theme", "/navigation", "/overlay", "/status", "/table", "/router", "/creator"}
+	uiDirs := []string{"/pages", "/cui", "/tui/", "/theme", "/navigation", "/overlay", "/status", "/table", "/router", "/creator"}
 	for _, d := range uiDirs {
 		if strings.Contains(pkgPath, d) {
 			return true
@@ -63,13 +63,17 @@ func checkKeyMappings(t *testing.T, fset *token.FileSet, path string, n ast.Node
 	switch x := n.(type) {
 	case *ast.FuncDecl:
 		name := x.Name.Name
-		if name == "ShortHelp" || name == "FullHelp" {
+		if name == "ShortHelp" || name == "FullHelp" || name == "Update" {
 			ast.Inspect(x.Body, func(bodyNode ast.Node) bool {
 				if call, ok := bodyNode.(*ast.CallExpr); ok {
 					if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 						if pkg, ok := sel.X.(*ast.Ident); ok {
 							if pkg.Name == "key" && sel.Sel.Name == "NewBinding" {
 								t.Errorf("%s:%d: %s() must not call key.NewBinding inline",
+									path, fset.Position(call.Pos()).Line, name)
+							}
+							if pkg.Name == "shared" && sel.Sel.Name == "HelpBinding" {
+								t.Errorf("%s:%d: %s() must not call shared.HelpBinding inline",
 									path, fset.Position(call.Pos()).Line, name)
 							}
 						}
@@ -111,6 +115,7 @@ func checkKeyMappings(t *testing.T, fset *token.FileSet, path string, n ast.Node
 				}
 			}
 		}
+
 	}
 }
 
@@ -146,6 +151,43 @@ func checkLayoutCalculations(t *testing.T, pkg *packages.Package, path string, n
 				pos := pkg.Fset.Position(call.Pos())
 				t.Errorf("%s:%d: Use lipgloss.Width() or ansi.StringWidth() instead of len() for string visual width", path, pos.Line)
 			}
+		}
+	}
+}
+
+// CheckDescriptiveStructNames verifies that structs are not generically named "Model" or "model".
+func CheckDescriptiveStructNames(t *testing.T, patterns ...string) {
+	t.Helper()
+
+	cfg := &packages.Config{
+		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
+			packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
+		Tests: false,
+	}
+
+	pkgs, err := packages.Load(cfg, patterns...)
+	if err != nil {
+		t.Fatalf("Failed to load packages: %v", err)
+	}
+
+	for _, pkg := range pkgs {
+		if len(pkg.Errors) > 0 {
+			continue
+		}
+
+		for _, file := range pkg.Syntax {
+			filename := pkg.Fset.Position(file.Pos()).Filename
+			ast.Inspect(file, func(n ast.Node) bool {
+				if x, ok := n.(*ast.TypeSpec); ok {
+					if x.Name.Name == "Model" || x.Name.Name == "model" {
+						if _, isStruct := x.Type.(*ast.StructType); isStruct {
+							t.Errorf("%s:%d: Struct must be given a more descriptive name than '%s'",
+								filename, pkg.Fset.Position(x.Pos()).Line, x.Name.Name)
+						}
+					}
+				}
+				return true
+			})
 		}
 	}
 }

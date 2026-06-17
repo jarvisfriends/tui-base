@@ -37,7 +37,7 @@ func overlayPaletteColors(t *huh.Styles, c *AppStyle) {
 	t.Focused.NextIndicator = t.Focused.NextIndicator.Foreground(c.Warning)
 	t.Focused.PrevIndicator = t.Focused.PrevIndicator.Foreground(c.Warning)
 	t.Focused.Option = t.Focused.Option.Foreground(c.Fg)
-	t.Focused.SelectedOption = t.Focused.SelectedOption.Foreground(c.Success)
+	t.Focused.SelectedOption = t.Focused.SelectedOption.Foreground(c.SelectionFg).Background(c.SelectionBg)
 	t.Focused.SelectedPrefix = t.Focused.SelectedPrefix.Foreground(c.Success)
 	t.Focused.UnselectedOption = t.Focused.UnselectedOption.Foreground(c.Fg)
 	t.Focused.UnselectedPrefix = t.Focused.UnselectedPrefix.Foreground(c.Muted)

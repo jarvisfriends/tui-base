@@ -213,3 +213,83 @@ func (h *FormOverlayHost) Composite(base string, borderStyle lipgloss.Style) str
 func FormWidth(termW int) int {
 	return max(30, min(termW-14, 120))
 }
+
+// ─── ModelOverlayHost ─────────────────────────────────────────────────────────
+
+// ModelOverlayHost manages the common lifecycle of a generic tea.Model rendered as
+// a centered overlay inside a page model.
+type ModelOverlayHost struct {
+	model  tea.Model
+	open   bool
+	bounds geom.Rect
+	termW  int
+	termH  int
+}
+
+// Open initializes and shows the overlay, returning the model's Init Cmd.
+func (h *ModelOverlayHost) Open(m tea.Model, termW, termH int) tea.Cmd {
+	h.termW, h.termH = termW, termH
+	h.model = m
+	h.open = true
+	if h.model != nil {
+		return h.model.Init()
+	}
+	return nil
+}
+
+// Close hides the overlay and releases the model.
+func (h *ModelOverlayHost) Close() {
+	h.model = nil
+	h.open = false
+	h.bounds = geom.Rect{}
+}
+
+// IsOpen reports whether the overlay is currently shown.
+func (h *ModelOverlayHost) IsOpen() bool { return h.open && h.model != nil }
+
+// Bounds returns the rectangle from the most-recent Composite call.
+func (h *ModelOverlayHost) Bounds() geom.Rect { return h.bounds }
+
+// OnResize adapts the hosted model to the new terminal size.
+func (h *ModelOverlayHost) OnResize(termW, termH int) {
+	h.termW, h.termH = termW, termH
+	if h.model != nil {
+		h.model, _ = h.model.Update(tea.WindowSizeMsg{Width: termW, Height: termH})
+	}
+}
+
+// Update forwards msg to the model.
+func (h *ModelOverlayHost) Update(msg tea.Msg) tea.Cmd {
+	if h.model == nil {
+		return nil
+	}
+	var cmd tea.Cmd
+	h.model, cmd = h.model.Update(msg)
+	return cmd
+}
+
+func (h *ModelOverlayHost) Model() tea.Model {
+	return h.model
+}
+
+// IsOutsideClick reports whether (x, y) falls outside the overlay bounds.
+func (h *ModelOverlayHost) IsOutsideClick(x, y int) bool {
+	return h.IsOpen() && !h.bounds.Contains(x, y)
+}
+
+// Composite renders the overlay centered over base.
+func (h *ModelOverlayHost) Composite(base string, borderStyle lipgloss.Style) string {
+	if !h.IsOpen() {
+		return base
+	}
+	box := borderStyle.
+		Border(lipgloss.RoundedBorder()).
+		Padding(1, 2).
+		Render(h.model.View().Content)
+	ow, oh := lipgloss.Size(box)
+	h.bounds = geom.Rect{W: ow, H: oh}.CenteredIn(h.termW, h.termH)
+	return lipgloss.NewCompositor(
+		lipgloss.NewLayer(base),
+		lipgloss.NewLayer(box).X(h.bounds.X).Y(h.bounds.Y).Z(1),
+	).Render()
+}

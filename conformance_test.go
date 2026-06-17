@@ -8,4 +8,5 @@ import (
 
 func TestCodeStandards(t *testing.T) {
 	testutil.CheckCodeStandards(t, "github.com/jarvisfriends/tui-base/...")
+	testutil.CheckDescriptiveStructNames(t, "github.com/jarvisfriends/tui-base/...")
 }

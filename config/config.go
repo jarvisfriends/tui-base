@@ -27,6 +27,12 @@ const (
 	FieldText
 	// FieldFilePicker opens a file/directory browser.
 	FieldFilePicker
+	// FieldMultiFilePicker opens a custom multi-file browser.
+	FieldMultiFilePicker
+	// FieldDate opens a calendar widget.
+	FieldDate
+	// FieldDuration opens an Hour/Minute/Second spinner.
+	FieldDuration
 )
 
 // FieldDef describes one configurable value that a component exposes to the
@@ -157,6 +163,43 @@ func TextField(key, title, description string, value *string, validate func(stri
 		Kind:        FieldText,
 		Value:       value,
 		Validate:    validate,
+		Apply:       apply,
+	}
+}
+
+// MultiFilePickerField returns a FieldMultiFilePicker FieldDef bound to a *string field
+// which should contain a semicolon-separated list of paths.
+func MultiFilePickerField(key, title, description string, value *string, apply func(string) error) FieldDef {
+	return FieldDef{
+		Key:         key,
+		Title:       title,
+		Description: description,
+		Kind:        FieldMultiFilePicker,
+		Value:       value,
+		Apply:       apply,
+	}
+}
+
+// DateField returns a FieldDate FieldDef.
+func DateField(key, title, description string, value *string, apply func(string) error) FieldDef {
+	return FieldDef{
+		Key:         key,
+		Title:       title,
+		Description: description,
+		Kind:        FieldDate,
+		Value:       value,
+		Apply:       apply,
+	}
+}
+
+// DurationField returns a FieldDuration FieldDef.
+func DurationField(key, title, description string, value *string, apply func(string) error) FieldDef {
+	return FieldDef{
+		Key:         key,
+		Title:       title,
+		Description: description,
+		Kind:        FieldDuration,
+		Value:       value,
 		Apply:       apply,
 	}
 }
