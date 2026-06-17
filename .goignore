@@ -1,2 +1,9 @@
 .history
 tmp
+
+# Added per request
+alive.exe
+__debug_bin.exe
+*.prof
+user.config
+

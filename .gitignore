@@ -56,3 +56,10 @@ tmp/
 *.code-workspace
 */settings.local.json
 
+
+# Added per request
+alive.exe
+__debug_bin.exe
+*.prof
+user.config
+
