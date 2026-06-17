@@ -4,30 +4,6 @@
 > Completed milestones are now documented in README and docs.
 > Legend: 🔄 In Progress · 🧪 Needs Tests · ⬜ Planned · 💡 Idea · 📋 Noted
 
-## Code Quality Status (2026-05-31)
-
-**Duplication Analysis:** Minimal duplicates detected across 60 Go files (2.73% in `pages/settings/settings.go` with 27 lines; negligible in other files). No refactoring needed at this time.
-
-**Completed Tasks (Current Sprint):**
-- ✅ N-6: Default to tabs navigation if config missing
-- ✅ S-13: Async SaveToFile via `saveCmd()` + SettingsSavedMsg
-- ✅ S-14: OS-aware config paths (UserConfigDir + per-app subdirs)
-- ✅ I-4: Replace MaxHeight with bubbles/viewport (keyboard nav + mouse wheel scrolling)
-- ✅ Added test coverage for first-run defaults
-
-**Priority Q2 Focus (Remaining):**
-- ✅ N-5: Migrate Sidebar to `bubbles/list` with custom delegate
-- ✅ Consumer-friendliness: env vars derived from app name (MY_APP_COLOR_PROFILE, MY_APP_DEBUG)
-- ✅ DebugKeyMap: rebindable key bindings for debug page actions
-- ✅ A-5: Removed `common.KnownFocusable` dead code
-- ✅ CI/CD: golangci-lint, Go 1.26.x, actions v5/v6, goreleaser fixes
-- ✅ `NewProgramWithEnvVar()`: consumers get branded color profile control
-- ✅ `TestHistoryOverlayAllRowsCarryStatusBg`: fixed StatusBg throughout overlay
-
-**Priority Q3 Focus (Remaining):**
-1. 🔄 **Inspector improvements** (I-5, I-6, I-7) — Ctrl+D overlay + filtering + export
-2. 💡 **Architecture scalability** (A-1, A-2) — Page registry + pub-sub message bus
-
 ## Theme & Color
 
 | Status | # | Task | Notes |
