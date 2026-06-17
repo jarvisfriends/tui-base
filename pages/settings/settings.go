@@ -787,6 +787,9 @@ func (m *SettingsModel) itemFromDef(def config.FieldDef) settingItem {
 			if def.Kind == config.FieldFilePicker || def.Kind == config.FieldMultiFilePicker || strings.Contains(strings.ToLower(def.Title), "path") {
 				return envpath.Collapse(val)
 			}
+			if def.Kind == config.FieldCustom && def.CustomFieldText != "" {
+				return def.CustomFieldText
+			}
 			return val
 		},
 		setValue: func(val string) {
@@ -795,7 +798,7 @@ func (m *SettingsModel) itemFromDef(def config.FieldDef) settingItem {
 			}
 		},
 		buildForm: func() *huh.Form {
-			if def.Kind == config.FieldMultiFilePicker || def.Kind == config.FieldDuration || def.Kind == config.FieldDate {
+			if def.Kind == config.FieldMultiFilePicker || def.Kind == config.FieldDuration || def.Kind == config.FieldDate || def.Kind == config.FieldCustom {
 				return nil
 			}
 			f := m.huhFieldFromDef(def)
@@ -817,6 +820,10 @@ func (m *SettingsModel) itemFromDef(def config.FieldDef) settingItem {
 					t = time.Now()
 				}
 				return datepicker.New(t)
+			case config.FieldCustom:
+				if def.CustomModelBuilder != nil {
+					return def.CustomModelBuilder()
+				}
 			}
 			return nil
 		},
@@ -1056,6 +1063,15 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.items[m.editIndex].setValue(v.Time.Format("2006-01-02"))
 				}
 			} else if km, ok := msg.(tea.KeyMsg); ok && key.Matches(km, v.KeyMap.Quit) {
+				state = huh.StateAborted
+			}
+		case interface {
+			IsDone() bool
+			IsAborted() bool
+		}:
+			if v.IsDone() {
+				state = huh.StateCompleted
+			} else if v.IsAborted() {
 				state = huh.StateAborted
 			}
 		}

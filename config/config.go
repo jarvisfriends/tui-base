@@ -12,6 +12,7 @@
 package config
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"fmt"
 
 	huh "charm.land/huh/v2"
@@ -33,6 +34,8 @@ const (
 	FieldDate
 	// FieldDuration opens an Hour/Minute/Second spinner.
 	FieldDuration
+	// FieldCustom opens a custom tea.Model.
+	FieldCustom
 )
 
 // FieldDef describes one configurable value that a component exposes to the
@@ -69,6 +72,10 @@ type FieldDef struct {
 	// Apply is an optional callback run when a field edit is submitted.
 	// Use this to persist values outside tui-base settings storage.
 	Apply func(string) error
+	// CustomModelBuilder is called to build a custom model when Kind is FieldCustom.
+	CustomModelBuilder func() tea.Model
+	// CustomFieldText is the text displayed on the right side of the settings list.
+	CustomFieldText string
 }
 
 // Section groups related FieldDefs under a named heading. Each Section
@@ -201,5 +208,17 @@ func DurationField(key, title, description string, value *string, apply func(str
 		Kind:        FieldDuration,
 		Value:       value,
 		Apply:       apply,
+	}
+}
+
+// CustomField returns a FieldCustom FieldDef that delegates to a custom tea.Model.
+func CustomField(key, title, description, displayText string, builder func() tea.Model) FieldDef {
+	return FieldDef{
+		Key:                key,
+		Title:              title,
+		Description:        description,
+		Kind:               FieldCustom,
+		CustomModelBuilder: builder,
+		CustomFieldText:    displayText,
 	}
 }
