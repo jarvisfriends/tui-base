@@ -13,6 +13,7 @@ import (
 
 	"github.com/charmbracelet/colorprofile"
 	cfg "github.com/jarvisfriends/tui-base/config"
+	"github.com/jarvisfriends/tui-base/gate"
 	"github.com/jarvisfriends/tui-base/keys"
 	log "github.com/jarvisfriends/tui-base/logging"
 	"github.com/jarvisfriends/tui-base/navigation"
@@ -106,6 +107,7 @@ type Options struct {
 	InitialLogLevel  string
 	SettingsSections []cfg.Section
 	KeyMap           *keys.AppKeyMap
+	Gates            *gate.GateRegistry
 }
 
 // pageIDFromTitle derives a stable navigation ID from a human-readable title
@@ -260,7 +262,11 @@ func NewWithOptions(opts Options) *RouterModel {
 	settings.SetConfigDir(appConfigDir)
 
 	// create settings first so we can pick the initial navigation style
-	settingsModel := settings.New(opts.SettingsSections...)
+	settingsModel := settings.NewWithOptions(settings.Options{
+		ExtraSections: opts.SettingsSections,
+		DefaultKeys:   opts.KeyMap,
+		Gates:         opts.Gates,
+	})
 	// On first run (no persisted settings file), settings.New applies first-run
 	// defaults (tabs nav). Persist them now so the choice is stable next launch.
 	if !settingsModel.LoadedFromFile() {
