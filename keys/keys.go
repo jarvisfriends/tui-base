@@ -162,6 +162,40 @@ func (km *AppKeyMap) ApplyCustomizations(custom map[string]string) {
 	km.Right = apply("Right", km.Right)
 }
 
+// BindingDef provides the ID, title, and default keys for an AppKeyMap binding.
+type BindingDef struct {
+	ID    string
+	Title string
+	Def   string
+}
+
+// BindingDefs returns the current bindings in a format suitable for generating settings UI.
+func (km *AppKeyMap) BindingDefs() []BindingDef {
+	return []BindingDef{
+		{"Quit", "Quit Application", strings.Join(km.Quit.Keys(), ",")},
+		{"NextPage", "Next Page", strings.Join(km.NextPage.Keys(), ",")},
+		{"PreviousPage", "Previous Page", strings.Join(km.PreviousPage.Keys(), ",")},
+		{"OpenSettings", "Open Settings", strings.Join(km.OpenSettings.Keys(), ",")},
+		{"ToggleNav", "Toggle Nav", strings.Join(km.ToggleNav.Keys(), ",")},
+		{"ToggleFullHelp", "Toggle Full Help", strings.Join(km.ToggleFullHelp.Keys(), ",")},
+		{"ToggleStatus", "Toggle Status", strings.Join(km.ToggleStatus.Keys(), ",")},
+		{"Select", "Select", strings.Join(km.Select.Keys(), ",")},
+		{"Top", "Go to Top", strings.Join(km.Top.Keys(), ",")},
+		{"Bottom", "Go to Bottom", strings.Join(km.Bottom.Keys(), ",")},
+		{"Dismiss", "Dismiss Modal", strings.Join(km.Dismiss.Keys(), ",")},
+		{"DismissAll", "Dismiss All Notifications", strings.Join(km.DismissAll.Keys(), ",")},
+		{"Debug", "Quick Debug", strings.Join(km.Debug.Keys(), ",")},
+		{"PageDown", "Page Down", strings.Join(km.PageDown.Keys(), ",")},
+		{"PageUp", "Page Up", strings.Join(km.PageUp.Keys(), ",")},
+		{"HalfPageDown", "Half Page Down", strings.Join(km.HalfPageDown.Keys(), ",")},
+		{"HalfPageUp", "Half Page Up", strings.Join(km.HalfPageUp.Keys(), ",")},
+		{"Up", "Up", strings.Join(km.Up.Keys(), ",")},
+		{"Down", "Down", strings.Join(km.Down.Keys(), ",")},
+		{"Left", "Left", strings.Join(km.Left.Keys(), ",")},
+		{"Right", "Right", strings.Join(km.Right.Keys(), ",")},
+	}
+}
+
 // FullHelp implements the bubbles/help KeyMap interface.
 // It returns the key bindings arranged into rows for display.
 func (km *AppKeyMap) FullHelp() [][]key.Binding {

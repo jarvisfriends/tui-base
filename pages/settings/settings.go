@@ -17,6 +17,8 @@ import (
 	"github.com/jarvisfriends/tui-base/config"
 	"github.com/jarvisfriends/tui-base/datepicker"
 	"github.com/jarvisfriends/tui-base/envpath"
+	"github.com/jarvisfriends/tui-base/gate"
+	"github.com/jarvisfriends/tui-base/keys"
 	"github.com/jarvisfriends/tui-base/logging"
 	"github.com/jarvisfriends/tui-base/overlay"
 	"github.com/jarvisfriends/tui-base/page"
@@ -247,6 +249,14 @@ type SettingsModel struct {
 	editIndex int
 
 	keys *Keys
+	opts Options
+}
+
+// Options provides configuration for the settings UI.
+type Options struct {
+	ExtraSections []config.Section
+	DefaultKeys   *keys.AppKeyMap
+	Gates         *gate.GateRegistry
 }
 
 // LoadedFromFile reports whether a persisted settings file was found and read
@@ -265,7 +275,13 @@ func (m *SettingsModel) Save() error {
 
 // New creates a settings model. Pass extra config.Sections contributed by
 // Configurable components; they appear after the built-in rows.
+// Deprecated: use NewWithOptions instead.
 func New(extraSections ...config.Section) *SettingsModel {
+	return NewWithOptions(Options{ExtraSections: extraSections})
+}
+
+// NewWithOptions creates a settings model with advanced configuration.
+func NewWithOptions(opts Options) *SettingsModel {
 	m := &SettingsModel{
 		NavStyle:             "sidebar",
 		NavShowNumbers:       false,
@@ -281,8 +297,9 @@ func New(extraSections ...config.Section) *SettingsModel {
 		NotificationsPersist: false,
 		CustomKeys:           make(map[string]string),
 		defaultTerminal:      "let_windows",
-		extraSections:        extraSections,
+		extraSections:        opts.ExtraSections,
 		keys:                 DefaultKeys(),
+		opts:                 opts,
 	}
 	if err := m.LoadFromFile(settingsFilePath()); err == nil {
 		m.loadedFromFile = true
@@ -634,43 +651,22 @@ func (m *SettingsModel) buildItems() {
 	},
 	)
 
-	keyOptions := []struct {
-		id    string
-		title string
-		def   string
-	}{
-		{"Quit", "Quit Application", "q,ctrl+c"},
-		{"NextPage", "Next Page", "tab"},
-		{"PreviousPage", "Previous Page", "shift+tab"},
-		{"OpenSettings", "Open Settings", "ctrl+,"},
-		{"ToggleNav", "Toggle Nav", "ctrl+b"},
-		{"ToggleFullHelp", "Toggle Full Help", "ctrl+h"},
-		{"ToggleStatus", "Toggle Status", "ctrl+j"},
-		{"Select", "Select", "enter"},
-		{"Top", "Go to Top", "home"},
-		{"Bottom", "Go to Bottom", "end"},
-		{"Dismiss", "Dismiss Modal", "esc"},
-		{"DismissAll", "Dismiss All Notifications", "d"},
-		{"Debug", "Quick Debug", "ctrl+d"},
-		{"PageDown", "Page Down", "pgdown"},
-		{"PageUp", "Page Up", "pgup"},
-		{"HalfPageDown", "Half Page Down", "ctrl+down"},
-		{"HalfPageUp", "Half Page Up", "ctrl+up"},
-		{"Up", "Up", "up"},
-		{"Down", "Down", "down"},
-		{"Left", "Left", "left"},
-		{"Right", "Right", "right"},
+	var keyOptions []keys.BindingDef
+	if m.opts.DefaultKeys != nil {
+		keyOptions = m.opts.DefaultKeys.BindingDefs()
+	} else {
+		keyOptions = keys.DefaultKeyMap().BindingDefs()
 	}
 
 	for _, kOpt := range keyOptions {
 		// Create a local copy for the closures
 		opt := kOpt
 		addItem("Keybindings", settingItem{
-			title: opt.title,
+			title: opt.Title,
 			value: func() string {
-				val, exists := m.CustomKeys[opt.id]
+				val, exists := m.CustomKeys[opt.ID]
 				if !exists {
-					return opt.def
+					return opt.Def
 				}
 				if val == "" {
 					return "(none)"
@@ -678,9 +674,9 @@ func (m *SettingsModel) buildItems() {
 				return val
 			},
 			buildModel: func() tea.Model {
-				val, exists := m.CustomKeys[opt.id]
+				val, exists := m.CustomKeys[opt.ID]
 				if !exists {
-					val = opt.def
+					val = opt.Def
 				}
 				kr := NewKeyRecorder(val)
 				kr.Validate = func(keys []string) error {
@@ -697,15 +693,16 @@ func (m *SettingsModel) buildItems() {
 					}
 
 					for _, other := range keyOptions {
-						if other.id == opt.id {
+						if other.ID == opt.ID {
 							continue
 						}
-						otherVal, otherExists := m.CustomKeys[other.id]
-						if !otherExists {
-							otherVal = other.def
+						// If the other shortcut has this key mapped, it's a conflict
+						val, exists := m.CustomKeys[other.ID]
+						if !exists {
+							val = other.Def
 						}
 						var otherKeys []string
-						parts := strings.SplitSeq(otherVal, ",")
+						parts := strings.SplitSeq(val, ",")
 						for p := range parts {
 							pTrim := strings.ToLower(strings.TrimSpace(p))
 							if pTrim != "" && pTrim != "(none)" {
@@ -718,7 +715,7 @@ func (m *SettingsModel) buildItems() {
 								continue
 							}
 							if slices.Contains(otherKeys, kNorm) {
-								return fmt.Errorf("key %q is already assigned to %q", k, other.title)
+								return fmt.Errorf("key %q is already assigned to %q", k, other.Title)
 							}
 						}
 					}
@@ -728,7 +725,7 @@ func (m *SettingsModel) buildItems() {
 				return kr
 			},
 			setValue: func(val string) {
-				m.CustomKeys[opt.id] = val
+				m.CustomKeys[opt.ID] = val
 			},
 		})
 	}
@@ -759,6 +756,41 @@ func (m *SettingsModel) buildItems() {
 				}
 			},
 		})
+	}
+
+	if m.opts.Gates != nil {
+		for _, gateDef := range m.opts.Gates.Defs() {
+			gDef := gateDef // capture
+			addItem("Feature Flags", settingItem{
+				title: gDef.Name,
+				value: func() string {
+					if m.opts.Gates.Value(gDef.Name) {
+						return "Enabled"
+					}
+					return "Disabled"
+				},
+				buildForm: func() *huh.Form {
+					opts := []huh.Option[string]{
+						huh.NewOption("Disabled", "false"),
+						huh.NewOption("Enabled", "true"),
+					}
+					valStr := "false"
+					if m.opts.Gates.Value(gDef.Name) {
+						valStr = "true"
+					}
+					return huh.NewForm(huh.NewGroup(
+						huh.NewSelect[string]().
+							Title(gDef.Name).
+							Description(gDef.Description).
+							Options(opts...).
+							Value(&valStr),
+					).WithTheme(theme.HuhThemeFunc()))
+				},
+				setValue: func(val string) {
+					m.opts.Gates.Set(gDef.Name, val == "true")
+				},
+			})
+		}
 	}
 }
 
