@@ -34,6 +34,19 @@ import (
 // DefaultAppName is the fallback application name used when Options.AppName is empty.
 const DefaultAppName = "TUI Base"
 
+const (
+	navStyleTabs   = "tabs"
+	navStyleTopnav = "topnav"
+
+	pageTitleHome     = "Home"
+	pageTitleSettings = "Settings"
+
+	konamiKeyDown  = "down"
+	konamiKeyUp    = "up"
+	konamiKeyLeft  = "left"
+	konamiKeyRight = "right"
+)
+
 // RegisteredPage describes one application page to be added to the router.
 // Only Title and Model are required; the navigation ID is derived automatically
 // from the Title so callers never need to manage IDs separately.
@@ -105,7 +118,7 @@ type Options struct {
 	// When empty the first page in the list is shown.
 	DefaultPage      string
 	InitialLogLevel  string
-	SettingsSections []cfg.Section
+	SettingsSections []cfg.Section[string]
 	KeyMap           *keys.AppKeyMap
 	Gates            *gate.GateRegistry
 }
@@ -297,9 +310,9 @@ func NewWithOptions(opts Options) *RouterModel {
 	// choose nav implementation from persisted settings
 	var nav navigation.Navigator
 	switch settingsModel.NavStyle {
-	case "tabs":
+	case navStyleTabs:
 		nav = navigation.NewTabs()
-	case "topnav":
+	case navStyleTopnav:
 		nav = navigation.NewMinimalTopNav()
 	default:
 		nav = navigation.New()
@@ -378,7 +391,7 @@ func NewWithOptions(opts Options) *RouterModel {
 		_ = m.notifMgr.Load(appConfigDir)
 		defaultPersistPath := filepath.Join(appConfigDir, "notifications.json")
 		m.notifPersistPath = defaultPersistPath
-		// honour the persisted setting: only activate file persistence when enabled
+		// honor the persisted setting: only activate file persistence when enabled
 		if settingsModel.NotificationsPersist {
 			m.notifMgr.SetEnabled(settingsModel.NotificationsEnabled)
 			m.notifMgr.SetPersistPath(defaultPersistPath)
@@ -504,12 +517,13 @@ func (m *RouterModel) replaceAppPages(extraPages []RegisteredPage, activeTitle s
 	}
 
 	if len(pageModels) == 0 {
-		navPages = append(navPages, navigation.Page{ID: "home", Title: "Home"})
+		navPages = append(navPages, navigation.Page{ID: navigation.PageIDHome, Title: pageTitleHome})
 		pageModels = append(pageModels, m.homePage)
 	}
 
-	navPages = append(navPages,
-		navigation.Page{ID: "settings", Title: "Settings"},
+	navPages = append(
+		navPages,
+		navigation.Page{ID: navigation.PageIDSettings, Title: pageTitleSettings},
 	)
 	pageModels = append(pageModels, m.settingsPage)
 
@@ -690,7 +704,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.handleResizeCmd()
 
 	case tea.BackgroundColorMsg:
-		// T-3: terminal reported its background colour on startup (or when the
+		// T-3: terminal reported its background color on startup (or when the
 		// user changes their terminal theme). Auto-switch dark/light mode so the
 		// palette stays readable without a manual tint selection.
 		mode := theme.ThemeModeLight
@@ -725,10 +739,10 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.applyColors()
 			m.startupColorSync = true
-			return m, tea.Batch(m.handleResizeCmd(), m.syncTerminalColorsAfterCmd(20*time.Millisecond))
+			return m, tea.Batch(m.handleResizeCmd(), m.syncTerminalColorsAfterCmd())
 		}
 		m.startupColorSync = true
-		return m, tea.Batch(m.handleResizeCmd(), m.syncTerminalColorsAfterCmd(20*time.Millisecond))
+		return m, tea.Batch(m.handleResizeCmd(), m.syncTerminalColorsAfterCmd())
 
 	case settings.ThemeMsg:
 		// Apply the selected tint globally and refresh the shared colors pointer.
@@ -759,7 +773,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// immediately after a theme change. This avoids temporary re-renders
 		// using an out-of-date width (which can make center vs left-aligned
 		// rendering appear briefly).
-		return m, tea.Batch(m.handleResizeCmd(), m.syncTerminalColorsAfterCmd(20*time.Millisecond))
+		return m, tea.Batch(m.handleResizeCmd(), m.syncTerminalColorsAfterCmd())
 	case tea.KeyPressMsg:
 		keyMsg := msg
 		// Observe the secret key sequence. Intermediate keys are NOT consumed
@@ -781,14 +795,15 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(keyMsg, m.keys.Quit):
 			return m, tea.Quit
 		case key.Matches(keyMsg, m.keys.ToggleNav):
-			if !m.navigationVisible {
+			switch {
+			case !m.navigationVisible:
 				// Hidden, show (unfocused).
 				m.navigationVisible = true
-			} else if !m.sidebarFocused {
+			case !m.sidebarFocused:
 				// Visible, unfocused, focus it so keyboard can navigate.
 				m.sidebarFocused = true
 				m.setNavFocused(true)
-			} else {
+			default:
 				// Visible and focused, hide it and drop focus.
 				m.navigationVisible = false
 				m.sidebarFocused = false
@@ -817,62 +832,8 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// shortcuts (region/focus moves, page-cycling) so every key reaches
 		// the form.
 		if !activeCapturesKeys {
-			_, isSidebar := m.nav.(navigation.Focusable)
-			if isSidebar {
-				// Region focus model for the sidebar (the recommended UX):
-				//   • Up/Down navigate within the sidebar and never move focus
-				//     out of it (handled by the sidebar when focused).
-				//   • Right / Enter / Tab / Shift+Tab move focus to the page.
-				//   • Left / Esc / Tab / Shift+Tab return focus to the sidebar.
-				// Tab/Shift+Tab therefore toggle focus between the two regions
-				// rather than cycling pages (page selection is Up/Down in the
-				// sidebar). Pages that need Left/Esc must implement
-				// KeyCapturer so those keys reach them instead.
-				switch {
-				case msg.Code == tea.KeyRight || msg.Code == tea.KeyEnter || msg.Code == tea.KeyTab || msg.String() == "shift+tab":
-					if m.sidebarFocused {
-						m.sidebarFocused = false
-						m.setNavFocused(false)
-						m.updatePageKeys()
-						return m, m.handleResizeCmd()
-					}
-				case msg.Code == tea.KeyLeft || msg.Code == tea.KeyEscape:
-					if !m.sidebarFocused {
-						m.sidebarFocused = true
-						m.setNavFocused(true)
-						m.updatePageKeys()
-						return m, m.handleResizeCmd()
-					}
-				}
-				// Tab/Shift+Tab while the page is focused return to the sidebar
-				// (the "prev/next region" half not covered above).
-				if !m.sidebarFocused {
-					switch {
-					case key.Matches(keyMsg, m.keys.NextPage), key.Matches(keyMsg, m.keys.PreviousPage):
-						m.sidebarFocused = true
-						m.setNavFocused(true)
-						m.updatePageKeys()
-						return m, m.handleResizeCmd()
-					}
-				}
-				// Up/Down (and Esc while focused) fall through to the sidebar
-				// via the normal key-forwarding path below.
-			} else {
-				// Top-docked nav (tabs / minimal top nav): Tab/Shift+Tab cycle
-				// pages. Number keys 1–9 jump directly only when the user has
-				// enabled "Number Key Select" in Settings (off by default), and
-				// independently of whether the nav shows a number prefix.
-				switch {
-				case key.Matches(keyMsg, m.keys.NextPage):
-					return m, m.cyclePage(1)
-				case key.Matches(keyMsg, m.keys.PreviousPage):
-					return m, m.cyclePage(-1)
-				}
-				if m.navNumberSelect && m.nav != nil && m.nav.Dock() == navigation.DockTop {
-					if i, ok := navDigitIndex(keyMsg); ok && i < len(m.nav.GetPages()) {
-						return m, m.cyclePageTo(i)
-					}
-				}
+			if cmd, handled := m.handleNavKeys(keyMsg); handled {
+				return m, cmd
 			}
 		}
 
@@ -886,7 +847,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.startupColorSync && !m.startupBgSeen {
 			// Fallback path for terminals that don't respond to OSC 11.
 			m.startupColorSync = true
-			return m, tea.Batch(m.handleResizeCmd(), m.syncTerminalColorsAfterCmd(20*time.Millisecond))
+			return m, tea.Batch(m.handleResizeCmd(), m.syncTerminalColorsAfterCmd())
 		}
 		return m, m.handleResizeCmd()
 
@@ -1036,13 +997,13 @@ func (m *RouterModel) navReservedWidth() int {
 	return 0
 }
 
-func (m *RouterModel) inspectorOverlayOuterSize() (int, int) {
-	w := min(max(m.width-6, 40), m.width)
-	h := min(max(m.height-4, 12), m.height)
+func (m *RouterModel) inspectorOverlayOuterSize() (w, h int) {
+	w = min(max(m.width-6, 40), m.width)
+	h = min(max(m.height-4, 12), m.height)
 	return max(w, 1), max(h, 1)
 }
 
-func (m *RouterModel) inspectorOverlayInnerSize() (int, int) {
+func (m *RouterModel) inspectorOverlayInnerSize() (w, h int) {
 	ow, oh := m.inspectorOverlayOuterSize()
 	return max(ow-2, 1), max(oh-2, 1)
 }
@@ -1101,7 +1062,7 @@ func (m *RouterModel) StatusBarContent() (string, bool) {
 // konamiSequence is the classic cheat code. Completing it triggers the hidden
 // "secret menu" — for now just a fun notification; games or other surprises may
 // live here later.
-var konamiSequence = []string{"up", "up", "down", "down", "left", "right", "left", "right", "b", "a"}
+var konamiSequence = []string{konamiKeyUp, konamiKeyUp, konamiKeyDown, konamiKeyDown, konamiKeyLeft, konamiKeyRight, konamiKeyLeft, konamiKeyRight, "b", "a"}
 
 var konamiMessages = []string{
 	"🕹️  Konami code accepted! 30 extra lives… just kidding. (Secret menu coming soon.)",
@@ -1238,7 +1199,7 @@ func (m *RouterModel) View() tea.View {
 	//
 	// Background must be explicit: over SSH, OSC 11 (v.BackgroundColor) is often
 	// stripped, so any unstyled padding rows would expose the terminal's own
-	// default background (typically black) instead of the theme colour.
+	// default background (typically black) instead of the theme color.
 	mainHeight := max(m.height-statusHeight, 0)
 	layout = lipgloss.NewStyle().
 		Background(m.colors.Styles.TextOnBg.GetBackground()).
@@ -1324,37 +1285,8 @@ func (m *RouterModel) View() tea.View {
 		mainHeight := max(m.height-statusHeight, 0)
 
 		// route based on nav layout
-		if m.navigationVisible && m.nav != nil {
-			mmPos := mm.Mouse()
-			if m.nav.Dock() == navigation.DockLeft {
-				navW := m.nav.Width()
-				if mmPos.Y < mainHeight {
-					if mmPos.X < navW {
-						return route(navView, 0, 0, "sidebar")
-					}
-					// Content area click: release nav keyboard focus so the border
-					// and highlight reset immediately on the next render.
-					if m.sidebarFocused {
-						m.sidebarFocused = false
-						m.setNavFocused(false)
-					}
-					return route(activePageView, navW, 0, "content")
-				}
-			} else {
-				navH := m.nav.Height()
-				if mmPos.Y < navH {
-					return route(navView, 0, 0, "tabs")
-				}
-				if mmPos.Y < mainHeight {
-					return route(activePageView, 0, navH, "content")
-				}
-			}
-		} else {
-			// nav hidden -> content occupies main area
-			mmPos := mm.Mouse()
-			if mmPos.Y < mainHeight {
-				return route(activePageView, 0, 0, "content")
-			}
+		if cmd := m.routeMouseToNav(mm, mainHeight, navView, activePageView, route); cmd != nil {
+			return cmd
 		}
 
 		// status area (at bottom) — delegate entirely to the status view's own
@@ -1371,6 +1303,115 @@ func (m *RouterModel) View() tea.View {
 	return v
 }
 
+type routeFn func(child tea.View, offX, offY int, childName string) tea.Cmd
+
+func (m *RouterModel) routeMouseToNav(mm tea.MouseMsg, mainHeight int, navView, activePageView tea.View, route routeFn) tea.Cmd {
+	if m.navigationVisible && m.nav != nil {
+		return m.routeMouseWithNavVisible(mm, mainHeight, navView, activePageView, route)
+	}
+	// nav hidden -> content occupies main area
+	mmPos := mm.Mouse()
+	if mmPos.Y < mainHeight {
+		return route(activePageView, 0, 0, "content")
+	}
+	return nil
+}
+
+func (m *RouterModel) routeMouseWithNavVisible(mm tea.MouseMsg, mainHeight int, navView, activePageView tea.View, route routeFn) tea.Cmd {
+	mmPos := mm.Mouse()
+	if m.nav.Dock() == navigation.DockLeft {
+		navW := m.nav.Width()
+		if mmPos.Y >= mainHeight {
+			return nil
+		}
+		if mmPos.X < navW {
+			return route(navView, 0, 0, "sidebar")
+		}
+		// Content area click: release nav keyboard focus so the border
+		// and highlight reset immediately on the next render.
+		if m.sidebarFocused {
+			m.sidebarFocused = false
+			m.setNavFocused(false)
+		}
+		return route(activePageView, navW, 0, "content")
+	}
+	navH := m.nav.Height()
+	if mmPos.Y < navH {
+		return route(navView, 0, 0, "tabs")
+	}
+	if mmPos.Y < mainHeight {
+		return route(activePageView, 0, navH, "content")
+	}
+	return nil
+}
+
+func (m *RouterModel) handleNavKeys(keyMsg tea.KeyPressMsg) (tea.Cmd, bool) {
+	_, isSidebar := m.nav.(navigation.Focusable)
+	if isSidebar {
+		return m.handleSidebarNavKey(keyMsg)
+	}
+	// Top-docked nav (tabs / minimal top nav): Tab/Shift+Tab cycle
+	// pages. Number keys 1–9 jump directly only when the user has
+	// enabled "Number Key Select" in Settings (off by default), and
+	// independently of whether the nav shows a number prefix.
+	switch {
+	case key.Matches(keyMsg, m.keys.NextPage):
+		return m.cyclePage(1), true
+	case key.Matches(keyMsg, m.keys.PreviousPage):
+		return m.cyclePage(-1), true
+	}
+	if m.navNumberSelect && m.nav != nil && m.nav.Dock() == navigation.DockTop {
+		if i, ok := navDigitIndex(keyMsg); ok && i < len(m.nav.GetPages()) {
+			return m.cyclePageTo(i), true
+		}
+	}
+	return nil, false
+}
+
+// handleSidebarNavKey handles key events when the active nav is a sidebar
+// (implements navigation.Focusable). It manages focus transitions between the
+// sidebar region and the page region without cycling pages via Tab/Shift+Tab.
+func (m *RouterModel) handleSidebarNavKey(keyMsg tea.KeyPressMsg) (tea.Cmd, bool) {
+	// Region focus model for the sidebar (the recommended UX):
+	//   • Up/Down navigate within the sidebar and never move focus
+	//     out of it (handled by the sidebar when focused).
+	//   • Right / Enter / Tab / Shift+Tab move focus to the page.
+	//   • Left / Esc / Tab / Shift+Tab return focus to the sidebar.
+	// Tab/Shift+Tab therefore toggle focus between the two regions
+	// rather than cycling pages (page selection is Up/Down in the
+	// sidebar). Pages that need Left/Esc must implement
+	// KeyCapturer so those keys reach them instead.
+	switch {
+	case keyMsg.Code == tea.KeyRight || keyMsg.Code == tea.KeyEnter || keyMsg.Code == tea.KeyTab || keyMsg.String() == "shift+tab":
+		if m.sidebarFocused {
+			m.sidebarFocused = false
+			m.setNavFocused(false)
+			m.updatePageKeys()
+			return m.handleResizeCmd(), true
+		}
+	case keyMsg.Code == tea.KeyLeft || keyMsg.Code == tea.KeyEscape:
+		if !m.sidebarFocused {
+			m.sidebarFocused = true
+			m.setNavFocused(true)
+			m.updatePageKeys()
+			return m.handleResizeCmd(), true
+		}
+	}
+	// Tab/Shift+Tab while the page is focused return to the sidebar
+	// (the "prev/next region" half not covered above).
+	if !m.sidebarFocused {
+		if key.Matches(keyMsg, m.keys.NextPage) || key.Matches(keyMsg, m.keys.PreviousPage) {
+			m.sidebarFocused = true
+			m.setNavFocused(true)
+			m.updatePageKeys()
+			return m.handleResizeCmd(), true
+		}
+	}
+	// Up/Down (and Esc while focused) fall through to the sidebar
+	// via the normal key-forwarding path below.
+	return nil, false
+}
+
 // syncTerminalColorsCmd force-applies terminal default foreground/background
 // colors via OSC, even when the renderer thinks the values are unchanged.
 // This keeps terminal frame/tab edge colors in sync with the active theme.
@@ -1381,8 +1422,8 @@ func (m *RouterModel) syncTerminalColorsCmd() tea.Cmd {
 	return tea.Raw(seq)
 }
 
-func (m *RouterModel) syncTerminalColorsAfterCmd(delay time.Duration) tea.Cmd {
-	return tea.Tick(delay, func(time.Time) tea.Msg {
+func (m *RouterModel) syncTerminalColorsAfterCmd() tea.Cmd {
+	return tea.Tick(20*time.Millisecond, func(time.Time) tea.Msg {
 		return syncTerminalColorsMsg{}
 	})
 }

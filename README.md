@@ -88,7 +88,7 @@ go install golang.org/x/vuln/cmd/govulncheck@latest
 ```
 
 - Build baseline:
-  - `go build -o tui_base_test_build.exe . && rm tui_base_test_build.exe`
+  - `go build -o tui_base_test_build . && rm -f tui_base_test_build tui_base_test_build.exe`
 - Run tests:
   - `go test ./... -v`
 - Run race tests:

@@ -11,7 +11,7 @@ func TestTabsBounds(t *testing.T) {
 	tabs := NewTabs()
 
 	// Create "more tabs than can fit on the screen"
-	var pages []Page
+	pages := make([]Page, 0, 20)
 	for i := range 20 {
 		pages = append(pages, Page{ID: fmt.Sprintf("tab%d", i), Title: fmt.Sprintf("Tab %d", i)})
 	}

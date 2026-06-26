@@ -3,6 +3,8 @@
 package settings
 
 import (
+	"errors"
+
 	"github.com/jarvisfriends/tui-base/logging"
 	"golang.org/x/sys/windows/registry"
 )
@@ -13,8 +15,8 @@ import (
 func detectDefaultTerminal() (string, error) {
 	k, err := registry.OpenKey(registry.CURRENT_USER, `Console\\%%Startup`, registry.QUERY_VALUE)
 	if err != nil {
-		if err == registry.ErrNotExist {
-			return "let_windows", nil
+		if errors.Is(err, registry.ErrNotExist) {
+			return defTerminalLetWindows, nil
 		}
 		return "", err
 	}
@@ -26,16 +28,16 @@ func detectDefaultTerminal() (string, error) {
 
 	consoleGUID, _, err := k.GetStringValue("DelegationConsole")
 	if err != nil {
-		consoleGUID = "{00000000-0000-0000-0000-000000000000}"
+		consoleGUID = blankGUID
 	}
 	terminalGUID, _, err := k.GetStringValue("DelegationTerminal")
 	if err != nil {
-		terminalGUID = "{00000000-0000-0000-0000-000000000000}"
+		terminalGUID = blankGUID
 	}
 
 	switch {
-	case consoleGUID == "{00000000-0000-0000-0000-000000000000}" && terminalGUID == "{00000000-0000-0000-0000-000000000000}":
-		return "let_windows", nil
+	case consoleGUID == blankGUID && terminalGUID == blankGUID:
+		return defTerminalLetWindows, nil
 	case consoleGUID == "{B23D10C0-E52E-411E-9D5B-C09FDF709C7D}" && terminalGUID == "{B23D10C0-E52E-411E-9D5B-C09FDF709C7D}":
 		return "classic", nil
 	case consoleGUID == "{2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69}" && terminalGUID == "{E12CFF52-A866-4C77-9A90-F570A7AA2C6B}":

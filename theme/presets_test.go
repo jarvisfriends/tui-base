@@ -21,7 +21,8 @@ func TestStylePresetsPreserveStructureAndApplyColor(t *testing.T) {
 		for _, isDark := range []bool{true, false} {
 			s := BuildHuhStyles(app, p, isDark)
 			if s == nil {
-				t.Fatalf("preset %s isDark=%v: nil styles", p, isDark)
+				t.Errorf("preset %s isDark=%v: nil styles", p, isDark)
+				continue
 			}
 
 			// Structure survives the overlay: the raw glyph (set-string, which is

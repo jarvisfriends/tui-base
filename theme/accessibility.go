@@ -35,10 +35,9 @@ var cvdMatrices = [...][3][3]float64{
 	},
 }
 
-// colorPairsFromSimple generates color pairs from simple ANSI color codes.
-// Used as a fallback when no theme is available.
-func colorPairsFromSimple(fgCode, bgCode string) []ColorPair {
-	bg := lipgloss.Color(bgCode)
+// colorPairsFromSimple generates color pairs for the fallback dark-terminal palette.
+func colorPairsFromSimple() []ColorPair {
+	bg := lipgloss.Color("235")
 	return []ColorPair{
 		{Name: "Black", Fg: lipgloss.Color("16"), Bg: bg},
 		{Name: "Red", Fg: lipgloss.Color("1"), Bg: bg},
@@ -63,13 +62,14 @@ func colorPairsFromSimple(fgCode, bgCode string) []ColorPair {
 // If adjustForAccess is true, colors are adjusted to improve accessibility.
 func colorPairsFromTint(t *tint.Tint, adjustForAccess bool) []ColorPair {
 	if t == nil {
-		return colorPairsFromSimple("250", "235")
+		return colorPairsFromSimple()
 	}
 
 	var pairs []ColorPair
 	if t.Bg != nil {
 		bg := lipgloss.Color(t.Bg.Hex())
-		pairs = append(pairs,
+		pairs = append(
+			pairs,
 			ColorPair{Name: "Black", Fg: col(t.Black, "16"), Bg: bg},
 			ColorPair{Name: "Red", Fg: col(t.Red, "1"), Bg: bg},
 			ColorPair{Name: "Green", Fg: col(t.Green, "2"), Bg: bg},
@@ -90,7 +90,8 @@ func colorPairsFromTint(t *tint.Tint, adjustForAccess bool) []ColorPair {
 	}
 	if t.SelectionBg != nil {
 		bg := lipgloss.Color(t.SelectionBg.Hex())
-		pairs = append(pairs,
+		pairs = append(
+			pairs,
 			ColorPair{Name: "Select Black", Fg: col(t.Black, "16"), Bg: bg},
 			ColorPair{Name: "Select Red", Fg: col(t.Red, "1"), Bg: bg},
 			ColorPair{Name: "Select Green", Fg: col(t.Green, "2"), Bg: bg},
@@ -176,7 +177,7 @@ func tryAdjustForAccess(fgColor, bgColor color.Color) color.Color {
 		// Need adjustment.
 		suggested := suggestAccessibleForeground(fgC, bgC, minContrast, minCVDistance, minCVContrast)
 		if suggested != nil && !almostEqualColor(*suggested, fgC) {
-			return lipgloss.Color((*suggested).Hex())
+			return lipgloss.Color(suggested.Hex())
 		}
 	}
 

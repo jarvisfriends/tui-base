@@ -39,7 +39,7 @@ router/              — root model; owns nav, pages, status, colors; dispatches
 navigation/          — Navigator interface + Sidebar and Tabs implementations
 pages/
   home/              — placeholder home page
-  inspector/         — inspector: message log + mouse highlight (candidate: bubbleinspector)
+  inspector/         — inspector: message log + mouse highlight + debug overlay (Ctrl+D)
   settings/          — three-pane settings: Layout | Log | Theme
 keys/                — AppKeyMap with all global key bindings
 status/              — themed status bar with click regions (candidate: bubblestatus)
@@ -48,6 +48,38 @@ theme/               — AppColors struct + Active() + style helpers
 logging/             — file-backed runtime logger with subscriber fan-out
 common/              — shared types (currently minimal)
 ```
+
+---
+
+## Debug Overlay (Ctrl+D)
+
+The **inspector** is a built-in debug overlay accessible via **Ctrl+D** from any page. It displays 7 tabs:
+
+1. **Runtime** — Goroutines, memory (heap/stack/GC), CPU%, GC frequency, uptime, allocation rate
+2. **Input** — Last mouse click/release/motion, last key press/release with modifiers
+3. **Disks** — Drive usage, free space per mount point
+4. **Terminal** — TERM, SSH status, color profile, background color, binary size, uptime
+5. **Accessibility** — Screen reader detection (WinScreen, NVDA, JAWS, etc.)
+6. **Log** — Application log messages (INFO/WARN/ERROR), searchable, filterable to WARN+
+7. **Settings** — pprof server control (enable/disable, set address), CPU/heap profile capture, output directory
+
+### Inspector Architecture
+
+**Key files:**
+- `pages/inspector/debug.go` — Main inspector model, tab rendering, refresh loop (statsTickMsg)
+- `pages/inspector/render_sections.go` — Row builders for each tab (buildRuntimeRows, buildInputRows, etc.)
+- `pages/inspector/disk_windows.go` / `disk_unix.go` — Platform-specific disk stats
+- `router/overlay.go` — Overlay lifecycle: ToggleVisible, hit-testing, key/mouse routing
+
+**Metrics collection:**
+- `runtimeStatsSnapshot` struct (line ~924 in debug.go) captures all Go runtime metrics
+- `collectSnapshot(startTime)` reads runtime.MemStats, goroutines, GC stats, disks
+- Refresh loop runs on ~1 Hz cadence via `statsTickMsg`; color-codes thresholds (warn/crit)
+
+**Custom metrics extension:**
+See `.agent/INSPECTOR_EXTENSION_GUIDE.md` for how consuming apps can add custom tabs or metrics.
+
+---
 
 ---
 

@@ -27,6 +27,52 @@
       "program": "${workspaceFolder}",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal"
+    },
+    {
+      "name": "Debug (Delve, race detector)",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "buildFlags": "-race",
+      "env": {
+        "CGO_ENABLED": "1"
+      }
+    },
+    {
+      "name": "Debug Test (current file)",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${fileDirname}",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "buildFlags": "-race",
+      "env": {
+        "CGO_ENABLED": "1",
+        "TERM": "xterm-256color"
+      }
+    },
+    {
+      "name": "Debug Test (current file, no race)",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${fileDirname}",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": {
+        "TERM": "xterm-256color"
+      }
+    },
+    {
+      "name": "Attach to Process",
+      "type": "go",
+      "request": "attach",
+      "mode": "local",
+      "processId": "${command:pickProcess}"
     }
   ]
 }

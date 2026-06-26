@@ -1,6 +1,7 @@
 package status
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -12,8 +13,9 @@ import (
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
-func init() {
+func TestMain(m *testing.M) {
 	tint.NewDefaultRegistry()
+	os.Exit(m.Run())
 }
 
 func TestInfoModal_Lifecycle(t *testing.T) {
@@ -110,7 +112,10 @@ func TestInfoModal_UpdateKeys(t *testing.T) {
 	if _, ok := msg.(CloseInfoModalMsg); !ok {
 		t.Errorf("expected CloseInfoModalMsg, got %T", msg)
 	}
-	updated := m.(*InfoModal)
+	updated, ok := m.(*InfoModal)
+	if !ok {
+		t.Fatalf("expected *InfoModal, got %T", m)
+	}
 	if updated.IsVisible() {
 		t.Error("expected modal closed after Esc")
 	}

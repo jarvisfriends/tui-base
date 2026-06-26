@@ -79,23 +79,24 @@ func TestMouseSelectionUpdatesActiveIndexAndEmitsMsg(t *testing.T) {
 
 	for i, page := range m.Pages {
 		for y, line := range lines {
-			if strings.Contains(line, page.Title) {
-				cmd := v.OnMouse(tea.MouseReleaseMsg{X: 0, Y: y, Button: tea.MouseLeft})
-				if cmd == nil {
-					t.Fatalf("OnMouse returned nil cmd for page %s at y=%d", page.Title, y)
-				}
-				sel, ok := extractSelected(cmd)
-				if !ok {
-					t.Fatalf("expected SelectedMsg from OnMouse, got %T", cmd())
-				}
-				if sel.PageIndex != i {
-					t.Fatalf("SelectedMsg.PageIndex = %d; want %d", sel.PageIndex, i)
-				}
-				if m.ActiveIndex != i {
-					t.Fatalf("model ActiveIndex = %d; want %d", m.ActiveIndex, i)
-				}
-				return
+			if !strings.Contains(line, page.Title) {
+				continue
 			}
+			cmd := v.OnMouse(tea.MouseReleaseMsg{X: 0, Y: y, Button: tea.MouseLeft})
+			if cmd == nil {
+				t.Fatalf("OnMouse returned nil cmd for page %s at y=%d", page.Title, y)
+			}
+			sel, ok := extractSelected(cmd)
+			if !ok {
+				t.Fatalf("expected SelectedMsg from OnMouse, got %T", cmd())
+			}
+			if sel.PageIndex != i {
+				t.Fatalf("SelectedMsg.PageIndex = %d; want %d", sel.PageIndex, i)
+			}
+			if m.ActiveIndex != i {
+				t.Fatalf("model ActiveIndex = %d; want %d", m.ActiveIndex, i)
+			}
+			return
 		}
 	}
 

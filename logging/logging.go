@@ -1,12 +1,18 @@
 package logging
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+)
+
+const (
+	logLevelInfo  = "INFO"
+	logLevelError = "ERROR"
 )
 
 // Subscriber is called for each log entry so other parts of the app (like the
@@ -32,16 +38,16 @@ var (
 	// minLevel is the minimum accepted log level: DEBUG=0, INFO=1, WARN=2, ERROR=3
 	minLevel       = 3
 	levelNameToInt = map[string]int{
-		"DEBUG": 0,
-		"INFO":  1,
-		"WARN":  2,
-		"ERROR": 3,
+		"DEBUG":       0,
+		logLevelInfo:  1,
+		"WARN":        2,
+		logLevelError: 3,
 	}
 	levelIntToName = map[int]string{
 		0: "DEBUG",
-		1: "INFO",
+		1: logLevelInfo,
 		2: "WARN",
-		3: "ERROR",
+		3: logLevelError,
 	}
 )
 
@@ -85,31 +91,31 @@ func InitFromSettings(logOutputMode, logPath string) (string, error) {
 	switch logOutputMode {
 	case "dir":
 		if logPath == "" {
-			return "", fmt.Errorf("log directory not provided")
+			return "", errors.New("log directory not provided")
 		}
-		if err := os.MkdirAll(logPath, 0o755); err != nil {
+		if err := os.MkdirAll(logPath, 0o750); err != nil {
 			return "", err
 		}
 		target = filepath.Join(logPath, fmt.Sprintf("%s-%s.log", currentAppName, time.Now().Format("20060102-150405")))
 	case "file":
 		if logPath == "" {
-			return "", fmt.Errorf("log file path not provided")
+			return "", errors.New("log file path not provided")
 		}
 		// ensure parent dir exists
-		if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(logPath), 0o750); err != nil {
 			return "", err
 		}
 		target = logPath
 	default:
 		// default: temp dir
 		dir := filepath.Join(os.TempDir(), currentAppName+"-logs")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
 			return "", err
 		}
 		target = filepath.Join(dir, fmt.Sprintf("%s-%s.log", currentAppName, time.Now().Format("20060102-150405")))
 	}
 
-	f, err := os.OpenFile(target, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(filepath.Clean(target), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", err
 	}
@@ -122,13 +128,16 @@ func InitFromSettings(logOutputMode, logPath string) (string, error) {
 	}
 	// initial info (write directly to file)
 	writeMu.Lock()
+	if outFile != nil {
+		_ = outFile.Close() // close previous handle before replacing
+	}
 	outFile = f
 	logTarget = target
 	curLogBytes = initBytes
 	n, _ := fmt.Fprintf(outFile, "%s [INFO] Logging initialized; file=%s\n", time.Now().Format(time.RFC3339), target)
 	curLogBytes += int64(n)
 	writeMu.Unlock()
-	notify("INFO", time.Now(), fmt.Sprintf("Logging initialized; file=%s", target))
+	notify(logLevelInfo, time.Now(), "Logging initialized; file="+target)
 	return target, nil
 }
 
@@ -152,7 +161,7 @@ func rotateIfNeededLocked() {
 	rotated := logTarget + ".1"
 	_ = os.Remove(rotated) // discard the previous rotation, if any
 	_ = os.Rename(logTarget, rotated)
-	f, err := os.OpenFile(logTarget, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(filepath.Clean(logTarget), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		outFile = nil // degrade to subscribers-only until the next InitFromSettings
 		return
@@ -187,10 +196,10 @@ func writeLog(level, format string, args ...any) {
 func Debugf(format string, args ...any) { writeLog("DEBUG", format, args...) }
 
 // Infof logs an info line and notifies subscribers.
-func Infof(format string, args ...any) { writeLog("INFO", format, args...) }
+func Infof(format string, args ...any) { writeLog(logLevelInfo, format, args...) }
 
 // Errorf logs an error line and notifies subscribers.
-func Errorf(format string, args ...any) { writeLog("ERROR", format, args...) }
+func Errorf(format string, args ...any) { writeLog(logLevelError, format, args...) }
 
 // Warnf logs a warning line and notifies subscribers.
 func Warnf(format string, args ...any) { writeLog("WARN", format, args...) }
@@ -216,7 +225,7 @@ func GetLevel() string {
 	if name, ok := levelIntToName[minLevel]; ok {
 		return name
 	}
-	return "INFO"
+	return logLevelInfo
 }
 
 // CurrentLogFile returns the path to the currently open log file, if any.

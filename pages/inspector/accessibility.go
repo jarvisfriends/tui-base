@@ -280,7 +280,6 @@ func (p *AccessibilityPanel) View() tea.View {
 	muted := c.Styles.Subtitle
 	good := c.Styles.Success
 	bad := c.Styles.Error
-	selStyle := c.Styles.SelectedItem
 	divider := strings.Repeat("─", min(p.width, 80))
 
 	checkbox := func(on bool, key, label string) string {
@@ -291,11 +290,13 @@ func (p *AccessibilityPanel) View() tea.View {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s  %s\n",
+	fmt.Fprintf(
+		&b, "%s  %s\n",
 		accent.Render("COLOR ACCESSIBILITY BROWSER"),
 		muted.Render("[←/→] switch tab  [↑↓] navigate  [enter] apply theme"),
 	)
-	fmt.Fprintf(&b, "%s   %s    %s   %s   %s\n",
+	fmt.Fprintf(
+		&b, "%s   %s    %s   %s   %s\n",
 		checkbox(p.showDark, "d", "Dark"),
 		checkbox(p.showLight, "l", "Light"),
 		checkbox(p.cvd[0], "1", acvdNames[0]),
@@ -331,7 +332,7 @@ func (p *AccessibilityPanel) View() tea.View {
 				cvdBadges[j] = good.Render(letter + "✓")
 			}
 		}
-		badges := normBadge + " " + strings.Join(cvdBadges[:], " ")
+		badges := normBadge + " " + strings.Join(cvdBadges, " ")
 
 		// Theme name rendered with its own fg/bg for a live swatch effect.
 		darkIcon := "☾"
@@ -349,47 +350,56 @@ func (p *AccessibilityPanel) View() tea.View {
 		row := name + "  " + badges
 
 		if vi == p.cursor {
-			// Highlight selected row, then show issue details and color palette beneath it.
-			fmt.Fprintf(&b, "▶ %s\n", selStyle.Render(row))
-
-			// Show accessibility issues
-			for _, issue := range e.issues {
-				fmt.Fprint(&b, muted.Render("  ↳ "+issue.pair+": "), bad.Render(issue.reason))
-				if issue.suggestedFg != nil {
-					oldStyle := c.Styles.SwatchDot.Background(issue.Bg).Foreground(issue.oldFg)
-					sugStyle := c.Styles.SwatchDot.Background(issue.Bg).Foreground(issue.suggestedFg)
-					fmt.Fprint(&b, "  → ", " ", good.Render(issue.suggestedFgHex), oldStyle.Render(" (original)"), sugStyle.Render(" (suggested)"))
-				}
-				b.WriteString("\n")
-			}
-
-			// Show color palette if we have color pairs
-			if len(e.colorPairsOrig) > 0 {
-				b.WriteString(muted.Render("  Orig colors:  "))
-				for i, pair := range e.colorPairsOrig {
-					if i%8 == 0 {
-						b.WriteString(" ") // separator between fg/bg groups
-					}
-					pairStyle := c.Styles.SwatchDot.Background(pair.Bg).Foreground(pair.Fg)
-					b.WriteString(pairStyle.Render("●"))
-				}
-				b.WriteString("\n")
-
-				b.WriteString(muted.Render("  Accessible:   "))
-				for i, pair := range e.colorPairsAccess {
-					if i%8 == 0 {
-						b.WriteString(" ") // separator between fg/bg groups
-					}
-					pairStyle := c.Styles.SwatchDot.Background(pair.Bg).Foreground(pair.Fg)
-					b.WriteString(pairStyle.Render("●"))
-				}
-				b.WriteString("\n")
-			}
+			p.writeSelectedRow(&b, c, e, row)
 		} else {
 			fmt.Fprintf(&b, "  %s\n", row)
 		}
 	}
 	return tea.NewView(b.String())
+}
+
+func (p *AccessibilityPanel) writeSelectedRow(b *strings.Builder, c *theme.AppStyle, e acEntry, row string) {
+	muted := c.Styles.Subtitle
+	bad := c.Styles.Error
+	good := c.Styles.Success
+	selStyle := c.Styles.SelectedItem
+
+	// Highlight selected row, then show issue details and color palette beneath it.
+	fmt.Fprintf(b, "▶ %s\n", selStyle.Render(row))
+
+	// Show accessibility issues
+	for _, issue := range e.issues {
+		fmt.Fprint(b, muted.Render("  ↳ "+issue.pair+": "), bad.Render(issue.reason))
+		if issue.suggestedFg != nil {
+			oldStyle := c.Styles.SwatchDot.Background(issue.Bg).Foreground(issue.oldFg)
+			sugStyle := c.Styles.SwatchDot.Background(issue.Bg).Foreground(issue.suggestedFg)
+			fmt.Fprint(b, "  → ", " ", good.Render(issue.suggestedFgHex), oldStyle.Render(" (original)"), sugStyle.Render(" (suggested)"))
+		}
+		b.WriteString("\n")
+	}
+
+	// Show color palette if we have color pairs
+	if len(e.colorPairsOrig) > 0 {
+		b.WriteString(muted.Render("  Orig colors:  "))
+		for i, pair := range e.colorPairsOrig {
+			if i%8 == 0 {
+				b.WriteString(" ") // separator between fg/bg groups
+			}
+			pairStyle := c.Styles.SwatchDot.Background(pair.Bg).Foreground(pair.Fg)
+			b.WriteString(pairStyle.Render("●"))
+		}
+		b.WriteString("\n")
+
+		b.WriteString(muted.Render("  Accessible:   "))
+		for i, pair := range e.colorPairsAccess {
+			if i%8 == 0 {
+				b.WriteString(" ") // separator between fg/bg groups
+			}
+			pairStyle := c.Styles.SwatchDot.Background(pair.Bg).Foreground(pair.Fg)
+			b.WriteString(pairStyle.Render("●"))
+		}
+		b.WriteString("\n")
+	}
 }
 
 // ── Computation ──────────────────────────────────────────────────────────────

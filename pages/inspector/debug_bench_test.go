@@ -16,8 +16,8 @@ func BenchmarkDebugViewWithLogs(b *testing.B) {
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 40})
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = m.View().Content
 	}
 }

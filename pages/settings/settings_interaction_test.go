@@ -10,7 +10,7 @@ import (
 func TestOverviewEnterStartsEditOnKeyPress(t *testing.T) {
 	t.Parallel()
 
-	m := New()
+	m := NewWithOptions(Options{})
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 16})
 	if len(m.items) == 0 {
 		t.Fatal("expected built-in settings items")
@@ -29,7 +29,7 @@ func TestOverviewEnterStartsEditOnKeyPress(t *testing.T) {
 func TestOverviewMouseWheelMovesCursorAndScrollWindow(t *testing.T) {
 	t.Parallel()
 
-	m := New()
+	m := NewWithOptions(Options{})
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 8})
 	if len(m.items) < 4 {
 		t.Fatalf("expected enough settings rows for scrolling; got %d", len(m.items))
@@ -60,7 +60,7 @@ func TestOverviewMouseWheelMovesCursorAndScrollWindow(t *testing.T) {
 func TestSettingsOverviewHasCategories(t *testing.T) {
 	t.Parallel()
 
-	m := New()
+	m := NewWithOptions(Options{})
 	if len(m.categories) == 0 {
 		t.Fatal("expected built-in settings categories")
 	}
@@ -77,7 +77,7 @@ func TestSettingsOverviewHasCategories(t *testing.T) {
 func TestPreferredColumnWidthIgnoresLogPathLength(t *testing.T) {
 	t.Parallel()
 
-	m := New()
+	m := NewWithOptions(Options{})
 	base := m.preferredColumnWidth()
 	m.LogPath = strings.Repeat("x", 1024)
 	after := m.preferredColumnWidth()
@@ -90,7 +90,7 @@ func TestPreferredColumnWidthIgnoresLogPathLength(t *testing.T) {
 func TestWideViewportUsesMultipleColumns(t *testing.T) {
 	t.Parallel()
 
-	m := New()
+	m := NewWithOptions(Options{})
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 220, Height: 20})
 	layout := m.overviewLayout()
 	if layout.columns < 2 {
@@ -101,7 +101,7 @@ func TestWideViewportUsesMultipleColumns(t *testing.T) {
 func TestScrollKeepsCursorVisible(t *testing.T) {
 	t.Parallel()
 
-	m := New()
+	m := NewWithOptions(Options{})
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 7})
 
 	m.cursor = len(m.items) - 1
@@ -119,7 +119,7 @@ func TestScrollKeepsCursorVisible(t *testing.T) {
 func TestShortAndFullHelp(t *testing.T) {
 	t.Parallel()
 
-	m := New()
+	m := NewWithOptions(Options{})
 	if len(m.ShortHelp()) == 0 {
 		t.Fatal("expected short help bindings")
 	}
@@ -140,7 +140,7 @@ func TestShortAndFullHelp(t *testing.T) {
 func TestKeyRecorderValidation(t *testing.T) {
 	t.Parallel()
 
-	m := New()
+	m := NewWithOptions(Options{})
 	var quitItem *settingItem
 	var nextPageItem *settingItem
 	for i, item := range m.items {
@@ -154,6 +154,7 @@ func TestKeyRecorderValidation(t *testing.T) {
 
 	if quitItem == nil || nextPageItem == nil {
 		t.Fatal("expected 'Quit Application' and 'Next Page' settings items")
+		return
 	}
 
 	model := quitItem.buildModel()
@@ -182,7 +183,7 @@ func TestKeyRecorderValidation(t *testing.T) {
 		t.Fatalf("expected error message to contain 'duplicate key', got %q", kr.Error)
 	}
 
-	_, _ = kr.Update(tea.KeyPressMsg{Text: "ctrl+s"})
+	_, _ = kr.Update(tea.KeyPressMsg{Text: keyCtrlS})
 	if kr.Done {
 		t.Fatal("expected Done to be false when there is a validation error")
 	}
@@ -204,7 +205,7 @@ func TestKeyRecorderValidation(t *testing.T) {
 		t.Fatalf("expected error message to contain 'already assigned to', got %q", krNP.Error)
 	}
 
-	_, _ = krNP.Update(tea.KeyPressMsg{Text: "ctrl+s"})
+	_, _ = krNP.Update(tea.KeyPressMsg{Text: keyCtrlS})
 	if krNP.Done {
 		t.Fatal("expected Done to be false when there is a conflict")
 	}
@@ -225,7 +226,7 @@ func TestKeyRecorderValidation(t *testing.T) {
 		t.Fatalf("expected no error for non-conflicting key, got %q", krNP.Error)
 	}
 
-	_, _ = krNP.Update(tea.KeyPressMsg{Text: "ctrl+s"})
+	_, _ = krNP.Update(tea.KeyPressMsg{Text: keyCtrlS})
 	if !krNP.Done {
 		t.Fatal("expected Done to be true when saving non-conflicting key")
 	}

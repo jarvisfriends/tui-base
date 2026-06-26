@@ -60,19 +60,21 @@ Pattern:
 
 1. Emit `notifications.AddMsg{Key, Pending: true, TTL: ..., Content: ...}`.
 2. Register a router overlay for the actual prompt UI.
-3. Handle `notifications.ActivateMsg` to open that overlay when the user selects the pending item from 
+3. Handle `notifications.ActivateMsg` to open that overlay when the user selects the pending item from
    notification history.
-4. On resolve, emit `notifications.DismissMsg` or `notifications.DismissKeyMsg` and persist whatever decision 
+4. On resolve, emit `notifications.DismissMsg` or `notifications.DismissKeyMsg` and persist whatever decision
    hash/state prevents repeated prompts.
 
-The status bar bell automatically shows the pending count, while the toast can expire independently of the item 
+The status bar bell automatically shows the pending count, while the toast can expire independently of the item
 remaining selectable in history.
 
 ## 7. Add a New Page Safely
 
 Checklist:
 
-1. Implement page model (`Init`, `Update`, `View`).
+1. Implement page model (`Init() tea.Cmd`, `Update(tea.Msg) (tea.Model, tea.Cmd)`, `View() tea.View`).
+   - **Note on Bubble Tea v2**: Ensure `Init` returns just `tea.Cmd` (not the model)
+   - and `View` returns `tea.View` (e.g. `tea.NewView("...")`).
 2. Support `SetColors` and use shared styles.
 3. Add keyboard bindings and mouse handling.
 4. Register page in router startup path.

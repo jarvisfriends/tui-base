@@ -1,6 +1,7 @@
 package theme
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"image/color"
@@ -81,7 +82,8 @@ func evaluatePair(pair semanticPair) pairMetrics {
 	}
 
 	if metrics.normalContrast < pair.minContrast {
-		metrics.failures = append(metrics.failures,
+		metrics.failures = append(
+			metrics.failures,
 			fmt.Sprintf("contrast %.2f < %.2f", metrics.normalContrast, pair.minContrast),
 		)
 	}
@@ -95,7 +97,8 @@ func evaluatePair(pair semanticPair) pairMetrics {
 			metrics.minCVDistance = distance
 		}
 		if distance < pair.minCVDistance {
-			metrics.failures = append(metrics.failures,
+			metrics.failures = append(
+				metrics.failures,
 				fmt.Sprintf("%s distance %.3f < %.3f", filter.name, distance, pair.minCVDistance),
 			)
 		}
@@ -105,7 +108,8 @@ func evaluatePair(pair semanticPair) pairMetrics {
 			metrics.minCVContrast = contrast
 		}
 		if contrast < pair.minCVContrast {
-			metrics.failures = append(metrics.failures,
+			metrics.failures = append(
+				metrics.failures,
 				fmt.Sprintf("%s contrast %.2f < %.2f", filter.name, contrast, pair.minCVContrast),
 			)
 		}
@@ -167,7 +171,7 @@ type themeScore struct {
 	totalCount int
 }
 
-func computeThemeScores() (darkScores []themeScore, lightScores []themeScore) {
+func computeThemeScores() (darkScores, lightScores []themeScore) {
 	tint.NewDefaultRegistry()
 	tints := tint.DefaultTints()
 	if len(tints) == 0 {
@@ -367,12 +371,12 @@ func TestStyleComboShortlistJSON(t *testing.T) {
 			t.Fatalf("marshal generated shortlist: %v", err)
 		}
 		b = append(b, '\n')
-		if err := os.WriteFile(shortlistPath, b, 0o644); err != nil {
+		if err := os.WriteFile(shortlistPath, b, 0o600); err != nil {
 			t.Fatalf("write shortlist json: %v", err)
 		}
 	}
 
-	b, err := os.ReadFile(shortlistPath)
+	b, err := os.ReadFile(filepath.Clean(shortlistPath))
 	if err != nil {
 		t.Fatalf("read shortlist json: %v", err)
 	}
@@ -394,7 +398,7 @@ func TestStyleComboShortlistJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal actual shortlist: %v", err)
 	}
-	if string(gotJSON) != string(want) {
+	if !bytes.Equal(gotJSON, want) {
 		t.Fatalf("style combo shortlist out of date; run with UPDATE_STYLE_SHORTLIST=1 to refresh %s", shortlistPath)
 	}
 }
@@ -424,36 +428,7 @@ func TestThemeGlobalStateAndAccessors(t *testing.T) {
 	// 3. ResolveTintIDForMode
 	tints := tint.Tints()
 	if len(tints) > 0 {
-		firstDark := ""
-		firstLight := ""
-		for _, tm := range tints {
-			if tm.Dark && firstDark == "" {
-				firstDark = tm.ID
-			} else if !tm.Dark && firstLight == "" {
-				firstLight = tm.ID
-			}
-		}
-
-		if firstDark != "" {
-			res := ResolveTintIDForMode(firstDark, "dark")
-			if res != firstDark {
-				t.Errorf("ResolveTintIDForMode(%s, dark) = %q; want %s", firstDark, res, firstDark)
-			}
-			res2 := ResolveTintIDForMode("", "dark")
-			if res2 != firstDark {
-				t.Errorf("ResolveTintIDForMode('', dark) = %q; want %s", res2, firstDark)
-			}
-			res3 := ResolveTintIDForMode("some-invalid-id", "dark")
-			if res3 != firstDark {
-				t.Errorf("expected fallback for invalid id to first dark tint, got %s", res3)
-			}
-		}
-		if firstLight != "" {
-			res := ResolveTintIDForMode(firstLight, "light")
-			if res != firstLight {
-				t.Errorf("ResolveTintIDForMode(%s, light) = %q; want %s", firstLight, res, firstLight)
-			}
-		}
+		verifyTintColors(t, tints)
 	}
 
 	// 4. SetCurrentTint
@@ -528,6 +503,39 @@ func TestThemeGlobalStateAndAccessors(t *testing.T) {
 	}
 	if got := firstEscapeFromStyle("\x1b[no-ending"); got != "" {
 		t.Errorf("expected empty for no-ending escape, got %q", got)
+	}
+}
+
+func verifyTintColors(t *testing.T, tints []*tint.Tint) {
+	t.Helper()
+	firstDark := ""
+	firstLight := ""
+	for _, tm := range tints {
+		if tm.Dark && firstDark == "" {
+			firstDark = tm.ID
+		} else if !tm.Dark && firstLight == "" {
+			firstLight = tm.ID
+		}
+	}
+	if firstDark != "" {
+		res := ResolveTintIDForMode(firstDark, "dark")
+		if res != firstDark {
+			t.Errorf("ResolveTintIDForMode(%s, dark) = %q; want %s", firstDark, res, firstDark)
+		}
+		res2 := ResolveTintIDForMode("", "dark")
+		if res2 != firstDark {
+			t.Errorf("ResolveTintIDForMode('', dark) = %q; want %s", res2, firstDark)
+		}
+		res3 := ResolveTintIDForMode("some-invalid-id", "dark")
+		if res3 != firstDark {
+			t.Errorf("expected fallback for invalid id to first dark tint, got %s", res3)
+		}
+	}
+	if firstLight != "" {
+		res := ResolveTintIDForMode(firstLight, "light")
+		if res != firstLight {
+			t.Errorf("ResolveTintIDForMode(%s, light) = %q; want %s", firstLight, res, firstLight)
+		}
 	}
 }
 

@@ -1,14 +1,13 @@
 package envpath
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 )
 
 func TestCollapseAndExpand(t *testing.T) {
-	os.Setenv("APPDATA", "C:\\Users\\test\\AppData\\Roaming")
-	os.Setenv("HOME", "C:\\Users\\test")
+	t.Setenv("APPDATA", "C:\\Users\\test\\AppData\\Roaming")
+	t.Setenv("HOME", "C:\\Users\\test")
 
 	tests := []struct {
 		input    string

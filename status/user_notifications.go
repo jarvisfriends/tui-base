@@ -30,8 +30,10 @@ type UserNotificationOverlay struct {
 	tickInterval time.Duration
 }
 
-type ToggleVisibilityMsg struct{}
-type TickMsg struct{}
+type (
+	ToggleVisibilityMsg struct{}
+	TickMsg             struct{}
+)
 
 func NewUserNotificationOverlay() *UserNotificationOverlay {
 	return &UserNotificationOverlay{
@@ -238,9 +240,10 @@ func (m *UserNotificationOverlay) colorForSeverity(s notifications.Severity) str
 		return "#F9C513"
 	case notifications.SeverityError:
 		return "#FF5757"
-	default:
+	case notifications.SeverityInfo:
 		return "#4FC3F7"
 	}
+	return "#4FC3F7"
 }
 
 func formatAge(d time.Duration) string {
@@ -260,9 +263,11 @@ type ClickRegion struct {
 	Name  string
 }
 
-const SettingsRegionName = "settings"
-const NotificationsRegionName = "notifications"
-const InfoRegionName = "info"
+const (
+	SettingsRegionName      = "settings"
+	NotificationsRegionName = "notifications"
+	InfoRegionName          = "info"
+)
 
 // RenderStyled composes a full-width status bar and returns its interactive click regions.
 // Every segment is individually styled with Background(StatusBg) so the bar has a consistent
@@ -303,7 +308,8 @@ func RenderStyled(width int, left, right string, colorIndex int, notifEnabled bo
 
 	gap := max(width-llw-rw-spw-npw-ipw, 1)
 
-	lastRow := lipgloss.JoinHorizontal(lipgloss.Left,
+	lastRow := lipgloss.JoinHorizontal(
+		lipgloss.Left,
 		lastLineRendered,
 		baseStyle.Render(strings.Repeat(" ", gap)),
 		rightRendered,
@@ -321,7 +327,8 @@ func RenderStyled(width int, left, right string, colorIndex int, notifEnabled bo
 			lineRendered := baseStyle.Render(line)
 			lw := lipgloss.Width(lineRendered)
 			if pad := max(width-lw, 0); pad > 0 {
-				rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Left,
+				rows = append(rows, lipgloss.JoinHorizontal(
+					lipgloss.Left,
 					lineRendered,
 					baseStyle.Render(strings.Repeat(" ", pad)),
 				))

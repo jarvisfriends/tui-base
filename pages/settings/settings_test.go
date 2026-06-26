@@ -9,7 +9,7 @@ import (
 )
 
 func TestSettingsResizeAndView(t *testing.T) {
-	m := settings.New()
+	m := settings.NewWithOptions(settings.Options{})
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
 	v := m.View()
 	if v.Content == "" {

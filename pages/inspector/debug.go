@@ -2,8 +2,10 @@ package inspector
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"image/color"
+	"math"
 	"net"
 	"net/http"
 	netpprof "net/http/pprof"
@@ -34,8 +36,31 @@ import (
 	"golang.org/x/text/message"
 )
 
-const defaultLatestValueRenderInterval = 500 * time.Millisecond
-const defaultStatsRefreshInterval = time.Second
+const (
+	defaultLatestValueRenderInterval = 500 * time.Millisecond
+	defaultStatsRefreshInterval      = time.Second
+)
+
+// saturatingDuration converts a uint64 nanosecond count to time.Duration,
+// clamping at math.MaxInt64 to prevent overflow on pathological values.
+func saturatingDuration(ns uint64) time.Duration {
+	if ns > math.MaxInt64 {
+		return math.MaxInt64
+	}
+	return time.Duration(ns)
+}
+
+const (
+	debugTabTitleAccessibility = "Accessibility"
+	pprofViewModeBuiltin       = "builtin"
+	settingsColMetric          = "Metric"
+	settingsColValue           = "Value"
+	settingsActionOpen         = "Open"
+	settingsActionRun          = "Run"
+	pprofKindSnapshot          = "snapshot"
+	pprofKindCPUProfile        = "cpu profile"
+	pprofKindGoTool            = "go tool pprof"
+)
 
 // TermDiagMsg carries terminal environment diagnostics to the inspector.
 // The router forwards this after receiving tea.BackgroundColorMsg.
@@ -98,7 +123,7 @@ const (
 	debugTabSettings
 )
 
-var debugTabTitles = []string{"Runtime", "Input", "Disks", "Terminal", "Accessibility", "Log", "Settings"}
+var debugTabTitles = []string{"Runtime", "Input", "Disks", "Terminal", debugTabTitleAccessibility, "Log", "Settings"}
 
 // pprof address constants — used in New() and handleSettingsKey to avoid
 // magic string literals scattered across the function.
@@ -303,9 +328,10 @@ func (m *InspectorModel) ShortHelp() []key.Binding {
 			m.keys.TabSwitch, m.keys.Scroll, m.keys.LevelFilter,
 			m.keys.NotifyInfo, m.keys.NotifyWarning, m.keys.NotifyError, m.keys.ExportLog,
 		}
-	default:
+	case debugTabRuntime, debugTabInput, debugTabDisks, debugTabTerminal, debugTabAccessibility:
 		return []key.Binding{m.keys.TabSwitch, m.keys.Scroll, m.keys.Highlight}
 	}
+	return []key.Binding{m.keys.TabSwitch, m.keys.Scroll, m.keys.Highlight}
 }
 
 // FullHelp implements [help.KeyMap]. Returns the expanded binding table shown
@@ -363,18 +389,17 @@ func (m *InspectorModel) switchTab(tab debugTab) {
 	m.activeTab = tab
 	// Ensure Accessibility panel visibility follows the active tab.
 	if m.acPanel != nil {
-		if m.activeTab == debugTabAccessibility {
-			if !m.acPanel.IsVisible() {
-				m.acPanel.Toggle()
-			}
-		} else {
-			if m.acPanel.IsVisible() {
-				m.acPanel.Toggle()
-			}
-		}
+		m.syncAcPanelVisibility()
 	}
 	m.restoreActiveTabScroll()
 	m.dirty = true
+}
+
+func (m *InspectorModel) syncAcPanelVisibility() {
+	want := m.activeTab == debugTabAccessibility
+	if want != m.acPanel.IsVisible() {
+		m.acPanel.Toggle()
+	}
 }
 
 func (m *InspectorModel) scrollActiveSection(lines int) {
@@ -478,7 +503,7 @@ func New() *InspectorModel {
 			Enabled:        false,
 			Addr:           pprofDefaultAddr,
 			ToolUIAddr:     pprofDefaultToolUI,
-			ViewMode:       "builtin",
+			ViewMode:       pprofViewModeBuiltin,
 			OutputDir:      filepath.Join(os.TempDir(), "tui-base", "pprof"),
 			CPUCaptureSecs: pprofDefaultCaptureSecs,
 		},
@@ -491,18 +516,18 @@ func New() *InspectorModel {
 	m.runtimeColMaxW = make([]int, 8)
 	for i := range m.runtimeColumns {
 		if i%2 == 0 {
-			m.runtimeColumns[i] = table.Column{Title: "Metric", Width: -1}
+			m.runtimeColumns[i] = table.Column{Title: settingsColMetric, Width: -1}
 		} else {
-			m.runtimeColumns[i] = table.Column{Title: "Value", Width: -1}
+			m.runtimeColumns[i] = table.Column{Title: settingsColValue, Width: -1}
 		}
 	}
 
 	m.inputDbgColumns = make([]table.Column, 6)
 	for i := range m.inputDbgColumns {
 		if i%2 == 0 {
-			m.inputDbgColumns[i] = table.Column{Title: "Metric", Width: -1}
+			m.inputDbgColumns[i] = table.Column{Title: settingsColMetric, Width: -1}
 		} else {
-			m.inputDbgColumns[i] = table.Column{Title: "Value", Width: -1}
+			m.inputDbgColumns[i] = table.Column{Title: settingsColValue, Width: -1}
 		}
 	}
 	m.inputDbgColMaxW = make([]int, 6)
@@ -611,11 +636,12 @@ func (m *InspectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.dirty = true
 		return m, preCmd
 	case pprofActionMsg:
-		if msg.Err != nil {
+		switch {
+		case msg.Err != nil:
 			m.settingsMessage = msg.Kind + " failed: " + msg.Err.Error()
-		} else if msg.Text != "" {
+		case msg.Text != "":
 			m.settingsMessage = msg.Text
-		} else {
+		default:
 			m.settingsMessage = msg.Kind + " complete"
 		}
 		if msg.Path != "" {
@@ -763,7 +789,7 @@ func (m *InspectorModel) LogMessageForDebugging(msg tea.Msg) tea.Cmd {
 			if pair := strings.SplitN(kv, "=", 2); len(pair) == 2 {
 				msgContent += fmt.Sprintf("Key: %s  Value: %s", pair[0], pair[1])
 			} else {
-				msgContent += fmt.Sprintf("Env: %s", kv)
+				msgContent += "Env: " + kv
 			}
 		}
 	case tea.MouseMsg:
@@ -996,13 +1022,13 @@ func collectSnapshot(startTime time.Time) runtimeStatsSnapshot {
 		HeapObjects:     ms.HeapObjects,
 		Mallocs:         ms.Mallocs,
 		NumGC:           ms.NumGC,
-		PauseTotal:      time.Duration(ms.PauseTotalNs),
+		PauseTotal:      saturatingDuration(ms.PauseTotalNs),
 		GcCPUFraction:   ms.GCCPUFraction,
 		Disks:           cachedDriveStats(now),
 		Launch:          launchOnce,
 	}
 	if ms.NumGC > 0 {
-		snap.LastPause = time.Duration(ms.PauseNs[(ms.NumGC+255)%256])
+		snap.LastPause = saturatingDuration(ms.PauseNs[(ms.NumGC+255)%256])
 	}
 	return snap
 }
@@ -1145,11 +1171,10 @@ func (m *InspectorModel) buildTermSection(c *theme.AppStyle, width int) string {
 	// Detected background color from BackgroundColorMsg
 	bgDetStr := "(waiting for OSC 11 response)"
 	isDarkStr := "-"
-	bgSwatch := ""
 	if m.termDiagSet && m.termDiag != nil {
 		bgDetStr = theme.ColorHex(m.termDiag.DetectedBg)
-		isDarkStr = fmt.Sprintf("%v", m.termDiag.BgIsDark)
-		bgSwatch = lipgloss.NewStyle().
+		isDarkStr = strconv.FormatBool(m.termDiag.BgIsDark)
+		bgSwatch := lipgloss.NewStyle().
 			Background(m.termDiag.DetectedBg).
 			Foreground(m.termDiag.DetectedBg).
 			Render("■■")
@@ -1157,9 +1182,16 @@ func (m *InspectorModel) buildTermSection(c *theme.AppStyle, width int) string {
 	}
 
 	// Active tint key colors
-	activeTint := func() *tint.Tint {
-		defer func() { recover() }() //nolint:errcheck
-		return tint.Current()
+	var activeTint *tint.Tint
+	func() {
+		// tint.Current() and tint.Tints() both panic before the registry is
+		// initialized; guard with recover so the inspector still renders.
+		defer func() {
+			if r := recover(); r != nil {
+				activeTint = nil // registry not ready; display "(none)"
+			}
+		}()
+		activeTint = tint.Current()
 	}()
 	tintID := "(none)"
 	bgHex, fgHex, accentHex, selBgHex := "?", "?", "?", "?"
@@ -1186,12 +1218,14 @@ func (m *InspectorModel) buildTermSection(c *theme.AppStyle, width int) string {
 	}
 
 	rows := []string{
-		lipgloss.JoinHorizontal(lipgloss.Top,
+		lipgloss.JoinHorizontal(
+			lipgloss.Top,
 			kv("TERM", termEnv), "   ",
 			kv("COLORTERM", colorterm), "   ",
 			kv("TERM_PROGRAM", termProg),
 		),
-		lipgloss.JoinHorizontal(lipgloss.Top,
+		lipgloss.JoinHorizontal(
+			lipgloss.Top,
 			kv("Color Profile", profStr), "   ",
 			kv("IsDark", isDarkStr),
 		),
@@ -1201,14 +1235,17 @@ func (m *InspectorModel) buildTermSection(c *theme.AppStyle, width int) string {
 	} else {
 		rows = append(rows, kv("SSH", sshStr))
 	}
-	rows = append(rows,
+	rows = append(
+		rows,
 		kv("OSC11 Bg", bgDetStr),
-		lipgloss.JoinHorizontal(lipgloss.Top,
+		lipgloss.JoinHorizontal(
+			lipgloss.Top,
 			kv("Tint", tintID), "   ",
 			kv("Tint Bg", bgHex), "   ",
 			kv("Tint Fg", fgHex),
 		),
-		lipgloss.JoinHorizontal(lipgloss.Top,
+		lipgloss.JoinHorizontal(
+			lipgloss.Top,
 			kv("Tint Accent", accentHex), "   ",
 			kv("Tint SelBg", selBgHex),
 		),
@@ -1218,7 +1255,8 @@ func (m *InspectorModel) buildTermSection(c *theme.AppStyle, width int) string {
 	// downsamples 24-bit theme colors. Surface the fix when we detect the
 	// classic signature (ANSI256 + SSH + no override + COLORTERM unset).
 	if prof == colorprofile.ANSI256 && isSSH && profileOverride == "" && colorterm == "(not set)" {
-		rows = append(rows,
+		rows = append(
+			rows,
 			warn("Color hint", "24-bit colors quantized to ANSI256 (COLORTERM not forwarded over SSH)"),
 			warn("Fix", "set COLORTERM=truecolor on the remote, or run with "+envName+"=truecolor"),
 		)
@@ -1226,7 +1264,8 @@ func (m *InspectorModel) buildTermSection(c *theme.AppStyle, width int) string {
 
 	// Config + launch info
 	st := m.stats
-	rows = append(rows,
+	rows = append(
+		rows,
 		kv("Executable", st.Launch.Executable),
 		kv("Args", strings.Join(st.Launch.Args, " ")),
 		kv("WorkDir", st.Launch.WorkDir),
@@ -1301,11 +1340,11 @@ func (m *InspectorModel) settingsRows() []debugSettingRow {
 		// 0-6: general display settings
 		{Field: "Latest-value refresh", Value: fmt.Sprintf("%dms", m.latestValueInterval/time.Millisecond), Help: "Enter increases cadence by 100 ms (mouse/key telemetry redraw interval)"},
 		{Field: "Runtime tick refresh", Value: fmt.Sprintf("%dms", m.statsRefreshInterval/time.Millisecond), Help: "Enter increases cadence by 100 ms (runtime snapshot update interval)"},
-		{Field: "Status summary on close", Value: fmt.Sprintf("%t", m.statusSummary.Enabled), Help: "Enter toggles compact runtime summary in status bar when inspector is closed"},
-		{Field: "Include terminal size", Value: fmt.Sprintf("%t", m.statusSummary.ShowTerm), Help: "Enter toggles terminal dimensions in the status summary"},
-		{Field: "Include heap size", Value: fmt.Sprintf("%t", m.statusSummary.ShowHeap), Help: "Enter toggles live heap allocation bytes in the status summary"},
-		{Field: "Include GC/sec", Value: fmt.Sprintf("%t", m.statusSummary.ShowGC), Help: "Enter toggles GC cadence in the status summary"},
-		{Field: "Include goroutines", Value: fmt.Sprintf("%t", m.statusSummary.ShowGorout), Help: "Enter toggles goroutine count in the status summary"},
+		{Field: "Status summary on close", Value: strconv.FormatBool(m.statusSummary.Enabled), Help: "Enter toggles compact runtime summary in status bar when inspector is closed"},
+		{Field: "Include terminal size", Value: strconv.FormatBool(m.statusSummary.ShowTerm), Help: "Enter toggles terminal dimensions in the status summary"},
+		{Field: "Include heap size", Value: strconv.FormatBool(m.statusSummary.ShowHeap), Help: "Enter toggles live heap allocation bytes in the status summary"},
+		{Field: "Include GC/sec", Value: strconv.FormatBool(m.statusSummary.ShowGC), Help: "Enter toggles GC cadence in the status summary"},
+		{Field: "Include goroutines", Value: strconv.FormatBool(m.statusSummary.ShowGorout), Help: "Enter toggles goroutine count in the status summary"},
 		// 7-12: pprof server config
 		{Field: "Enable profiler HTTP server", Value: pprofState, Help: "Enter toggles Go's built-in pprof server. Required for all browser viewer endpoints below. Profiles measure CPU, memory, goroutines, and GC."},
 		{Field: "Profiler listen addr", Value: m.pprof.Addr, Help: fmt.Sprintf("Enter cycles between %s and %s. Restart server to apply.", pprofDefaultAddr, pprofAltAddr)},
@@ -1319,22 +1358,22 @@ func (m *InspectorModel) settingsRows() []debugSettingRow {
 		// 15: section header
 		{Field: "── Browser viewer (profiler HTTP must be enabled above) ──", SectionOnly: true},
 		// 16-25: built-in browser endpoints (no external dependencies)
-		{Field: "Profile index page", Value: "Open", ActionOnly: true, Help: "All available profile types as a human-readable HTML index."},
-		{Field: "Heap — allocation counts (debug=1)", Value: "Open", ActionOnly: true, Help: "Live heap: per-allocation stack traces. Best starting point for finding memory leaks."},
-		{Field: "Heap — all live objects (debug=2)", Value: "Open", ActionOnly: true, Help: "Every live heap object with full stacks. Very verbose; use debug=1 first."},
-		{Field: "Goroutines — deduplicated (debug=1)", Value: "Open", ActionOnly: true, Help: "One line per unique goroutine stack. Easy to scan; good for spotting goroutine leaks."},
-		{Field: "Goroutines — all stacks (debug=2)", Value: "Open", ActionOnly: true, Help: "Every running goroutine with its full stack. Shows exact counts; confirms goroutine leaks."},
-		{Field: "Allocations profile (debug=1)", Value: "Open", ActionOnly: true, Help: "Heap allocations since program start (includes freed objects). Great for allocation hot-path analysis."},
-		{Field: "Block profile (debug=1)", Value: "Open", ActionOnly: true, Help: "Where goroutines block on synchronization (channels, mutexes). Needs runtime.SetBlockProfileRate."},
-		{Field: "Mutex profile (debug=1)", Value: "Open", ActionOnly: true, Help: "Mutex contention report. Needs runtime.SetMutexProfileFraction."},
+		{Field: "Profile index page", Value: settingsActionOpen, ActionOnly: true, Help: "All available profile types as a human-readable HTML index."},
+		{Field: "Heap — allocation counts (debug=1)", Value: settingsActionOpen, ActionOnly: true, Help: "Live heap: per-allocation stack traces. Best starting point for finding memory leaks."},
+		{Field: "Heap — all live objects (debug=2)", Value: settingsActionOpen, ActionOnly: true, Help: "Every live heap object with full stacks. Very verbose; use debug=1 first."},
+		{Field: "Goroutines — deduplicated (debug=1)", Value: settingsActionOpen, ActionOnly: true, Help: "One line per unique goroutine stack. Easy to scan; good for spotting goroutine leaks."},
+		{Field: "Goroutines — all stacks (debug=2)", Value: settingsActionOpen, ActionOnly: true, Help: "Every running goroutine with its full stack. Shows exact counts; confirms goroutine leaks."},
+		{Field: "Allocations profile (debug=1)", Value: settingsActionOpen, ActionOnly: true, Help: "Heap allocations since program start (includes freed objects). Great for allocation hot-path analysis."},
+		{Field: "Block profile (debug=1)", Value: settingsActionOpen, ActionOnly: true, Help: "Where goroutines block on synchronization (channels, mutexes). Needs runtime.SetBlockProfileRate."},
+		{Field: "Mutex profile (debug=1)", Value: settingsActionOpen, ActionOnly: true, Help: "Mutex contention report. Needs runtime.SetMutexProfileFraction."},
 		{Field: "CPU profile stream", Value: fmt.Sprintf("Open (%ss)", secs), ActionOnly: true, Help: "Browser downloads an N-second CPU profile. Analyze offline with: go tool pprof <file>"},
-		{Field: "Execution trace stream (5s)", Value: "Open", ActionOnly: true, Help: "Browser downloads a 5-second execution trace. View with: go tool trace <file>"},
+		{Field: "Execution trace stream (5s)", Value: settingsActionOpen, ActionOnly: true, Help: "Browser downloads a 5-second execution trace. View with: go tool trace <file>"},
 		// 26: section header
 		{Field: "── go tool pprof -http (Go in PATH required; graph view needs Graphviz 'dot') ──", SectionOnly: true},
 		// 27-29: go tool pprof -http (needs Go toolchain; graph view needs Graphviz)
-		{Field: "Open pprof UI — last saved file", Value: "Run", ActionOnly: true, Help: "Launches 'go tool pprof -http' for the most recently saved .pprof file. Flame/top/source views need no Graphviz; graph view does."},
-		{Field: "Open pprof UI — live heap", Value: "Run", ActionOnly: true, Help: "Launches 'go tool pprof -http' fetching live heap from the profiler server (must be enabled above)."},
-		{Field: "Open pprof UI — live CPU", Value: "Run", ActionOnly: true, Help: fmt.Sprintf("Launches 'go tool pprof -http' capturing %s seconds of live CPU (UI appears after capture finishes).", secs)},
+		{Field: "Open pprof UI — last saved file", Value: settingsActionRun, ActionOnly: true, Help: "Launches 'go tool pprof -http' for the most recently saved .pprof file. Flame/top/source views need no Graphviz; graph view does."},
+		{Field: "Open pprof UI — live heap", Value: settingsActionRun, ActionOnly: true, Help: "Launches 'go tool pprof -http' fetching live heap from the profiler server (must be enabled above)."},
+		{Field: "Open pprof UI — live CPU", Value: settingsActionRun, ActionOnly: true, Help: fmt.Sprintf("Launches 'go tool pprof -http' capturing %s seconds of live CPU (UI appears after capture finishes).", secs)},
 		// 30: info
 		{Field: "Server", Value: serverState},
 	}
@@ -1417,12 +1456,12 @@ func (m *InspectorModel) handleSettingsKey(km tea.KeyPressMsg) tea.Cmd {
 		}
 	case settingsRowPprofViewMode: // cycle: builtin → go-tool → graphviz → builtin
 		switch m.pprof.ViewMode {
-		case "builtin":
+		case pprofViewModeBuiltin:
 			m.pprof.ViewMode = "go-tool"
 		case "go-tool":
 			m.pprof.ViewMode = "graphviz"
 		default:
-			m.pprof.ViewMode = "builtin"
+			m.pprof.ViewMode = pprofViewModeBuiltin
 		}
 	case settingsRowCPUSecs:
 		m.pprof.CPUCaptureSecs = max(1, m.pprof.CPUCaptureSecs+1)
@@ -1495,7 +1534,8 @@ func (m *InspectorModel) handleSettingsKey(km tea.KeyPressMsg) tea.Cmd {
 	case settingsRowGotoolLiveCPU:
 		m.dirty = true
 		return m.openGoToolPprofLiveCPUCmd()
-		// settingsRowServerState: read-only display
+	case settingsRowOutputDir, settingsRowBuiltinHeader, settingsRowGotoolHeader, settingsRowServerState:
+		// read-only display rows and section headers — no interactive action
 	}
 	m.dirty = true
 	return nil
@@ -1515,7 +1555,7 @@ func (m *InspectorModel) startPprofServerCmd() tea.Cmd {
 		if err != nil {
 			return pprofServerStartedMsg{Err: err}
 		}
-		srv := &http.Server{Handler: mux}
+		srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 		go func() { _ = srv.Serve(ln) }()
 		return pprofServerStartedMsg{Server: srv, URL: "http://" + ln.Addr().String() + "/debug/pprof/"}
 	}
@@ -1536,23 +1576,23 @@ func (m *InspectorModel) stopPprofServerCmd() tea.Cmd {
 func (m *InspectorModel) writeProfileSnapshotCmd() tea.Cmd {
 	outDir := m.pprof.OutputDir
 	return func() tea.Msg {
-		if err := os.MkdirAll(outDir, 0o755); err != nil {
-			return pprofActionMsg{Kind: "snapshot", Err: err}
+		if err := os.MkdirAll(outDir, 0o750); err != nil {
+			return pprofActionMsg{Kind: pprofKindSnapshot, Err: err}
 		}
 		ts := time.Now().Format("20060102-150405")
 		heapPath := filepath.Join(outDir, "heap-"+ts+".pprof")
-		f, err := os.Create(heapPath)
+		f, err := os.Create(filepath.Clean(heapPath))
 		if err != nil {
-			return pprofActionMsg{Kind: "snapshot", Err: err}
+			return pprofActionMsg{Kind: pprofKindSnapshot, Err: err}
 		}
 		runtime.GC()
 		err = runtimepprof.WriteHeapProfile(f)
 		_ = f.Close()
 		if err != nil {
-			return pprofActionMsg{Kind: "snapshot", Err: err}
+			return pprofActionMsg{Kind: pprofKindSnapshot, Err: err}
 		}
 		text := "heap snapshot saved: " + heapPath + " | open via built-in browser endpoints or go tool pprof UI actions in settings"
-		return pprofActionMsg{Kind: "snapshot", Path: heapPath, Text: text}
+		return pprofActionMsg{Kind: pprofKindSnapshot, Path: heapPath, Text: text}
 	}
 }
 
@@ -1560,24 +1600,24 @@ func (m *InspectorModel) captureCPUProfileCmd() tea.Cmd {
 	outDir := m.pprof.OutputDir
 	secs := m.pprof.CPUCaptureSecs
 	return func() tea.Msg {
-		if err := os.MkdirAll(outDir, 0o755); err != nil {
-			return pprofActionMsg{Kind: "cpu profile", Err: err}
+		if err := os.MkdirAll(outDir, 0o750); err != nil {
+			return pprofActionMsg{Kind: pprofKindCPUProfile, Err: err}
 		}
 		ts := time.Now().Format("20060102-150405")
 		cpuPath := filepath.Join(outDir, "cpu-"+ts+".pprof")
-		f, err := os.Create(cpuPath)
+		f, err := os.Create(filepath.Clean(cpuPath))
 		if err != nil {
-			return pprofActionMsg{Kind: "cpu profile", Err: err}
+			return pprofActionMsg{Kind: pprofKindCPUProfile, Err: err}
 		}
 		if err := runtimepprof.StartCPUProfile(f); err != nil {
 			_ = f.Close()
-			return pprofActionMsg{Kind: "cpu profile", Err: err}
+			return pprofActionMsg{Kind: pprofKindCPUProfile, Err: err}
 		}
 		time.Sleep(time.Duration(secs) * time.Second)
 		runtimepprof.StopCPUProfile()
 		_ = f.Close()
 		text := fmt.Sprintf("cpu profile (%ds) saved: %s | open via go tool pprof UI or CPU stream action in settings", secs, cpuPath)
-		return pprofActionMsg{Kind: "cpu profile", Path: cpuPath, Text: text}
+		return pprofActionMsg{Kind: pprofKindCPUProfile, Path: cpuPath, Text: text}
 	}
 }
 
@@ -1588,14 +1628,14 @@ func (m *InspectorModel) openGoToolPprofLatestCmd() tea.Cmd {
 	uiAddr := m.pprof.ToolUIAddr
 	return func() tea.Msg {
 		if strings.TrimSpace(profilePath) == "" {
-			return pprofActionMsg{Kind: "go tool pprof", Err: fmt.Errorf("no saved profile yet — use 'write heap snapshot' first")}
+			return pprofActionMsg{Kind: pprofKindGoTool, Err: errors.New("no saved profile yet — use 'write heap snapshot' first")}
 		}
 		cmd := exec.Command("go", "tool", "pprof", "-http="+uiAddr, profilePath)
 		if err := cmd.Start(); err != nil {
-			return pprofActionMsg{Kind: "go tool pprof", Err: fmt.Errorf("go tool pprof: %w (is Go toolchain in PATH?)", err)}
+			return pprofActionMsg{Kind: pprofKindGoTool, Err: fmt.Errorf("go tool pprof: %w (is Go toolchain in PATH?)", err)}
 		}
 		url := "http://" + uiAddr
-		return pprofActionMsg{Kind: "go tool pprof", Text: "go pprof UI started: " + url + " (flamegraph/top/source views need no Graphviz; graph view needs dot)"}
+		return pprofActionMsg{Kind: pprofKindGoTool, Text: "go pprof UI started: " + url + " (flamegraph/top/source views need no Graphviz; graph view needs dot)"}
 	}
 }
 
@@ -1605,15 +1645,15 @@ func (m *InspectorModel) openGoToolPprofLiveHeapCmd() tea.Cmd {
 	uiAddr := m.pprof.ToolUIAddr
 	return func() tea.Msg {
 		if strings.TrimSpace(serverURL) == "" {
-			return pprofActionMsg{Kind: "go tool pprof", Err: fmt.Errorf("pprof HTTP server is not running — enable pprof HTTP first")}
+			return pprofActionMsg{Kind: pprofKindGoTool, Err: errors.New("pprof HTTP server is not running — enable pprof HTTP first")}
 		}
 		heapURL := strings.TrimRight(serverURL, "/") + "/heap"
 		cmd := exec.Command("go", "tool", "pprof", "-http="+uiAddr, heapURL)
 		if err := cmd.Start(); err != nil {
-			return pprofActionMsg{Kind: "go tool pprof", Err: fmt.Errorf("go tool pprof: %w (is Go toolchain in PATH?)", err)}
+			return pprofActionMsg{Kind: pprofKindGoTool, Err: fmt.Errorf("go tool pprof: %w (is Go toolchain in PATH?)", err)}
 		}
 		url := "http://" + uiAddr
-		return pprofActionMsg{Kind: "go tool pprof", Text: "go pprof UI started: " + url + " (source: " + heapURL + ")"}
+		return pprofActionMsg{Kind: pprofKindGoTool, Text: "go pprof UI started: " + url + " (source: " + heapURL + ")"}
 	}
 }
 
@@ -1625,7 +1665,7 @@ func (m *InspectorModel) exportLogCmd() tea.Cmd {
 
 	return func() tea.Msg {
 		outDir := filepath.Join(os.TempDir(), "tui-base", "logs")
-		if err := os.MkdirAll(outDir, 0o755); err != nil {
+		if err := os.MkdirAll(outDir, 0o750); err != nil {
 			return notifications.AddMsg{
 				Content:  "Failed to create log dir: " + err.Error(),
 				Severity: notifications.SeverityError,
@@ -1635,7 +1675,7 @@ func (m *InspectorModel) exportLogCmd() tea.Cmd {
 
 		ts := time.Now().Format("20060102-150405")
 		logPath := filepath.Join(outDir, "inspector-"+ts+".log")
-		f, err := os.Create(logPath)
+		f, err := os.Create(filepath.Clean(logPath))
 		if err != nil {
 			return notifications.AddMsg{
 				Content:  "Failed to create log file: " + err.Error(),
@@ -1665,15 +1705,15 @@ func (m *InspectorModel) openGoToolPprofLiveCPUCmd() tea.Cmd {
 	secs := strconv.Itoa(max(1, m.pprof.CPUCaptureSecs))
 	return func() tea.Msg {
 		if strings.TrimSpace(serverURL) == "" {
-			return pprofActionMsg{Kind: "go tool pprof", Err: fmt.Errorf("pprof HTTP server is not running — enable pprof HTTP first")}
+			return pprofActionMsg{Kind: pprofKindGoTool, Err: errors.New("pprof HTTP server is not running — enable pprof HTTP first")}
 		}
 		profileURL := strings.TrimRight(serverURL, "/") + "/profile?seconds=" + secs
 		cmd := exec.Command("go", "tool", "pprof", "-http="+uiAddr, profileURL)
 		if err := cmd.Start(); err != nil {
-			return pprofActionMsg{Kind: "go tool pprof", Err: fmt.Errorf("go tool pprof: %w (is Go toolchain in PATH?)", err)}
+			return pprofActionMsg{Kind: pprofKindGoTool, Err: fmt.Errorf("go tool pprof: %w (is Go toolchain in PATH?)", err)}
 		}
 		url := "http://" + uiAddr
-		return pprofActionMsg{Kind: "go tool pprof", Text: fmt.Sprintf("go pprof UI started: %s (capturing %ss CPU profile — UI appears when done)", url, secs)}
+		return pprofActionMsg{Kind: pprofKindGoTool, Text: fmt.Sprintf("go pprof UI started: %s (capturing %ss CPU profile — UI appears when done)", url, secs)}
 	}
 }
 
@@ -1719,23 +1759,7 @@ func (m *InspectorModel) StatusLineSummary() string {
 		parts = append(parts, "heap "+humanize.IBytes(st.HeapAllocBytes))
 	}
 	if m.statusSummary.ShowGC {
-		dt := st.CapturedAt.Sub(pr.CapturedAt).Seconds()
-		if dt <= 0 {
-			dt = 1
-		}
-		gcPerSec := 0.0
-		if st.NumGC >= pr.NumGC {
-			gcPerSec = float64(st.NumGC-pr.NumGC) / dt
-		}
-		if gcPerSec < 0.1 {
-			if gcPerSec == 0 {
-				parts = append(parts, "gc idle")
-			} else {
-				parts = append(parts, fmt.Sprintf("gc %.1fs", 1.0/gcPerSec))
-			}
-		} else {
-			parts = append(parts, fmt.Sprintf("gc %.1f/s", gcPerSec))
-		}
+		parts = append(parts, gcSummary(st, pr))
 	}
 	if m.statusSummary.ShowGorout {
 		parts = append(parts, fmt.Sprintf("gor %d", st.Goroutines))
@@ -1743,8 +1767,26 @@ func (m *InspectorModel) StatusLineSummary() string {
 	return strings.Join(parts, " • ")
 }
 
-func getEnvOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
+func gcSummary(st, pr runtimeStatsSnapshot) string {
+	dt := st.CapturedAt.Sub(pr.CapturedAt).Seconds()
+	if dt <= 0 {
+		dt = 1
+	}
+	gcPerSec := 0.0
+	if st.NumGC >= pr.NumGC {
+		gcPerSec = float64(st.NumGC-pr.NumGC) / dt
+	}
+	if gcPerSec < 0.1 {
+		if gcPerSec == 0 {
+			return "gc idle"
+		}
+		return fmt.Sprintf("gc %.1fs", 1.0/gcPerSec)
+	}
+	return fmt.Sprintf("gc %.1f/s", gcPerSec)
+}
+
+func getEnvOr(name, fallback string) string {
+	if v := os.Getenv(name); v != "" {
 		return v
 	}
 	return fallback

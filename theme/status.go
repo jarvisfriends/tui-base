@@ -30,14 +30,14 @@ func SubtleStyle() lipgloss.Style {
 // RenderStatusBar composes a left-aligned help string and a right-aligned
 // status string into a single styled bar of the given width. If width <= 0
 // the function will return a simple un-padded rendering.
-func RenderStatusBar(width int, left string, right string) string {
+func RenderStatusBar(width int, left, right string) string {
 	return RenderStatusBarStyled(width, left, right, -1)
 }
 
 // RenderStatusBarStyled renders the status bar. When colorIndex >= 0 it
 // overrides the foreground with that ANSI index (0-255), which is useful for
 // fade-in/out animations. Pass -1 to use the theme's StatusFg color.
-func RenderStatusBarStyled(width int, left string, right string, colorIndex int) string {
+func RenderStatusBarStyled(width int, left, right string, colorIndex int) string {
 	c := Active()
 	fg := c.StatusFg
 	if colorIndex >= 0 {

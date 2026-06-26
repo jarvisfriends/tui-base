@@ -8,6 +8,30 @@ import (
 	"charm.land/bubbles/v2/viewport"
 )
 
+const (
+	bindingQuit           = "Quit"
+	bindingNextPage       = "NextPage"
+	bindingPreviousPage   = "PreviousPage"
+	bindingOpenSettings   = "OpenSettings"
+	bindingToggleNav      = "ToggleNav"
+	bindingToggleStatus   = "ToggleStatus"
+	bindingToggleFullHelp = "ToggleFullHelp"
+	bindingSelect         = "Select"
+	bindingTop            = "Top"
+	bindingBottom         = "Bottom"
+	bindingDismiss        = "Dismiss"
+	bindingDismissAll     = "DismissAll"
+	bindingDebug          = "Debug"
+	bindingPageDown       = "PageDown"
+	bindingPageUp         = "PageUp"
+	bindingHalfPageDown   = "HalfPageDown"
+	bindingHalfPageUp     = "HalfPageUp"
+	bindingUp             = "Up"
+	bindingDown           = "Down"
+	bindingLeft           = "Left"
+	bindingRight          = "Right"
+)
+
 type AppKeyMap struct {
 	viewport.KeyMap
 	Quit           key.Binding // Quit the application
@@ -139,27 +163,27 @@ func (km *AppKeyMap) ApplyCustomizations(custom map[string]string) {
 		return current
 	}
 
-	km.Quit = apply("Quit", km.Quit)
-	km.NextPage = apply("NextPage", km.NextPage)
-	km.PreviousPage = apply("PreviousPage", km.PreviousPage)
-	km.OpenSettings = apply("OpenSettings", km.OpenSettings)
-	km.ToggleNav = apply("ToggleNav", km.ToggleNav)
-	km.ToggleStatus = apply("ToggleStatus", km.ToggleStatus)
-	km.ToggleFullHelp = apply("ToggleFullHelp", km.ToggleFullHelp)
-	km.Select = apply("Select", km.Select)
-	km.Top = apply("Top", km.Top)
-	km.Bottom = apply("Bottom", km.Bottom)
-	km.Dismiss = apply("Dismiss", km.Dismiss)
-	km.DismissAll = apply("DismissAll", km.DismissAll)
-	km.Debug = apply("Debug", km.Debug)
-	km.PageDown = apply("PageDown", km.PageDown)
-	km.PageUp = apply("PageUp", km.PageUp)
-	km.HalfPageDown = apply("HalfPageDown", km.HalfPageDown)
-	km.HalfPageUp = apply("HalfPageUp", km.HalfPageUp)
-	km.Up = apply("Up", km.Up)
-	km.Down = apply("Down", km.Down)
-	km.Left = apply("Left", km.Left)
-	km.Right = apply("Right", km.Right)
+	km.Quit = apply(bindingQuit, km.Quit)
+	km.NextPage = apply(bindingNextPage, km.NextPage)
+	km.PreviousPage = apply(bindingPreviousPage, km.PreviousPage)
+	km.OpenSettings = apply(bindingOpenSettings, km.OpenSettings)
+	km.ToggleNav = apply(bindingToggleNav, km.ToggleNav)
+	km.ToggleStatus = apply(bindingToggleStatus, km.ToggleStatus)
+	km.ToggleFullHelp = apply(bindingToggleFullHelp, km.ToggleFullHelp)
+	km.Select = apply(bindingSelect, km.Select)
+	km.Top = apply(bindingTop, km.Top)
+	km.Bottom = apply(bindingBottom, km.Bottom)
+	km.Dismiss = apply(bindingDismiss, km.Dismiss)
+	km.DismissAll = apply(bindingDismissAll, km.DismissAll)
+	km.Debug = apply(bindingDebug, km.Debug)
+	km.PageDown = apply(bindingPageDown, km.PageDown)
+	km.PageUp = apply(bindingPageUp, km.PageUp)
+	km.HalfPageDown = apply(bindingHalfPageDown, km.HalfPageDown)
+	km.HalfPageUp = apply(bindingHalfPageUp, km.HalfPageUp)
+	km.Up = apply(bindingUp, km.Up)
+	km.Down = apply(bindingDown, km.Down)
+	km.Left = apply(bindingLeft, km.Left)
+	km.Right = apply(bindingRight, km.Right)
 }
 
 // BindingDef provides the ID, title, and default keys for an AppKeyMap binding.
@@ -172,27 +196,27 @@ type BindingDef struct {
 // BindingDefs returns the current bindings in a format suitable for generating settings UI.
 func (km *AppKeyMap) BindingDefs() []BindingDef {
 	return []BindingDef{
-		{"Quit", "Quit Application", strings.Join(km.Quit.Keys(), ",")},
-		{"NextPage", "Next Page", strings.Join(km.NextPage.Keys(), ",")},
-		{"PreviousPage", "Previous Page", strings.Join(km.PreviousPage.Keys(), ",")},
-		{"OpenSettings", "Open Settings", strings.Join(km.OpenSettings.Keys(), ",")},
-		{"ToggleNav", "Toggle Nav", strings.Join(km.ToggleNav.Keys(), ",")},
-		{"ToggleFullHelp", "Toggle Full Help", strings.Join(km.ToggleFullHelp.Keys(), ",")},
-		{"ToggleStatus", "Toggle Status", strings.Join(km.ToggleStatus.Keys(), ",")},
-		{"Select", "Select", strings.Join(km.Select.Keys(), ",")},
-		{"Top", "Go to Top", strings.Join(km.Top.Keys(), ",")},
-		{"Bottom", "Go to Bottom", strings.Join(km.Bottom.Keys(), ",")},
-		{"Dismiss", "Dismiss Modal", strings.Join(km.Dismiss.Keys(), ",")},
-		{"DismissAll", "Dismiss All Notifications", strings.Join(km.DismissAll.Keys(), ",")},
-		{"Debug", "Quick Debug", strings.Join(km.Debug.Keys(), ",")},
-		{"PageDown", "Page Down", strings.Join(km.PageDown.Keys(), ",")},
-		{"PageUp", "Page Up", strings.Join(km.PageUp.Keys(), ",")},
-		{"HalfPageDown", "Half Page Down", strings.Join(km.HalfPageDown.Keys(), ",")},
-		{"HalfPageUp", "Half Page Up", strings.Join(km.HalfPageUp.Keys(), ",")},
-		{"Up", "Up", strings.Join(km.Up.Keys(), ",")},
-		{"Down", "Down", strings.Join(km.Down.Keys(), ",")},
-		{"Left", "Left", strings.Join(km.Left.Keys(), ",")},
-		{"Right", "Right", strings.Join(km.Right.Keys(), ",")},
+		{bindingQuit, "Quit Application", strings.Join(km.Quit.Keys(), ",")},
+		{bindingNextPage, "Next Page", strings.Join(km.NextPage.Keys(), ",")},
+		{bindingPreviousPage, "Previous Page", strings.Join(km.PreviousPage.Keys(), ",")},
+		{bindingOpenSettings, "Open Settings", strings.Join(km.OpenSettings.Keys(), ",")},
+		{bindingToggleNav, "Toggle Nav", strings.Join(km.ToggleNav.Keys(), ",")},
+		{bindingToggleFullHelp, "Toggle Full Help", strings.Join(km.ToggleFullHelp.Keys(), ",")},
+		{bindingToggleStatus, "Toggle Status", strings.Join(km.ToggleStatus.Keys(), ",")},
+		{bindingSelect, "Select", strings.Join(km.Select.Keys(), ",")},
+		{bindingTop, "Go to Top", strings.Join(km.Top.Keys(), ",")},
+		{bindingBottom, "Go to Bottom", strings.Join(km.Bottom.Keys(), ",")},
+		{bindingDismiss, "Dismiss Modal", strings.Join(km.Dismiss.Keys(), ",")},
+		{bindingDismissAll, "Dismiss All Notifications", strings.Join(km.DismissAll.Keys(), ",")},
+		{bindingDebug, "Quick Debug", strings.Join(km.Debug.Keys(), ",")},
+		{bindingPageDown, "Page Down", strings.Join(km.PageDown.Keys(), ",")},
+		{bindingPageUp, "Page Up", strings.Join(km.PageUp.Keys(), ",")},
+		{bindingHalfPageDown, "Half Page Down", strings.Join(km.HalfPageDown.Keys(), ",")},
+		{bindingHalfPageUp, "Half Page Up", strings.Join(km.HalfPageUp.Keys(), ",")},
+		{bindingUp, "Up", strings.Join(km.Up.Keys(), ",")},
+		{bindingDown, "Down", strings.Join(km.Down.Keys(), ",")},
+		{bindingLeft, "Left", strings.Join(km.Left.Keys(), ",")},
+		{bindingRight, "Right", strings.Join(km.Right.Keys(), ",")},
 	}
 }
 

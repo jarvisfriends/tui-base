@@ -41,7 +41,7 @@ func TestMyAppConforms(t *testing.T) {
 ```
 
 (See `router/conformance_test.go` for the reference, and
-`amarcum/media/tui/conformance_test.go` for a derived-app example.)
+`jarvisfriends/media/tui/conformance_test.go` for a derived-app example.)
 
 ## What each check guarantees
 

@@ -11,8 +11,8 @@ func BenchmarkView(b *testing.B) {
 	m := New()
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 20, Height: 24})
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = m.View().Content
 	}
 }
@@ -21,7 +21,7 @@ func BenchmarkUpdateKeys(b *testing.B) {
 	m := New()
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		if i%2 == 0 {
 			_, _ = m.Update(tea.KeyPressMsg{Text: "j"})
 		} else {
@@ -40,7 +40,7 @@ func BenchmarkMouseMapping(b *testing.B) {
 	}
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		y := i % lines
 		cmd := v.OnMouse(tea.MouseReleaseMsg{X: 0, Y: y, Button: tea.MouseLeft})
 		if cmd != nil {

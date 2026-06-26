@@ -48,8 +48,8 @@ type TimePickerModel struct {
 	InactiveStyle lipgloss.Style
 }
 
-func New(d time.Duration) TimePickerModel {
-	return TimePickerModel{
+func New(d time.Duration) *TimePickerModel {
+	return &TimePickerModel{
 		Duration: d,
 		KeyMap:   DefaultKeyMap(),
 		Focused:  FieldHours,
@@ -65,11 +65,11 @@ func New(d time.Duration) TimePickerModel {
 	}
 }
 
-func (m TimePickerModel) Init() tea.Cmd {
+func (m *TimePickerModel) Init() tea.Cmd {
 	return nil
 }
 
-func (m TimePickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *TimePickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch {
@@ -148,7 +148,7 @@ func (m *TimePickerModel) increment(dir int) {
 	m.Duration = time.Duration(hours)*time.Hour + time.Duration(minutes)*time.Minute + time.Duration(seconds)*time.Second
 }
 
-func (m TimePickerModel) View() tea.View {
+func (m *TimePickerModel) View() tea.View {
 	hours := int64(m.Duration.Hours())
 	minutes := int64(m.Duration.Minutes()) % 60
 	seconds := int64(m.Duration.Seconds()) % 60
@@ -166,7 +166,8 @@ func (m TimePickerModel) View() tea.View {
 
 	title := lipgloss.NewStyle().Bold(true).Padding(0, 1).Render("Duration")
 
-	body := lipgloss.JoinHorizontal(lipgloss.Top,
+	body := lipgloss.JoinHorizontal(
+		lipgloss.Top,
 		styleFor(FieldHours).Render(hStr),
 		styleFor(FieldMinutes).Render(mStr),
 		styleFor(FieldSeconds).Render(sStr),

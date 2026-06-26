@@ -1,5 +1,14 @@
 {
   "recommendations": [
-    "golang.go"
+    "golang.go",
+    "timonwong.shellcheck",
+    "redhat.vscode-yaml",
+    "editorconfig.editorconfig",
+    "davidanson.vscode-markdownlint",
+    "tamasfe.even-better-toml",
+    "github.vscode-github-actions",
+    "usernamehw.errorlens",
+    "mhutchie.git-graph",
+    "streetsidesoftware.code-spell-checker"
   ]
 }

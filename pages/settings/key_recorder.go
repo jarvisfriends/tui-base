@@ -7,6 +7,8 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+const keyCtrlS = "ctrl+s"
+
 type KeyRecorder struct {
 	keys      []string
 	cursor    int
@@ -102,7 +104,7 @@ func (m *KeyRecorder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.validate()
 			}
 		default:
-			if msg.String() == "ctrl+s" {
+			if msg.String() == keyCtrlS {
 				m.validate()
 				if m.Error == "" {
 					m.Done = true
@@ -117,7 +119,7 @@ func (m *KeyRecorder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *KeyRecorder) View() tea.View {
 	title := lipgloss.NewStyle().Bold(true).Padding(0, 1).Render("Keybinding Recorder")
 
-	var rows []string
+	rows := make([]string, 0, len(m.keys)+1)
 	selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
 	normStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
 	delStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))

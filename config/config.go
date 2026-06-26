@@ -6,14 +6,15 @@
 //  1. A component (page, nav, logger) implements [Configurable].
 //  2. It returns a [Section] describing its fields with pointers into its own
 //     state for live binding.
-//  3. The router collects sections and passes them to [settings.New].
+//  3. The router collects sections and passes them to [settings.NewWithOptions].
 //  4. Settings builds one huh.Form group per section; Tab cycles naturally
 //     through every field in every section with no custom pane-switch code.
 package config
 
 import (
+	"time"
+
 	tea "charm.land/bubbletea/v2"
-	"fmt"
 
 	huh "charm.land/huh/v2"
 )
@@ -42,7 +43,7 @@ const (
 // Settings page. Settings turns each FieldDef into the corresponding huh
 // widget and keeps it live-bound to the component's own field via the Value
 // pointer.
-type FieldDef struct {
+type FieldDef[T comparable] struct {
 	// Key is a machine-readable identifier, used for JSON persistence.
 	Key string
 	// Title is the label rendered above the input.
@@ -53,11 +54,11 @@ type FieldDef struct {
 	// Kind determines which huh widget is created.
 	Kind FieldKind
 	// Options is the ordered list of choices for FieldSelect widgets.
-	Options []huh.Option[string]
+	Options []huh.Option[T]
 	// Value must point to the string field in the owning model that backs
 	// this setting. The pointer must remain valid for the lifetime of the
 	// Settings page.
-	Value *string
+	Value *T
 	// Height overrides the drop-down height for FieldSelect (0 = huh default).
 	Height int
 	// DirAllowed and FileAllowed configure FieldFilePicker.
@@ -68,10 +69,10 @@ type FieldDef struct {
 	HideFunc func() bool
 	// Validate is an optional per-field validation function called when the
 	// user moves focus away from the field.
-	Validate func(string) error
+	Validate func(T) error
 	// Apply is an optional callback run when a field edit is submitted.
 	// Use this to persist values outside tui-base settings storage.
-	Apply func(string) error
+	Apply func(T) error
 	// CustomModelBuilder is called to build a custom model when Kind is FieldCustom.
 	CustomModelBuilder func() tea.Model
 	// CustomFieldText is the text displayed on the right side of the settings list.
@@ -80,19 +81,19 @@ type FieldDef struct {
 
 // Section groups related FieldDefs under a named heading. Each Section
 // becomes one huh.Group in the Settings form.
-type Section struct {
+type Section[T comparable] struct {
 	// Title is displayed as the section heading inside the Settings form.
 	Title string
 	// Fields is the ordered list of configurable values in this section.
-	Fields []FieldDef
+	Fields []FieldDef[T]
 }
 
 // Configurable can be implemented by any page model or router component that
 // wants to expose its configuration in the Settings page. The router
 // discovers Configurable implementations and passes their Sections to
-// settings.New so they appear after the built-in sections.
-type Configurable interface {
-	ConfigSection() Section
+// settings.NewWithOptions so they appear after the built-in sections.
+type Configurable[T comparable] interface {
+	ConfigSection() Section[T]
 }
 
 // ── Field constructor helpers ─────────────────────────────────────────────
@@ -101,24 +102,21 @@ type Configurable interface {
 // returns a FieldDef pre-configured for the most common patterns.
 
 // BoolField returns a FieldSelect FieldDef with Enabled/Disabled options bound
-// to a *string field that holds "true" or "false". The apply callback is called
+// to a *bool field that holds true or false. The apply callback is called
 // when the user submits the form; pass nil to skip the callback.
-func BoolField(key, title, description string, value *string, apply func(string) error) FieldDef {
-	return FieldDef{
+func BoolField(key, title, description string, value *bool, apply func(bool) error) FieldDef[bool] {
+	return FieldDef[bool]{
 		Key:         key,
 		Title:       title,
 		Description: description,
 		Kind:        FieldSelect,
-		Options: []huh.Option[string]{
-			huh.NewOption("Enabled", "true"),
-			huh.NewOption("Disabled", "false"),
+		Options: []huh.Option[bool]{
+			huh.NewOption("Enabled", true),
+			huh.NewOption("Disabled", false),
 		},
 		Value: value,
-		Validate: func(v string) error {
-			if v == "true" || v == "false" {
-				return nil
-			}
-			return fmt.Errorf("value must be true or false")
+		Validate: func(v bool) error {
+			return nil
 		},
 		Apply: apply,
 	}
@@ -126,30 +124,27 @@ func BoolField(key, title, description string, value *string, apply func(string)
 
 // YesNoField is like BoolField but shows "Yes" / "No" instead of
 // "Enabled" / "Disabled".
-func YesNoField(key, title, description string, value *string, apply func(string) error) FieldDef {
-	return FieldDef{
+func YesNoField(key, title, description string, value *bool, apply func(bool) error) FieldDef[bool] {
+	return FieldDef[bool]{
 		Key:         key,
 		Title:       title,
 		Description: description,
 		Kind:        FieldSelect,
-		Options: []huh.Option[string]{
-			huh.NewOption("Yes", "true"),
-			huh.NewOption("No", "false"),
+		Options: []huh.Option[bool]{
+			huh.NewOption("Yes", true),
+			huh.NewOption("No", false),
 		},
 		Value: value,
-		Validate: func(v string) error {
-			if v == "true" || v == "false" {
-				return nil
-			}
-			return fmt.Errorf("value must be Yes or No")
+		Validate: func(v bool) error {
+			return nil
 		},
 		Apply: apply,
 	}
 }
 
 // EnumField returns a FieldSelect FieldDef with arbitrary label/value pairs.
-func EnumField(key, title, description string, options []huh.Option[string], value *string, apply func(string) error) FieldDef {
-	return FieldDef{
+func EnumField[T comparable](key, title, description string, options []huh.Option[T], value *T, apply func(T) error) FieldDef[T] {
+	return FieldDef[T]{
 		Key:         key,
 		Title:       title,
 		Description: description,
@@ -162,8 +157,8 @@ func EnumField(key, title, description string, options []huh.Option[string], val
 
 // TextField returns a FieldText FieldDef bound to a *string field with an
 // optional validation function.
-func TextField(key, title, description string, value *string, validate func(string) error, apply func(string) error) FieldDef {
-	return FieldDef{
+func TextField(key, title, description string, value *string, validate, apply func(string) error) FieldDef[string] {
+	return FieldDef[string]{
 		Key:         key,
 		Title:       title,
 		Description: description,
@@ -176,8 +171,8 @@ func TextField(key, title, description string, value *string, validate func(stri
 
 // MultiFilePickerField returns a FieldMultiFilePicker FieldDef bound to a *string field
 // which should contain a semicolon-separated list of paths.
-func MultiFilePickerField(key, title, description string, value *string, apply func(string) error) FieldDef {
-	return FieldDef{
+func MultiFilePickerField(key, title, description string, value *string, apply func(string) error) FieldDef[string] {
+	return FieldDef[string]{
 		Key:         key,
 		Title:       title,
 		Description: description,
@@ -188,8 +183,8 @@ func MultiFilePickerField(key, title, description string, value *string, apply f
 }
 
 // DateField returns a FieldDate FieldDef.
-func DateField(key, title, description string, value *string, apply func(string) error) FieldDef {
-	return FieldDef{
+func DateField(key, title, description string, value *time.Time, apply func(time.Time) error) FieldDef[time.Time] {
+	return FieldDef[time.Time]{
 		Key:         key,
 		Title:       title,
 		Description: description,
@@ -200,8 +195,8 @@ func DateField(key, title, description string, value *string, apply func(string)
 }
 
 // DurationField returns a FieldDuration FieldDef.
-func DurationField(key, title, description string, value *string, apply func(string) error) FieldDef {
-	return FieldDef{
+func DurationField(key, title, description string, value *time.Duration, apply func(time.Duration) error) FieldDef[time.Duration] {
+	return FieldDef[time.Duration]{
 		Key:         key,
 		Title:       title,
 		Description: description,
@@ -212,8 +207,8 @@ func DurationField(key, title, description string, value *string, apply func(str
 }
 
 // CustomField returns a FieldCustom FieldDef that delegates to a custom tea.Model.
-func CustomField(key, title, description, displayText string, builder func() tea.Model) FieldDef {
-	return FieldDef{
+func CustomField[T comparable](key, title, description, displayText string, builder func() tea.Model) FieldDef[T] {
+	return FieldDef[T]{
 		Key:                key,
 		Title:              title,
 		Description:        description,

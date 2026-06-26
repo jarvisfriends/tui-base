@@ -1,6 +1,7 @@
 package navigation
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -11,8 +12,18 @@ import (
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
-func init() {
+func mustTabs(t *testing.T, m tea.Model) *Tabs {
+	t.Helper()
+	r, ok := m.(*Tabs)
+	if !ok {
+		t.Fatalf("expected *Tabs, got %T", m)
+	}
+	return r
+}
+
+func TestMain(m *testing.M) {
 	tint.NewDefaultRegistry()
+	os.Exit(m.Run())
 }
 
 func TestNewTabs(t *testing.T) {
@@ -73,7 +84,7 @@ func TestTabsUpdateWindowSizeAndHover(t *testing.T) {
 
 	// Resizing
 	m, cmd := tabs.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
-	updated := m.(*Tabs)
+	updated := mustTabs(t, m)
 	if updated.width != 100 || updated.height != 40 {
 		t.Errorf("Resize failed: width=%d height=%d", updated.width, updated.height)
 	}
@@ -83,7 +94,7 @@ func TestTabsUpdateWindowSizeAndHover(t *testing.T) {
 
 	// Hover msg
 	m, cmd = tabs.Update(TabHoverMsg{Index: 1})
-	updated = m.(*Tabs)
+	updated = mustTabs(t, m)
 	if updated.HoverIndex != 1 {
 		t.Errorf("expected HoverIndex 1, got %d", updated.HoverIndex)
 	}
@@ -99,7 +110,7 @@ func TestTabsUpdateKeyPresses(t *testing.T) {
 
 	// 1. Right key (move to B -> C)
 	m, cmd := tabs.Update(tea.KeyPressMsg{Code: tea.KeyRight})
-	updated := m.(*Tabs)
+	updated := mustTabs(t, m)
 	if updated.ActiveIndex != 2 {
 		t.Errorf("expected index 2, got %d", updated.ActiveIndex)
 	}
@@ -113,14 +124,14 @@ func TestTabsUpdateKeyPresses(t *testing.T) {
 
 	// 2. Tab key (move to C -> A)
 	m, _ = tabs.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-	updated = m.(*Tabs)
+	updated = mustTabs(t, m)
 	if updated.ActiveIndex != 0 {
 		t.Errorf("expected index 0, got %d", updated.ActiveIndex)
 	}
 
 	// 3. Left key (move to A -> C)
 	m, _ = tabs.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
-	updated = m.(*Tabs)
+	updated = mustTabs(t, m)
 	if updated.ActiveIndex != 2 {
 		t.Errorf("expected index 2, got %d", updated.ActiveIndex)
 	}
@@ -129,14 +140,14 @@ func TestTabsUpdateKeyPresses(t *testing.T) {
 	// In code: case "left", "shift+tab": (checks keyMsg.String() which is "shift+tab")
 	// Let's pass via KeyPressMsg with Text="shift+tab"
 	m, _ = tabs.Update(tea.KeyPressMsg{Text: "shift+tab"})
-	updated = m.(*Tabs)
+	updated = mustTabs(t, m)
 	if updated.ActiveIndex != 1 {
 		t.Errorf("expected index 1, got %d", updated.ActiveIndex)
 	}
 
 	// 5. Enter key
 	m, cmd = tabs.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	updated = m.(*Tabs)
+	updated = mustTabs(t, m)
 	if updated.ActiveIndex != 1 {
 		t.Errorf("expected index 1, got %d", updated.ActiveIndex)
 	}

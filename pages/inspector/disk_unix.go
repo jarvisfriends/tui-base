@@ -26,7 +26,7 @@ func listDriveStats() []diskStat {
 		if st.Blocks == 0 {
 			continue // zero-size: tmpfs, cgroup, etc.
 		}
-		bsize := uint64(st.Bsize) //nolint:unconvert — int32 on Darwin, int64 on Linux
+		bsize := uint64(max(0, st.Bsize))
 		total := st.Blocks * bsize
 		free := st.Bavail * bsize
 		stats = append(stats, diskStat{

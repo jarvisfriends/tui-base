@@ -35,9 +35,9 @@ type MinimalTopNav struct {
 func NewMinimalTopNav() *MinimalTopNav {
 	return &MinimalTopNav{
 		Pages: []Page{
-			{ID: "home", Title: "Home"},
-			{ID: "debug", Title: "Inspector"},
-			{ID: "settings", Title: "Settings"},
+			{ID: pageIDHome, Title: pageHome},
+			{ID: pageIDInspector, Title: pageInspector},
+			{ID: pageIDSettings, Title: pageSettings},
 		},
 		ActiveIndex: 0,
 		ShowNumbers: false,

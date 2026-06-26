@@ -80,8 +80,8 @@ func New() *BarModel {
 // this message and perform navigation.
 type ClickRegionMsg struct{ Name string }
 
-func (b *BarModel) SetKeys(keys *keys.AppKeyMap) {
-	b.keys = keys
+func (b *BarModel) SetKeys(km *keys.AppKeyMap) {
+	b.keys = km
 	b.SetWidth(b.help.Width())
 }
 
@@ -213,7 +213,7 @@ func (b *BarModel) IsHistoryVisible() bool { return b.sb.ShowHistory() }
 func (b *BarModel) NotifHistoryCursorUp() { b.sb.HistoryCursorUp() }
 
 // NotifHistoryCursorDown moves the history cursor down.
-func (b *BarModel) NotifHistoryCursorDown(max int) { b.sb.HistoryCursorDown(max) }
+func (b *BarModel) NotifHistoryCursorDown(n int) { b.sb.HistoryCursorDown(n) }
 
 // HistoryCursor returns the current notification history cursor index.
 func (b *BarModel) HistoryCursor() int { return b.sb.HistoryCursor() }

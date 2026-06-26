@@ -1,10 +1,11 @@
 package common
 
 import (
+	"cmp"
 	"fmt"
 	"runtime"
 	"runtime/debug"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
@@ -67,8 +68,8 @@ func Dependencies() []Dependency {
 		out = append(out, d)
 	}
 
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].Path < out[j].Path
+	slices.SortFunc(out, func(a, b Dependency) int {
+		return cmp.Compare(a.Path, b.Path)
 	})
 
 	return out
@@ -93,9 +94,7 @@ func ExpandedBuildInfo() *ExpandedInfo {
 	out.Settings = map[string]string{}
 
 	for _, setting := range info.Settings {
-
 		switch setting.Key {
-
 		case "vcs.revision":
 			out.VCS.Revision = setting.Value
 
