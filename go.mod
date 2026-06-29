@@ -8,7 +8,7 @@ require (
 	charm.land/huh/v2 v2.0.3
 	charm.land/lipgloss/v2 v2.0.4
 	github.com/dustin/go-humanize v1.0.1
-	golang.org/x/tools v0.45.0
+	golang.org/x/tools v0.47.0
 )
 
 require (
@@ -18,7 +18,7 @@ require (
 	github.com/charmbracelet/x/exp/strings v0.1.0 // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
 	github.com/sahilm/fuzzy v0.1.3 // indirect
-	golang.org/x/mod v0.36.0 // indirect
+	golang.org/x/mod v0.37.0 // indirect
 )
 
 require (
