@@ -27,24 +27,25 @@ func TestMouseInput(t *testing.T) {
 
 	for _, page := range nav.Pages {
 		for y, line := range lines {
-			if strings.Contains(line, page.Title) {
-				fmt.Printf("Simulating click on page %s at y=%d\n", page.Title, y)
-				mm := tea.MouseReleaseMsg{X: 0, Y: y, Button: tea.MouseLeft}
-				cmd := v.OnMouse(mm)
-				if cmd == nil {
-					fmt.Println("OnMouse returned nil cmd")
-					break
-				}
-				msg := cmd()
-				sel, ok := msg.(SelectedMsg)
-				if ok {
-					fmt.Printf("Received SelectedMsg: %+v\n", sel)
-				} else {
-					fmt.Printf("Received unexpected msg: %T %+v\n", msg, msg)
-				}
-				fmt.Printf("nav.ActiveIndex=%d\n", nav.ActiveIndex)
+			if !strings.Contains(line, page.Title) {
+				continue
+			}
+			fmt.Printf("Simulating click on page %s at y=%d\n", page.Title, y)
+			mm := tea.MouseReleaseMsg{X: 0, Y: y, Button: tea.MouseLeft}
+			cmd := v.OnMouse(mm)
+			if cmd == nil {
+				fmt.Println("OnMouse returned nil cmd")
 				break
 			}
+			msg := cmd()
+			sel, ok := msg.(SelectedMsg)
+			if ok {
+				fmt.Printf("Received SelectedMsg: %+v\n", sel)
+			} else {
+				fmt.Printf("Received unexpected msg: %T %+v\n", msg, msg)
+			}
+			fmt.Printf("nav.ActiveIndex=%d\n", nav.ActiveIndex)
+			break
 		}
 	}
 }

@@ -21,9 +21,9 @@ type Tabs struct {
 func NewTabs() *Tabs {
 	return &Tabs{
 		Pages: []Page{
-			{ID: "home", Title: "Home"},
-			{ID: "debug", Title: "Inspector"},
-			{ID: "settings", Title: "Settings"},
+			{ID: pageIDHome, Title: pageHome},
+			{ID: pageIDInspector, Title: pageInspector},
+			{ID: pageIDSettings, Title: pageSettings},
 		},
 		ActiveIndex: 0,
 		HoverIndex:  -1,
@@ -97,7 +97,7 @@ func computeTabWindow(widths []int, avail, active, leftW, rightW int) (first, la
 		return 0, n - 1, false, false
 	}
 	active = max(0, min(active, n-1))
-	for first = 0; first <= active; first++ {
+	for first = range active + 1 {
 		showLeft = first > 0
 		budget := avail
 		if showLeft {
@@ -138,8 +138,8 @@ func (m *Tabs) View() tea.View {
 	activeTabStyle := inactiveTabStyle.Border(activeTabBorder, true)
 	hoverTabStyle := c.Styles.TabHover.Border(inactiveTabBorder, true).Padding(0, 1)
 
-	var rendered []string
-	var tabWidths []int
+	rendered := make([]string, 0, len(m.Pages))
+	tabWidths := make([]int, 0, len(m.Pages))
 	for i, t := range m.Pages {
 		var style lipgloss.Style
 		switch i {

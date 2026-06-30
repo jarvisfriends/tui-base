@@ -11,7 +11,7 @@ import (
 )
 
 // Test that the settings page renders the huh form and that the router
-// correctly initialises with the persisted nav style.
+// correctly initializes with the persisted nav style.
 func TestSettingsNavToggleViaClick(t *testing.T) {
 	// ensure no leftover settings file
 	tmpDir := t.TempDir()
@@ -30,7 +30,7 @@ func TestSettingsNavToggleViaClick(t *testing.T) {
 	// find settings page index
 	settingsIdx := -1
 	for i, p := range m.nav.GetPages() {
-		if p.ID == "settings" {
+		if p.ID == navigation.PageIDSettings {
 			settingsIdx = i
 			break
 		}
@@ -49,7 +49,7 @@ func TestSettingsNavToggleViaClick(t *testing.T) {
 	}
 
 	// Verify that sending NavStyleMsg directly still switches nav (core contract).
-	_, _ = m.Update(settings.NavStyleMsg{Style: "tabs"})
+	_, _ = m.Update(settings.NavStyleMsg{Style: navStyleTabs})
 	if _, ok := m.nav.(*navigation.Tabs); !ok {
 		t.Fatalf("expected router nav to be tabs after NavStyleMsg; got %T", m.nav)
 	}
@@ -65,7 +65,7 @@ func TestSettingsNavToggleViaMsg(t *testing.T) {
 	}
 
 	// send message to switch to tabs
-	_, _ = m.Update(settings.NavStyleMsg{Style: "tabs"})
+	_, _ = m.Update(settings.NavStyleMsg{Style: navStyleTabs})
 	if _, ok := m.nav.(*navigation.Tabs); !ok {
 		t.Fatalf("expected router nav to be tabs after NavStyleMsg; got %T", m.nav)
 	}

@@ -1,6 +1,7 @@
 ignores:
   - .github/**
   - tmp/**
+  - .agent/**
 
 config:
   default: false

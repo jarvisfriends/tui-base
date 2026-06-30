@@ -1,96 +1,163 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "go: build",
-            "type": "shell",
-            "command": "go build ./...",
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "problemMatcher": [
-                "$go"
-            ]
-        },
-        {
-            "label": "go: run TUI",
-            "type": "shell",
-            "command": "go run .",
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared"
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "go: test",
-            "type": "shell",
-            "command": "go test ./... -v",
-            "group": "test",
-            "problemMatcher": []
-        },
-        {
-            "label": "go: test (race)",
-            "type": "shell",
-            "command": "go test -race ./... -v",
-            "group": {
-                "kind": "test",
-                "isDefault": true
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "go: lint",
-            "type": "shell",
-            "command": "golangci-lint run ./...",
-            "problemMatcher": []
-        },
-        {
-            "label": "go: verify local",
-            "type": "shell",
-            "command": "bash tools/local_verify.sh",
-            "problemMatcher": []
-        },
-        {
-            "label": "go: coverage",
-            "type": "shell",
-            "command": "bash tools/test_coverage.sh",
-            "problemMatcher": []
-        },
-        {
-            "label": "go: bench",
-            "type": "shell",
-            "command": "go test -bench . -benchmem ./...",
-            "problemMatcher": []
-        },
-        {
-            "label": "go: coverage open",
-            "type": "shell",
-            "command": "go tool cover -html=coverage.out -o coverage.html || true",
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared"
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "go: profile",
-            "type": "shell",
-            "command": "bash tools/profile.sh",
-            "problemMatcher": []
-        },
-        {
-            "label": "go: fuzz",
-            "type": "shell",
-            "command": "bash tools/fuzz.sh",
-            "problemMatcher": []
-        },
-        {
-            "label": "go: fuzz (10s)",
-            "type": "shell",
-            "command": "go test ./... -run=^$ -fuzz=Fuzz -fuzztime=10s",
-            "problemMatcher": []
-        }
-    ]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "go: build",
+      "type": "shell",
+      "command": "go build ./...",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "go: run TUI",
+      "type": "shell",
+      "command": "go run .",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "go: test",
+      "type": "shell",
+      "command": "go test ./... -v",
+      "group": "test",
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "go: test (race)",
+      "type": "shell",
+      "command": "CGO_ENABLED=1 go test -race ./... -v",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "go: lint",
+      "type": "shell",
+      "command": "golangci-lint run ./...",
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "go: vet",
+      "type": "shell",
+      "command": "go vet ./...",
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "go: verify local",
+      "type": "shell",
+      "command": "bash tools/local_verify.sh",
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "go: coverage",
+      "type": "shell",
+      "command": "bash tools/test_coverage.sh",
+      "problemMatcher": []
+    },
+    {
+      "label": "go: coverage open",
+      "type": "shell",
+      "command": "go tool cover -html=coverage.out -o coverage.html || true",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "go: bench",
+      "type": "shell",
+      "command": "go test -bench . -benchmem ./...",
+      "problemMatcher": []
+    },
+    {
+      "label": "go: fuzz",
+      "type": "shell",
+      "command": "bash tools/fuzz.sh",
+      "problemMatcher": []
+    },
+    {
+      "label": "go: fuzz (10s)",
+      "type": "shell",
+      "command": "go test ./... -run=^$ -fuzz=Fuzz -fuzztime=10s",
+      "problemMatcher": []
+    },
+    {
+      "label": "go: profile",
+      "type": "shell",
+      "command": "bash tools/profile.sh",
+      "problemMatcher": []
+    },
+    {
+      "label": "go: govulncheck",
+      "detail": "Scan for known vulnerabilities in dependencies",
+      "type": "shell",
+      "command": "govulncheck ./...",
+      "problemMatcher": []
+    },
+    {
+      "label": "go: go fix",
+      "detail": "Show what go fix would change (modernize to latest Go idioms)",
+      "type": "shell",
+      "command": "go fix -diff ./...",
+      "problemMatcher": []
+    },
+    {
+      "label": "go: go generate (drift check)",
+      "detail": "Run go generate and check for uncommitted changes",
+      "type": "shell",
+      "command": "go generate ./... && git diff --exit-code || echo 'ERROR: go generate produced changes — commit them'",
+      "problemMatcher": []
+    },
+    {
+      "label": "go: cross-compile (linux/amd64)",
+      "detail": "Verify the project compiles for Linux",
+      "type": "shell",
+      "command": "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./...",
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "go: cross-compile (darwin/arm64)",
+      "detail": "Verify the project compiles for macOS Apple Silicon",
+      "type": "shell",
+      "command": "GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build ./...",
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "go: cross-compile (windows/amd64)",
+      "detail": "Verify the project compiles for Windows",
+      "type": "shell",
+      "command": "GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build ./...",
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "go: api compat check",
+      "detail": "Check public API backward compatibility (gorelease)",
+      "type": "shell",
+      "command": "gorelease 2>&1 || true",
+      "problemMatcher": []
+    },
+    {
+      "label": "go: full verify",
+      "detail": "Run all checks: build, lint, test (race), vet, govulncheck, go fix",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "go: build",
+        "go: lint",
+        "go: test (race)",
+        "go: vet",
+        "go: govulncheck",
+        "go: go fix"
+      ],
+      "problemMatcher": []
+    }
+  ]
 }

@@ -52,7 +52,7 @@ func TestInitFromSettingsFileModeSetsCurrentLogFile(t *testing.T) {
 		t.Fatalf("CurrentLogFile() = %q; want %q", current, path)
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		t.Fatalf("ReadFile returned error: %v", err)
 	}
@@ -85,20 +85,20 @@ func TestSetLevelFiltersSubscriberNotifications(t *testing.T) {
 		events = append(events, event{level: level, ts: ts, msg: msg})
 	})
 
-	if err := SetLevel("ERROR"); err != nil {
+	if err := SetLevel(logLevelError); err != nil {
 		t.Fatalf("SetLevel returned error: %v", err)
 	}
 	Debugf("debug hidden")
 	Warnf("warn hidden")
 	Errorf("error visible")
 
-	if got := GetLevel(); got != "ERROR" {
-		t.Fatalf("GetLevel() = %q; want %q", got, "ERROR")
+	if got := GetLevel(); got != logLevelError {
+		t.Fatalf("GetLevel() = %q; want %q", got, logLevelError)
 	}
 	if len(events) != 1 {
 		t.Fatalf("subscriber event count = %d; want 1", len(events))
 	}
-	if events[0].level != "ERROR" || events[0].msg != "error visible" {
+	if events[0].level != logLevelError || events[0].msg != "error visible" {
 		t.Fatalf("subscriber event = %+v; want ERROR/error visible", events[0])
 	}
 	if events[0].ts.IsZero() {

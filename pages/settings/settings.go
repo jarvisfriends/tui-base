@@ -34,26 +34,36 @@ import (
 
 const defaultSettingsFile = "tui_settings.json"
 
+const (
+	boolStrTrue   = "true"
+	boolStrFalse  = "false"
+	settingValOff = "Off"
+	settingValOn  = "On"
+
+	defTerminalLetWindows = "let_windows"
+	blankGUID             = "{00000000-0000-0000-0000-000000000000}"
+)
+
 // initRegistryOnce ensures tint.NewDefaultRegistry is called exactly once
 // across the process lifetime. NewDefaultRegistry writes to a module-level
 // global inside bubbletint; calling it from concurrent goroutines (e.g.
-// parallel tests that each call settings.New) produces a data race.
+// parallel tests that each call settings.NewWithOptions) produces a data race.
 var initRegistryOnce sync.Once
 
 // configDirMu guards the configDir package-level variable. Tests that call
-// settings.New in parallel each invoke SetConfigDir, which would otherwise
+// settings.NewWithOptions in parallel each invoke SetConfigDir, which would otherwise
 // produce a write-write data race on the unguarded string.
 var configDirMu sync.RWMutex
 
 // configDir is the directory tui_settings.json is read from and written to.
 // Empty means the current working directory (legacy behavior). The router sets
-// this to the per-app OS config directory via SetConfigDir before settings.New
+// this to the per-app OS config directory via SetConfigDir before settings.NewWithOptions
 // so settings persist in a stable, user-appropriate location rather than
 // wherever the binary happened to be launched from.
 var configDir string
 
 // SetConfigDir sets the directory used to persist tui_settings.json. Call this
-// before settings.New. An empty string restores current-working-directory
+// before settings.NewWithOptions. An empty string restores current-working-directory
 // behavior. The directory is created on first save if it does not exist.
 func SetConfigDir(dir string) {
 	configDirMu.Lock()
@@ -192,25 +202,25 @@ func DefaultKeys() *Keys {
 //   - Overview: a compact list showing every setting on one line with its current
 //     value. Up/Down moves the cursor; Enter or click opens an edit overlay.
 //
-//   - Editing: a centred huh form (one field) is composited over the overview using
+//   - Editing: a centered huh form (one field) is composited over the overview using
 //     the lipgloss Compositor. Submitting or aborting the form returns to overview.
 type SettingsModel struct {
 	page.Base
 
 	// Persisted fields (exported so JSON encoding works).
-	NavStyle             string            `json:"nav_style"`
-	NavShowNumbers       bool              `json:"nav_show_numbers"`
-	NavNumberSelect      bool              `json:"nav_number_select"`
-	ColorThemeID         string            `json:"theme_id"`
-	ThemeMode            string            `json:"theme_mode"`
-	StylePreset          string            `json:"style_preset"`
-	AccessibilityColors  bool              `json:"accessibility_colors"`
-	LogOutput            string            `json:"log_output"`
-	LogPath              string            `json:"log_path"`
-	LogLevel             string            `json:"log_level"`
-	NotificationsEnabled bool              `json:"notifications_enabled"`
-	NotificationsPersist bool              `json:"notifications_persist"`
-	CustomKeys           map[string]string `json:"custom_keys"`
+	NavStyle             string            `json:"nav_style,omitempty"`
+	NavShowNumbers       bool              `json:"nav_show_numbers,omitempty"`
+	NavNumberSelect      bool              `json:"nav_number_select,omitempty"`
+	ColorThemeID         string            `json:"theme_id,omitempty"`
+	ThemeMode            string            `json:"theme_mode,omitempty"`
+	StylePreset          string            `json:"style_preset,omitempty"`
+	AccessibilityColors  bool              `json:"accessibility_colors,omitempty"`
+	LogOutput            string            `json:"log_output,omitempty"`
+	LogPath              string            `json:"log_path,omitempty"`
+	LogLevel             string            `json:"log_level,omitempty"`
+	NotificationsEnabled bool              `json:"notifications_enabled,omitempty"`
+	NotificationsPersist bool              `json:"notifications_persist,omitempty"`
+	CustomKeys           map[string]string `json:"custom_keys,omitempty"`
 	// defaultTerminal holds the current machine default terminal handling on
 	// Windows. It is intentionally unexported so it's not persisted to the
 	// JSON settings file; the value is always read from / written to the
@@ -224,7 +234,7 @@ type SettingsModel struct {
 	navNumbersStr      string
 	navNumberSelectStr string
 
-	extraSections []config.Section
+	extraSections []config.Section[string]
 	items         []settingItem
 	categories    []settingsCategory
 
@@ -254,7 +264,7 @@ type SettingsModel struct {
 
 // Options provides configuration for the settings UI.
 type Options struct {
-	ExtraSections []config.Section
+	ExtraSections []config.Section[string]
 	DefaultKeys   *keys.AppKeyMap
 	Gates         *gate.GateRegistry
 }
@@ -273,13 +283,6 @@ func (m *SettingsModel) Save() error {
 	return nil
 }
 
-// New creates a settings model. Pass extra config.Sections contributed by
-// Configurable components; they appear after the built-in rows.
-// Deprecated: use NewWithOptions instead.
-func New(extraSections ...config.Section) *SettingsModel {
-	return NewWithOptions(Options{ExtraSections: extraSections})
-}
-
 // NewWithOptions creates a settings model with advanced configuration.
 func NewWithOptions(opts Options) *SettingsModel {
 	m := &SettingsModel{
@@ -296,7 +299,7 @@ func NewWithOptions(opts Options) *SettingsModel {
 		NotificationsEnabled: true,
 		NotificationsPersist: false,
 		CustomKeys:           make(map[string]string),
-		defaultTerminal:      "let_windows",
+		defaultTerminal:      defTerminalLetWindows,
 		extraSections:        opts.ExtraSections,
 		keys:                 DefaultKeys(),
 		opts:                 opts,
@@ -364,29 +367,29 @@ func (m *SettingsModel) buildItems() {
 
 	// sync intermediate strings from persisted bools
 	if m.NotificationsEnabled {
-		m.notifEnabledStr = "true"
+		m.notifEnabledStr = boolStrTrue
 	} else {
-		m.notifEnabledStr = "false"
+		m.notifEnabledStr = boolStrFalse
 	}
 	if m.NotificationsPersist {
-		m.notifPersistStr = "true"
+		m.notifPersistStr = boolStrTrue
 	} else {
-		m.notifPersistStr = "false"
+		m.notifPersistStr = boolStrFalse
 	}
 	if m.AccessibilityColors {
-		m.accessibilityStr = "true"
+		m.accessibilityStr = boolStrTrue
 	} else {
-		m.accessibilityStr = "false"
+		m.accessibilityStr = boolStrFalse
 	}
 	if m.NavShowNumbers {
-		m.navNumbersStr = "true"
+		m.navNumbersStr = boolStrTrue
 	} else {
-		m.navNumbersStr = "false"
+		m.navNumbersStr = boolStrFalse
 	}
 	if m.NavNumberSelect {
-		m.navNumberSelectStr = "true"
+		m.navNumberSelectStr = boolStrTrue
 	} else {
-		m.navNumberSelectStr = "false"
+		m.navNumberSelectStr = boolStrFalse
 	}
 	m.ThemeMode = theme.NormalizeMode(m.ThemeMode)
 	m.StylePreset = string(theme.NormalizePreset(m.StylePreset))
@@ -397,8 +400,8 @@ func (m *SettingsModel) buildItems() {
 		huh.NewOption("Top Nav - minimal horizontal bar (inspector-style)", "topnav"),
 	}
 	navNumbersOpts := []huh.Option[string]{
-		huh.NewOption("Off", "false"),
-		huh.NewOption("On", "true"),
+		huh.NewOption(settingValOff, boolStrFalse),
+		huh.NewOption(settingValOn, boolStrTrue),
 	}
 	modeOpts := []huh.Option[string]{
 		huh.NewOption("Dark", theme.ThemeModeDark),
@@ -409,8 +412,8 @@ func (m *SettingsModel) buildItems() {
 		styleOpts = append(styleOpts, huh.NewOption(p.DisplayName(), string(p)))
 	}
 	accessibilityOpts := []huh.Option[string]{
-		huh.NewOption("Off", "false"),
-		huh.NewOption("On", "true"),
+		huh.NewOption(settingValOff, boolStrFalse),
+		huh.NewOption(settingValOn, boolStrTrue),
 	}
 	logOpts := []huh.Option[string]{
 		huh.NewOption("Temporary directory (default)", "temp"),
@@ -429,7 +432,7 @@ func (m *SettingsModel) buildItems() {
 	var terminalOpts []huh.Option[string]
 	if runtime.GOOS == "windows" {
 		terminalOpts = []huh.Option[string]{
-			huh.NewOption("Let Windows Decide (system default)", "let_windows"),
+			huh.NewOption("Let Windows Decide (system default)", defTerminalLetWindows),
 			huh.NewOption("Windows Console Host (Classic ConHost) — legacy", "classic"),
 			huh.NewOption("Windows Terminal (Modern) — recommended", "modern"),
 		}
@@ -462,9 +465,9 @@ func (m *SettingsModel) buildItems() {
 		title: "Show Nav Numbers",
 		value: func() string {
 			if m.NavShowNumbers {
-				return "On"
+				return settingValOn
 			}
-			return "Off"
+			return settingValOff
 		},
 		buildForm: func() *huh.Form {
 			return huh.NewForm(huh.NewGroup(
@@ -480,9 +483,9 @@ func (m *SettingsModel) buildItems() {
 		title: "Number Key Select",
 		value: func() string {
 			if m.NavNumberSelect {
-				return "On"
+				return settingValOn
 			}
-			return "Off"
+			return settingValOff
 		},
 		buildForm: func() *huh.Form {
 			return huh.NewForm(huh.NewGroup(
@@ -494,19 +497,20 @@ func (m *SettingsModel) buildItems() {
 			).WithTheme(theme.HuhThemeFunc()))
 		},
 	})
-	addItem("Logging", settingItem{
-		title: "Log Destination",
-		value: func() string { return labelFor(m.LogOutput, logOpts) },
-		buildForm: func() *huh.Form {
-			return huh.NewForm(huh.NewGroup(
-				huh.NewSelect[string]().
-					Title("Log Destination").
-					Description("Where runtime logs are written").
-					Options(logOpts...).
-					Value(&m.LogOutput),
-			).WithTheme(theme.HuhThemeFunc()))
+	addItem(
+		"Logging", settingItem{
+			title: "Log Destination",
+			value: func() string { return labelFor(m.LogOutput, logOpts) },
+			buildForm: func() *huh.Form {
+				return huh.NewForm(huh.NewGroup(
+					huh.NewSelect[string]().
+						Title("Log Destination").
+						Description("Where runtime logs are written").
+						Options(logOpts...).
+						Value(&m.LogOutput),
+				).WithTheme(theme.HuhThemeFunc()))
+			},
 		},
-	},
 	)
 	addItem("Logging", settingItem{
 		title:     "Log Path",
@@ -528,127 +532,134 @@ func (m *SettingsModel) buildItems() {
 			).WithTheme(theme.HuhThemeFunc()))
 		},
 	})
-	addItem("Logging", settingItem{
-		title: "Log Level",
-		value: func() string { return labelFor(m.LogLevel, levelOpts) },
-		buildForm: func() *huh.Form {
-			return huh.NewForm(huh.NewGroup(
-				huh.NewSelect[string]().
-					Title("Log Level").
-					Description("Minimum severity recorded to file and shown in inspector").
-					Options(levelOpts...).
-					Value(&m.LogLevel),
-			).WithTheme(theme.HuhThemeFunc()))
+	addItem(
+		"Logging", settingItem{
+			title: "Log Level",
+			value: func() string { return labelFor(m.LogLevel, levelOpts) },
+			buildForm: func() *huh.Form {
+				return huh.NewForm(huh.NewGroup(
+					huh.NewSelect[string]().
+						Title("Log Level").
+						Description("Minimum severity recorded to file and shown in inspector").
+						Options(levelOpts...).
+						Value(&m.LogLevel),
+				).WithTheme(theme.HuhThemeFunc()))
+			},
 		},
-	},
 	)
-	addItem("Appearance", settingItem{
-		title: "Theme Mode",
-		value: func() string { return labelFor(m.ThemeMode, modeOpts) },
-		buildForm: func() *huh.Form {
-			return huh.NewForm(huh.NewGroup(
-				huh.NewSelect[string]().
-					Title("Theme Mode").
-					Description("Choose between dark and light themes for the theme picker").
-					Options(modeOpts...).
-					Value(&m.ThemeMode),
-			).WithTheme(theme.HuhThemeFunc()))
+	addItem(
+		"Appearance", settingItem{
+			title: "Theme Mode",
+			value: func() string { return labelFor(m.ThemeMode, modeOpts) },
+			buildForm: func() *huh.Form {
+				return huh.NewForm(huh.NewGroup(
+					huh.NewSelect[string]().
+						Title("Theme Mode").
+						Description("Choose between dark and light themes for the theme picker").
+						Options(modeOpts...).
+						Value(&m.ThemeMode),
+				).WithTheme(theme.HuhThemeFunc()))
+			},
 		},
-	},
 	)
-	addItem("Appearance", settingItem{
-		title: "Color Theme",
-		value: func() string { return tintDisplayName(m.ColorThemeID) },
-		buildForm: func() *huh.Form {
-			return huh.NewForm(huh.NewGroup(
-				huh.NewSelect[string]().
-					Title("Color Theme").
-					Description("Up/Down to browse - applied immediately as you scroll").
-					Options(buildThemeOptions(m.ThemeMode)...).
-					Height(14).
-					Value(&m.ColorThemeID),
-			).WithTheme(theme.HuhThemeFunc()))
+	addItem(
+		"Appearance", settingItem{
+			title: "Color Theme",
+			value: func() string { return tintDisplayName(m.ColorThemeID) },
+			buildForm: func() *huh.Form {
+				return huh.NewForm(huh.NewGroup(
+					huh.NewSelect[string]().
+						Title("Color Theme").
+						Description("Up/Down to browse - applied immediately as you scroll").
+						Options(buildThemeOptions(m.ThemeMode)...).
+						Height(14).
+						Value(&m.ColorThemeID),
+				).WithTheme(theme.HuhThemeFunc()))
+			},
 		},
-	},
 	)
-	addItem("Appearance", settingItem{
-		title: "Form Style",
-		value: func() string { return labelFor(m.StylePreset, styleOpts) },
-		buildForm: func() *huh.Form {
-			return huh.NewForm(huh.NewGroup(
-				huh.NewSelect[string]().
-					Title("Form Style").
-					Description("Border, prefix, and indicator style for forms - colors come from the Color Theme").
-					Options(styleOpts...).
-					Value(&m.StylePreset),
-			).WithTheme(theme.HuhThemeFunc()))
+	addItem(
+		"Appearance", settingItem{
+			title: "Form Style",
+			value: func() string { return labelFor(m.StylePreset, styleOpts) },
+			buildForm: func() *huh.Form {
+				return huh.NewForm(huh.NewGroup(
+					huh.NewSelect[string]().
+						Title("Form Style").
+						Description("Border, prefix, and indicator style for forms - colors come from the Color Theme").
+						Options(styleOpts...).
+						Value(&m.StylePreset),
+				).WithTheme(theme.HuhThemeFunc()))
+			},
 		},
-	},
 	)
-	addItem("Appearance", settingItem{
-		title: "Accessibility Colors",
-		value: func() string {
-			if m.AccessibilityColors {
-				return "On"
-			}
-			return "Off"
+	addItem(
+		"Appearance", settingItem{
+			title: "Accessibility Colors",
+			value: func() string {
+				if m.AccessibilityColors {
+					return settingValOn
+				}
+				return settingValOff
+			},
+			buildForm: func() *huh.Form {
+				return huh.NewForm(huh.NewGroup(
+					huh.NewSelect[string]().
+						Title("Accessibility Colors").
+						Description("Apply accessibility adjustments to foreground colors app-wide").
+						Options(accessibilityOpts...).
+						Value(&m.accessibilityStr),
+				).WithTheme(theme.HuhThemeFunc()))
+			},
 		},
-		buildForm: func() *huh.Form {
-			return huh.NewForm(huh.NewGroup(
-				huh.NewSelect[string]().
-					Title("Accessibility Colors").
-					Description("Apply accessibility adjustments to foreground colors app-wide").
-					Options(accessibilityOpts...).
-					Value(&m.accessibilityStr),
-			).WithTheme(theme.HuhThemeFunc()))
-		},
-	},
 	)
-	addItem("Notifications", settingItem{
-		title: "Bell Notifications",
-		value: func() string {
-			if m.NotificationsEnabled {
-				return "Enabled 🔔"
-			}
-			return "Disabled 🔕"
+	addItem(
+		"Notifications", settingItem{
+			title: "Bell Notifications",
+			value: func() string {
+				if m.NotificationsEnabled {
+					return "Enabled 🔔"
+				}
+				return "Disabled 🔕"
+			},
+			buildForm: func() *huh.Form {
+				notifOpts := []huh.Option[string]{
+					huh.NewOption("Enabled", boolStrTrue),
+					huh.NewOption("Disabled", boolStrFalse),
+				}
+				return huh.NewForm(huh.NewGroup(
+					huh.NewSelect[string]().
+						Title("Bell Notifications").
+						Description("Show toast pop-ups for info, warnings, and errors").
+						Options(notifOpts...).
+						Value(&m.notifEnabledStr),
+				).WithTheme(theme.HuhThemeFunc()))
+			},
 		},
-		buildForm: func() *huh.Form {
-			notifOpts := []huh.Option[string]{
-				huh.NewOption("Enabled", "true"),
-				huh.NewOption("Disabled", "false"),
-			}
-			return huh.NewForm(huh.NewGroup(
-				huh.NewSelect[string]().
-					Title("Bell Notifications").
-					Description("Show toast pop-ups for info, warnings, and errors").
-					Options(notifOpts...).
-					Value(&m.notifEnabledStr),
-			).WithTheme(theme.HuhThemeFunc()))
-		},
-	},
 	)
-	addItem("Notifications", settingItem{
-		title: "Notification Persistence",
-		value: func() string {
-			if m.NotificationsPersist {
-				return "On"
-			}
-			return "Off"
+	addItem(
+		"Notifications", settingItem{
+			title: "Notification Persistence",
+			value: func() string {
+				if m.NotificationsPersist {
+					return settingValOn
+				}
+				return settingValOff
+			},
+			buildForm: func() *huh.Form {
+				persistOpts := []huh.Option[string]{
+					huh.NewOption("Off (session only)", boolStrFalse),
+					huh.NewOption("On (saved to disk)", boolStrTrue),
+				}
+				return huh.NewForm(huh.NewGroup(
+					huh.NewSelect[string]().
+						Title("Notification Persistence").
+						Description("Store notifications in config dir across restarts").
+						Options(persistOpts...).
+						Value(&m.notifPersistStr),
+				).WithTheme(theme.HuhThemeFunc()))
+			},
 		},
-		buildForm: func() *huh.Form {
-			persistOpts := []huh.Option[string]{
-				huh.NewOption("Off (session only)", "false"),
-				huh.NewOption("On (saved to disk)", "true"),
-			}
-			return huh.NewForm(huh.NewGroup(
-				huh.NewSelect[string]().
-					Title("Notification Persistence").
-					Description("Store notifications in config dir across restarts").
-					Options(persistOpts...).
-					Value(&m.notifPersistStr),
-			).WithTheme(theme.HuhThemeFunc()))
-		},
-	},
 	)
 
 	var keyOptions []keys.BindingDef
@@ -745,8 +756,8 @@ func (m *SettingsModel) buildItems() {
 			},
 			apply: func() error {
 				switch m.defaultTerminal {
-				case "let_windows":
-					return applyTerminalSetting("{00000000-0000-0000-0000-000000000000}", "{00000000-0000-0000-0000-000000000000}")
+				case defTerminalLetWindows:
+					return applyTerminalSetting(blankGUID, blankGUID)
 				case "classic":
 					return applyTerminalSetting("{B23D10C0-E52E-411E-9D5B-C09FDF709C7D}", "{B23D10C0-E52E-411E-9D5B-C09FDF709C7D}")
 				case "modern":
@@ -771,12 +782,12 @@ func (m *SettingsModel) buildItems() {
 				},
 				buildForm: func() *huh.Form {
 					opts := []huh.Option[string]{
-						huh.NewOption("Disabled", "false"),
-						huh.NewOption("Enabled", "true"),
+						huh.NewOption("Disabled", boolStrFalse),
+						huh.NewOption("Enabled", boolStrTrue),
 					}
 					valStr := "false"
 					if m.opts.Gates.Value(gDef.Name) {
-						valStr = "true"
+						valStr = boolStrTrue
 					}
 					return huh.NewForm(huh.NewGroup(
 						huh.NewSelect[string]().
@@ -787,7 +798,7 @@ func (m *SettingsModel) buildItems() {
 					).WithTheme(theme.HuhThemeFunc()))
 				},
 				setValue: func(val string) {
-					m.opts.Gates.Set(gDef.Name, val == "true")
+					m.opts.Gates.Set(gDef.Name, val == boolStrTrue)
 				},
 			})
 		}
@@ -795,7 +806,7 @@ func (m *SettingsModel) buildItems() {
 }
 
 // itemFromDef builds a settingItem from a config.FieldDef for extra sections.
-func (m *SettingsModel) itemFromDef(def config.FieldDef) settingItem {
+func (m *SettingsModel) itemFromDef(def config.FieldDef[string]) settingItem {
 	return settingItem{
 		title:     def.Title,
 		leftTrunc: def.Kind == config.FieldFilePicker,
@@ -856,6 +867,8 @@ func (m *SettingsModel) itemFromDef(def config.FieldDef) settingItem {
 				if def.CustomModelBuilder != nil {
 					return def.CustomModelBuilder()
 				}
+			case config.FieldSelect, config.FieldText, config.FieldFilePicker:
+				// handled via huh form, not a model overlay
 			}
 			return nil
 		},
@@ -869,7 +882,7 @@ func (m *SettingsModel) itemFromDef(def config.FieldDef) settingItem {
 }
 
 // huhFieldFromDef creates a huh.Field from a config.FieldDef.
-func (m *SettingsModel) huhFieldFromDef(def config.FieldDef) huh.Field {
+func (m *SettingsModel) huhFieldFromDef(def config.FieldDef[string]) huh.Field {
 	switch def.Kind {
 	case config.FieldSelect:
 		s := huh.NewSelect[string]().
@@ -903,6 +916,8 @@ func (m *SettingsModel) huhFieldFromDef(def config.FieldDef) huh.Field {
 			DirAllowed(def.DirAllowed).
 			FileAllowed(def.FileAllowed).
 			Value(def.Value)
+	case config.FieldMultiFilePicker, config.FieldDate, config.FieldDuration, config.FieldCustom:
+		// handled via model overlay, not a huh field
 	}
 	return nil
 }
@@ -1024,6 +1039,62 @@ func (m *SettingsModel) abortEdit() tea.Cmd {
 	}
 }
 
+func (m *SettingsModel) updateActiveOverlay(msg tea.Msg) (huh.FormState, tea.Cmd) {
+	if !m.modelOverlay.IsOpen() {
+		return m.editOverlay.Update(msg)
+	}
+	cmd := m.modelOverlay.Update(msg)
+	mod := m.modelOverlay.Model()
+	switch v := mod.(type) {
+	case *MultiFileEditor:
+		if v.Done {
+			if m.editIndex >= 0 && m.items[m.editIndex].setValue != nil {
+				m.items[m.editIndex].setValue(v.Value())
+			}
+			return huh.StateCompleted, cmd
+		} else if v.Aborted {
+			return huh.StateAborted, cmd
+		}
+	case *KeyRecorder:
+		if v.Done {
+			if m.editIndex >= 0 && m.items[m.editIndex].setValue != nil {
+				m.items[m.editIndex].setValue(v.Value())
+			}
+			return huh.StateCompleted, cmd
+		} else if v.Aborted {
+			return huh.StateAborted, cmd
+		}
+	case *timepicker.TimePickerModel:
+		if v.Done {
+			if m.editIndex >= 0 && m.items[m.editIndex].setValue != nil {
+				m.items[m.editIndex].setValue(v.Duration.String())
+			}
+			return huh.StateCompleted, cmd
+		} else if v.Aborted {
+			return huh.StateAborted, cmd
+		}
+	case *datepicker.DatePickerModel:
+		if v.Selected {
+			if m.editIndex >= 0 && m.items[m.editIndex].setValue != nil {
+				m.items[m.editIndex].setValue(v.Time.Format("2006-01-02"))
+			}
+			return huh.StateCompleted, cmd
+		} else if km, ok := msg.(tea.KeyMsg); ok && key.Matches(km, v.KeyMap.Quit) {
+			return huh.StateAborted, cmd
+		}
+	case interface {
+		IsDone() bool
+		IsAborted() bool
+	}:
+		if v.IsDone() {
+			return huh.StateCompleted, cmd
+		} else if v.IsAborted() {
+			return huh.StateAborted, cmd
+		}
+	}
+	return huh.StateNormal, cmd
+}
+
 func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Esc closes the overlay and reverts any unsaved/live-preview changes.
 	if km, ok := msg.(tea.KeyMsg); ok && key.Matches(km, m.keys.Dismiss) {
@@ -1054,67 +1125,12 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
 
-	if m.modelOverlay.IsOpen() {
-		cmd = m.modelOverlay.Update(msg)
-		if cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-		mod := m.modelOverlay.Model()
-		switch v := mod.(type) {
-		case *MultiFileEditor:
-			if v.Done {
-				state = huh.StateCompleted
-				if m.editIndex >= 0 && m.items[m.editIndex].setValue != nil {
-					m.items[m.editIndex].setValue(v.Value())
-				}
-			} else if v.Aborted {
-				state = huh.StateAborted
-			}
-		case *KeyRecorder:
-			if v.Done {
-				state = huh.StateCompleted
-				if m.editIndex >= 0 && m.items[m.editIndex].setValue != nil {
-					m.items[m.editIndex].setValue(v.Value())
-				}
-			} else if v.Aborted {
-				state = huh.StateAborted
-			}
-		case timepicker.TimePickerModel:
-			if v.Done {
-				state = huh.StateCompleted
-				if m.editIndex >= 0 && m.items[m.editIndex].setValue != nil {
-					m.items[m.editIndex].setValue(v.Duration.String())
-				}
-			} else if v.Aborted {
-				state = huh.StateAborted
-			}
-		case datepicker.DatePickerModel:
-			if v.Selected {
-				state = huh.StateCompleted
-				if m.editIndex >= 0 && m.items[m.editIndex].setValue != nil {
-					m.items[m.editIndex].setValue(v.Time.Format("2006-01-02"))
-				}
-			} else if km, ok := msg.(tea.KeyMsg); ok && key.Matches(km, v.KeyMap.Quit) {
-				state = huh.StateAborted
-			}
-		case interface {
-			IsDone() bool
-			IsAborted() bool
-		}:
-			if v.IsDone() {
-				state = huh.StateCompleted
-			} else if v.IsAborted() {
-				state = huh.StateAborted
-			}
-		}
-	} else {
-		state, cmd = m.editOverlay.Update(msg)
-		if cmd != nil {
-			cmds = append(cmds, cmd)
-		}
+	state, cmd = m.updateActiveOverlay(msg)
+	if cmd != nil {
+		cmds = append(cmds, cmd)
 	}
 
-	m.AccessibilityColors = m.accessibilityStr == "true"
+	m.AccessibilityColors = m.accessibilityStr == boolStrTrue
 	m.ThemeMode = theme.NormalizeMode(m.ThemeMode)
 	m.StylePreset = string(theme.NormalizePreset(m.StylePreset))
 	m.ColorThemeID = theme.ResolveTintIDForMode(m.ColorThemeID, m.ThemeMode)
@@ -1136,12 +1152,12 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		nav := m.NavStyle
 		cmds = append(cmds, func() tea.Msg { return NavStyleMsg{Style: nav} })
 	}
-	m.NavShowNumbers = m.navNumbersStr == "true"
+	m.NavShowNumbers = m.navNumbersStr == boolStrTrue
 	if m.NavShowNumbers != prevNavNumbers {
 		show := m.NavShowNumbers
 		cmds = append(cmds, func() tea.Msg { return NavShowNumbersMsg{Show: show} })
 	}
-	m.NavNumberSelect = m.navNumberSelectStr == "true"
+	m.NavNumberSelect = m.navNumberSelectStr == boolStrTrue
 	if m.NavNumberSelect != prevNavNumberSelect {
 		enabled := m.NavNumberSelect
 		cmds = append(cmds, func() tea.Msg { return NavNumberSelectMsg{Enabled: enabled} })
@@ -1157,33 +1173,32 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		// sync notification bool fields from intermediate string values
-		m.NotificationsEnabled = m.notifEnabledStr == "true"
-		m.NotificationsPersist = m.notifPersistStr == "true"
-		m.AccessibilityColors = m.accessibilityStr == "true"
-		m.NavShowNumbers = m.navNumbersStr == "true"
-		m.NavNumberSelect = m.navNumberSelectStr == "true"
+		m.NotificationsEnabled = m.notifEnabledStr == boolStrTrue
+		m.NotificationsPersist = m.notifPersistStr == boolStrTrue
+		m.AccessibilityColors = m.accessibilityStr == boolStrTrue
+		m.NavShowNumbers = m.navNumbersStr == boolStrTrue
+		m.NavNumberSelect = m.navNumberSelectStr == boolStrTrue
 		m.ThemeMode = theme.NormalizeMode(m.ThemeMode)
 		m.ColorThemeID = theme.ResolveTintIDForMode(m.ColorThemeID, m.ThemeMode)
 		// propagate notification settings to the shared manager at runtime
 		notifEnabled, notifPersist := m.NotificationsEnabled, m.NotificationsPersist
-		cmds = append(cmds, func() tea.Msg {
-			return NotificationsSettingsMsg{Enabled: notifEnabled, Persist: notifPersist}
-		})
 		customKeys := make(map[string]string)
 		maps.Copy(customKeys, m.CustomKeys)
-		cmds = append(cmds, func() tea.Msg {
-			return KeybindingsChangedMsg{CustomKeys: customKeys}
-		})
 		// S-13: persist asynchronously so a slow disk never blocks Update. The
 		// snapshot is taken now (on the UI goroutine) so the background write
 		// sees a consistent copy even if the user keeps editing.
-		cmds = append(cmds, m.saveCmd())
+		cmds = append(
+			cmds,
+			func() tea.Msg { return NotificationsSettingsMsg{Enabled: notifEnabled, Persist: notifPersist} },
+			func() tea.Msg { return KeybindingsChangedMsg{CustomKeys: customKeys} },
+			m.saveCmd(),
+		)
 		m.loadedFromFile = true
 		if path, err := logging.InitFromSettings(m.LogOutput, m.LogPath); err == nil {
 			m.LogPath = path
 			logging.Infof("Settings: log path updated to %s", path)
 		} else {
-			logging.Errorf("Settings: failed to initialise logging: %v", err)
+			logging.Errorf("Settings: failed to initialize logging: %v", err)
 		}
 		_ = logging.SetLevel(m.LogLevel)
 		m.editOverlay.Close()
@@ -1192,6 +1207,8 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case huh.StateAborted:
 		// huh's own abort key (ctrl+c inside the form) — same revert path.
 		cmds = append(cmds, m.abortEdit())
+	case huh.StateNormal:
+		// form still in progress — no action
 	}
 
 	return m, tea.Batch(cmds...)
@@ -1294,16 +1311,15 @@ func (m *SettingsModel) renderOverview() string {
 	titleStyle := c.Styles.Title
 
 	lines := make([]string, 0, 4)
-	lines = append(lines, titleStyle.Render("Settings"))
-	lines = append(lines, "") // blank separator — part of headerLines
+	lines = append(lines, titleStyle.Render("Settings"), "") // blank separator — part of headerLines
 
 	m.ensureCursorVisible()
 	layout = m.overviewLayout()
 	visible := layout.visibleEntries(m.scrollTop)
 	cols := make([]string, 0, layout.columns)
-	for col := 0; col < layout.columns; col++ {
+	for col := range layout.columns {
 		colLines := make([]string, 0, layout.rowsPerCol)
-		for row := 0; row < layout.rowsPerCol; row++ {
+		for row := range layout.rowsPerCol {
 			i := col*layout.rowsPerCol + row
 			if i >= len(visible) {
 				colLines = append(colLines, emptyRow)
@@ -1483,11 +1499,11 @@ func (m *SettingsModel) saveCmd() tea.Cmd {
 	}
 	return func() tea.Msg {
 		if dir := filepath.Dir(path); dir != "" && dir != "." {
-			if mkErr := os.MkdirAll(dir, 0o755); mkErr != nil {
+			if mkErr := os.MkdirAll(dir, 0o750); mkErr != nil {
 				return SettingsSavedMsg{Path: path, Err: mkErr}
 			}
 		}
-		writeErr := os.WriteFile(path, append(data, '\n'), 0o644)
+		writeErr := os.WriteFile(filepath.Clean(path), append(data, '\n'), 0o600)
 		return SettingsSavedMsg{Path: path, Err: writeErr}
 	}
 }
@@ -1497,11 +1513,11 @@ func (m *SettingsModel) saveCmd() tea.Cmd {
 // need a blocking save (tests, explicit export).
 func (m *SettingsModel) SaveToFile(filename string) error {
 	if dir := filepath.Dir(filename); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
 			return err
 		}
 	}
-	f, err := os.Create(filename)
+	f, err := os.OpenFile(filepath.Clean(filename), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
 	}
@@ -1513,7 +1529,7 @@ func (m *SettingsModel) SaveToFile(filename string) error {
 
 // LoadFromFile loads settings from the given filename if it exists.
 func (m *SettingsModel) LoadFromFile(filename string) error {
-	b, err := os.ReadFile(filename)
+	b, err := os.ReadFile(filepath.Clean(filename))
 	if err != nil {
 		return err
 	}

@@ -6,4 +6,4 @@ package settings
 func detectDefaultTerminal() (string, error) { return "", nil }
 
 // applyTerminalSetting is a no-op on non-Windows platforms.
-func applyTerminalSetting(consoleGUID, terminalGUID string) error { return nil }
+func applyTerminalSetting(string, string) error { return nil }

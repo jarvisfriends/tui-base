@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,6 +14,11 @@ import (
 
 	"charm.land/bubbles/v2/table"
 	"charm.land/lipgloss/v2"
+)
+
+const (
+	inputColMod    = "Mod"
+	inputColButton = "Button"
 )
 
 func (m *InspectorModel) colorStat(c *theme.AppStyle, val, warn, crit float64, rendered string) string {
@@ -46,27 +52,32 @@ func (m *InspectorModel) buildRuntimeRows(c *theme.AppStyle) []table.Row {
 	p := m.printer
 
 	return []table.Row{
-		{"Uptime", st.Uptime.Round(time.Second).String(),
+		{
+			"Uptime", st.Uptime.Round(time.Second).String(),
 			"Go", valStyle.Render(st.GoVersion),
 			"OS/Arch", valStyle.Render(p.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)),
 			"PID", valStyle.Render(p.Sprintf("%d", os.Getpid())),
 		},
-		{"Goroutines", m.colorStat(c, float64(st.Goroutines), 100, 500, fmt.Sprintf("%d", st.Goroutines)),
+		{
+			"Goroutines", m.colorStat(c, float64(st.Goroutines), 100, 500, strconv.Itoa(st.Goroutines)),
 			"GOMAXPROCS", valStyle.Render(p.Sprintf("%d/%d", st.GOMAXPROCS, st.NumCPU)),
 			"CGO Calls", valStyle.Render(p.Sprintf("%d", st.NumCgoCalls)),
 			"Term Size", valStyle.Render(p.Sprintf("%dx%d", m.Width(), m.Height())),
 		},
-		{"Heap Alloc", m.colorStat(c, float64(st.HeapAllocBytes)/1024/1024, 100, 500, humanize.IBytes(st.HeapAllocBytes)),
+		{
+			"Heap Alloc", m.colorStat(c, float64(st.HeapAllocBytes)/1024/1024, 100, 500, humanize.IBytes(st.HeapAllocBytes)),
 			"Heap InUse", valStyle.Render(humanize.IBytes(st.HeapInUseBytes)),
 			"Heap Sys", valStyle.Render(humanize.IBytes(st.HeapSysBytes)),
 			"Stack InUse", valStyle.Render(humanize.IBytes(st.StackInUseBytes)),
 		},
-		{"GC Cycles", valStyle.Render(p.Sprintf("%d", st.NumGC)),
+		{
+			"GC Cycles", valStyle.Render(p.Sprintf("%d", st.NumGC)),
 			"Last Pause", m.colorStat(c, float64(st.LastPause.Milliseconds()), 1, 10, st.LastPause.Round(time.Microsecond).String()),
 			"Total Paused", valStyle.Render(st.PauseTotal.Round(time.Millisecond).String()),
-			"Bin Size", valStyle.Render(humanize.IBytes(uint64(st.Launch.BinarySize))),
+			"Bin Size", valStyle.Render(humanize.IBytes(uint64(max(0, st.Launch.BinarySize)))),
 		},
-		{"GC CPU %", m.colorStat(c, st.GcCPUFraction*100, 5, 25, p.Sprintf("%.2f%%", st.GcCPUFraction*100)),
+		{
+			"GC CPU %", m.colorStat(c, st.GcCPUFraction*100, 5, 25, p.Sprintf("%.2f%%", st.GcCPUFraction*100)),
 			"GC/sec", m.colorStat(c, gcPerSec, 10, 50, p.Sprintf("%.1f", gcPerSec)),
 			"Allocs/sec", m.colorStat(c, allocsPerSec, 10000, 100000, p.Sprintf("%.0f", allocsPerSec)),
 			"Heap Objects", valStyle.Render(p.Sprintf("%d", st.HeapObjects)),
@@ -77,29 +88,35 @@ func (m *InspectorModel) buildRuntimeRows(c *theme.AppStyle) []table.Row {
 func (m *InspectorModel) buildInputRows(c *theme.AppStyle) []table.Row {
 	valStyle := c.Styles.TextOnBg
 	return []table.Row{
-		{"Mouse Click", valStyle.Render(fmt.Sprintf("%d,%d", m.LastMouseClick.X, m.LastMouseClick.Y)),
-			"Mod", valStyle.Render(KeyModToString(m.LastMouseClick.Mod)),
-			"Button", valStyle.Render(m.LastMouseClick.Button.String()),
+		{
+			"Mouse Click", valStyle.Render(fmt.Sprintf("%d,%d", m.LastMouseClick.X, m.LastMouseClick.Y)),
+			inputColMod, valStyle.Render(KeyModToString(m.LastMouseClick.Mod)),
+			inputColButton, valStyle.Render(m.LastMouseClick.Button.String()),
 		},
-		{"Mouse Release", valStyle.Render(fmt.Sprintf("%d,%d", m.LastMouseRelease.X, m.LastMouseRelease.Y)),
-			"Mod", valStyle.Render(KeyModToString(m.LastMouseRelease.Mod)),
-			"Button", valStyle.Render(m.LastMouseRelease.Button.String()),
+		{
+			"Mouse Release", valStyle.Render(fmt.Sprintf("%d,%d", m.LastMouseRelease.X, m.LastMouseRelease.Y)),
+			inputColMod, valStyle.Render(KeyModToString(m.LastMouseRelease.Mod)),
+			inputColButton, valStyle.Render(m.LastMouseRelease.Button.String()),
 		},
-		{"Mouse Motion", valStyle.Render(fmt.Sprintf("%d,%d", m.LastMouseMotion.X, m.LastMouseMotion.Y)),
-			"Mod", valStyle.Render(KeyModToString(m.LastMouseMotion.Mod)),
-			"Button", valStyle.Render(m.LastMouseMotion.Button.String()),
+		{
+			"Mouse Motion", valStyle.Render(fmt.Sprintf("%d,%d", m.LastMouseMotion.X, m.LastMouseMotion.Y)),
+			inputColMod, valStyle.Render(KeyModToString(m.LastMouseMotion.Mod)),
+			inputColButton, valStyle.Render(m.LastMouseMotion.Button.String()),
 		},
-		{"Mouse Wheel", valStyle.Render(fmt.Sprintf("%d,%d", m.LastMouseWheel.X, m.LastMouseWheel.Y)),
-			"Mod", valStyle.Render(KeyModToString(m.LastMouseWheel.Mod)),
-			"Button", valStyle.Render(m.LastMouseWheel.Button.String()),
+		{
+			"Mouse Wheel", valStyle.Render(fmt.Sprintf("%d,%d", m.LastMouseWheel.X, m.LastMouseWheel.Y)),
+			inputColMod, valStyle.Render(KeyModToString(m.LastMouseWheel.Mod)),
+			inputColButton, valStyle.Render(m.LastMouseWheel.Button.String()),
 		},
-		{"Key Press String", valStyle.Render(m.LastKeyPress.String()),
+		{
+			"Key Press String", valStyle.Render(m.LastKeyPress.String()),
 			"Text/Repeated", valStyle.Render(fmt.Sprintf("%s/%t", m.LastKeyPress.Text, m.LastKeyPress.IsRepeat)),
-			"Mod", valStyle.Render(KeyModToString(m.LastKeyPress.Mod)),
+			inputColMod, valStyle.Render(KeyModToString(m.LastKeyPress.Mod)),
 		},
-		{"Key Rel String", valStyle.Render(m.LastKeyRel.String()),
+		{
+			"Key Rel String", valStyle.Render(m.LastKeyRel.String()),
 			"Text/Repeated", valStyle.Render(fmt.Sprintf("%s/%t", m.LastKeyRel.Text, m.LastKeyRel.IsRepeat)),
-			"Mod", valStyle.Render(KeyModToString(m.LastKeyRel.Mod)),
+			inputColMod, valStyle.Render(KeyModToString(m.LastKeyRel.Mod)),
 		},
 	}
 }
@@ -290,7 +307,8 @@ func (m *InspectorModel) renderLogContent(c *theme.AppStyle) string {
 			countStr = c.Styles.Warning.Render(fmt.Sprintf(" [%d events]", log.Count))
 		}
 		typeStr := c.Styles.Title.Render(log.Type)
-		line := fmt.Sprintf("%s %s%s\n  %s",
+		line := fmt.Sprintf(
+			"%s %s%s\n  %s",
 			c.Styles.Subtitle.Render(timestamp),
 			typeStr,
 			countStr,
@@ -339,7 +357,7 @@ func (m *InspectorModel) buildTabsLine(c *theme.AppStyle) string {
 	return lipgloss.JoinHorizontal(lipgloss.Left, tabParts...)
 }
 
-func (m *InspectorModel) sectionForActiveTab(c *theme.AppStyle, availW int, s table.Styles, runtimeSection string, inputRows []table.Row, logContent string) (string, string) {
+func (m *InspectorModel) sectionForActiveTab(c *theme.AppStyle, availW int, s table.Styles, runtimeSection string, inputRows []table.Row, logContent string) (title, content string) {
 	switch m.activeTab {
 	case debugTabRuntime:
 		return "Runtime Profiling", runtimeSection
@@ -351,9 +369,9 @@ func (m *InspectorModel) sectionForActiveTab(c *theme.AppStyle, availW int, s ta
 		return "Terminal & Theme", m.buildTermSection(c, availW)
 	case debugTabAccessibility:
 		if m.acPanel != nil {
-			return "Accessibility", m.acPanel.View().Content
+			return debugTabTitleAccessibility, m.acPanel.View().Content
 		}
-		return "Accessibility", "(accessibility panel not available)"
+		return debugTabTitleAccessibility, "(accessibility panel not available)"
 	case debugTabLog:
 		title := "Message Log"
 		if m.logWarnPlus {

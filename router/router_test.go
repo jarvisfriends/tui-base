@@ -16,22 +16,27 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+const (
+	testKeyCtrlB  = "ctrl+b"
+	testPageTitle = "aSettings"
+)
+
 func TestTabCyclesPages(t *testing.T) {
 	t.Parallel()
 	m := New()
-	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != "home" {
+	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != navigation.PageIDHome {
 		t.Fatalf("initial active page = %q; want \"home\"", m.nav.GetPages()[m.nav.GetActiveIndex()].ID)
 	}
 
 	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != "settings" {
+	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != navigation.PageIDSettings {
 		t.Fatalf("after tab active page = %q; want \"settings\"", m.nav.GetPages()[m.nav.GetActiveIndex()].ID)
 	}
 
 	// nav highlight should be in sync
 	idx := -1
 	for i, p := range m.nav.GetPages() {
-		if p.ID == "settings" {
+		if p.ID == navigation.PageIDSettings {
 			idx = i
 			break
 		}
@@ -51,7 +56,7 @@ func TestSelectedMsgSwitchesPage(t *testing.T) {
 	// find settings index
 	idx := -1
 	for i, p := range m.nav.GetPages() {
-		if p.ID == "settings" {
+		if p.ID == navigation.PageIDSettings {
 			idx = i
 			break
 		}
@@ -61,7 +66,7 @@ func TestSelectedMsgSwitchesPage(t *testing.T) {
 	}
 
 	_, _ = m.Update(navigation.SelectedMsg{PageIndex: idx})
-	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != "settings" {
+	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != navigation.PageIDSettings {
 		t.Fatalf("active page = %q; want \"settings\"", m.nav.GetPages()[m.nav.GetActiveIndex()].ID)
 	}
 	if m.nav.GetActiveIndex() != idx {
@@ -89,9 +94,10 @@ func clickStatusRegion(t *testing.T, r *RouterModel, regionName string) tea.Cmd 
 	}
 	if target == nil {
 		t.Fatalf("region %q not found in status.Regions(): %+v", regionName, regions)
+		return nil
 	}
 
-	// Click the centre of the region for robustness.
+	// Click the center of the region for robustness.
 	clickX := (target.Start + target.End) / 2
 	statusHeight := lipgloss.Height(r.status.View().Content)
 	mainHeight := max(r.height-statusHeight, 0)
@@ -152,7 +158,7 @@ func TestRouter_StatusClick_SettingsNavigates(t *testing.T) {
 	// Verify the nav switched to the settings page.
 	settingsIdx := -1
 	for i, p := range r.nav.GetPages() {
-		if p.ID == "settings" {
+		if p.ID == navigation.PageIDSettings {
 			settingsIdx = i
 			break
 		}
@@ -168,7 +174,7 @@ func TestRouter_StatusClick_SettingsNavigates(t *testing.T) {
 func TestSelectedMsgChangesActivePageAndLogs(t *testing.T) {
 	m := New()
 	// verify initial state
-	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != "home" {
+	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != navigation.PageIDHome {
 		t.Fatalf("expected initial active page 'home'; got %s", m.nav.GetPages()[m.nav.GetActiveIndex()].ID)
 	}
 
@@ -184,7 +190,7 @@ func TestSelectedMsgChangesActivePageAndLogs(t *testing.T) {
 	// find settings index in nav
 	idx := -1
 	for i, p := range m.nav.GetPages() {
-		if p.ID == "settings" {
+		if p.ID == navigation.PageIDSettings {
 			idx = i
 			break
 		}
@@ -195,7 +201,7 @@ func TestSelectedMsgChangesActivePageAndLogs(t *testing.T) {
 
 	// send selection
 	_, _ = m.Update(navigation.SelectedMsg{PageIndex: idx})
-	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != "settings" {
+	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != navigation.PageIDSettings {
 		t.Fatalf("expected active page 'settings' after selection; got %s", m.nav.GetPages()[m.nav.GetActiveIndex()].ID)
 	}
 	if m.nav.GetActiveIndex() != idx {
@@ -273,7 +279,7 @@ func TestWindowSizeMsgUpdatesRouterState(t *testing.T) {
 	// find home page in pages slice
 	homeIdx := -1
 	for i, p := range m.nav.GetPages() {
-		if p.ID == "home" {
+		if p.ID == navigation.PageIDHome {
 			homeIdx = i
 			break
 		}
@@ -305,11 +311,11 @@ func TestTabWithNilNavCyclesPages(t *testing.T) {
 	t.Parallel()
 	m := New()
 	// ensure tab advances the active nav page
-	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != "home" {
+	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != navigation.PageIDHome {
 		t.Fatalf("expected initial active page 'home'; got %q", m.nav.GetPages()[m.nav.GetActiveIndex()].ID)
 	}
 	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != "settings" {
+	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != navigation.PageIDSettings {
 		t.Fatalf("expected active page 'settings' after tab; got %q", m.nav.GetPages()[m.nav.GetActiveIndex()].ID)
 	}
 }
@@ -322,7 +328,7 @@ func stripANSI(s string) string {
 	return ansiRE.ReplaceAllString(s, "")
 }
 
-// setupRouter returns a router initialised to 100×30 cells with sidebar nav.
+// setupRouter returns a router initialized to 100×30 cells with sidebar nav.
 func setupRouter(t *testing.T) *RouterModel {
 	t.Helper()
 	m := New()
@@ -379,6 +385,7 @@ func TestToastOverlayPreservesNavAndStatus(t *testing.T) {
 		{"error toast", notifications.SeverityError, "Error test notification"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Fresh router for each sub-test so they are independent.
 			mr := setupRouter(t)
 			_, cmd := mr.Update(notifications.AddMsg{
@@ -452,9 +459,13 @@ func TestHistoryPanelOverlayPreservesNavAndStatus(t *testing.T) {
 // calling notifMgr.Handle(), leaving the notification permanently active.
 // updateRouter is a typed Update helper for tests — Update returns tea.Model
 // which needs a type assertion to get back *RouterModel.
-func updateRouter(m *RouterModel, msg tea.Msg) (*RouterModel, tea.Cmd) {
-	next, cmd := m.Update(msg)
-	return next.(*RouterModel), cmd
+func updateRouter(m *RouterModel, msg tea.Msg) *RouterModel {
+	next, _ := m.Update(msg)
+	r, ok := next.(*RouterModel)
+	if !ok {
+		panic(fmt.Sprintf("Update returned %T, want *RouterModel", next))
+	}
+	return r
 }
 
 func TestTTLExpiryDismissesNotification(t *testing.T) {
@@ -462,7 +473,7 @@ func TestTTLExpiryDismissesNotification(t *testing.T) {
 	m := setupRouter(t)
 
 	// Add a notification with no real timer (TTL=0) so the test controls timing.
-	m, _ = updateRouter(m, notifications.AddMsg{
+	m = updateRouter(m, notifications.AddMsg{
 		Content:  "should auto-expire",
 		Severity: notifications.SeverityInfo,
 		TTL:      0,
@@ -472,13 +483,13 @@ func TestTTLExpiryDismissesNotification(t *testing.T) {
 		t.Fatalf("expected 1 active notification after add, got %d", got)
 	}
 
-	// Grab the notification ID so we can synthesise the expiry message.
+	// Grab the notification ID so we can synthesize the expiry message.
 	all := m.notifMgr.All()
 	id := all[0].ID
 
 	// Simulate the TTL timer firing: send the (now-exported) ExpireMsg to the
 	// router.  Before the fix the router ignored this type, so Count() stayed 1.
-	m, _ = updateRouter(m, notifications.ExpireMsg{ID: id})
+	m = updateRouter(m, notifications.ExpireMsg{ID: id})
 
 	if got := m.notifMgr.Count(); got != 0 {
 		t.Errorf("TTL expiry: expected 0 active notifications after ExpireMsg, got %d — ExpireMsg is not being routed to notifMgr.Handle()", got)
@@ -497,8 +508,8 @@ func TestHistoryPanelDismissAllKey(t *testing.T) {
 	m := setupRouter(t)
 
 	// Add two notifications.
-	m, _ = updateRouter(m, notifications.AddMsg{Content: "first", Severity: notifications.SeverityInfo, TTL: 0})
-	m, _ = updateRouter(m, notifications.AddMsg{Content: "second", Severity: notifications.SeverityWarning, TTL: 0})
+	m = updateRouter(m, notifications.AddMsg{Content: "first", Severity: notifications.SeverityInfo, TTL: 0})
+	m = updateRouter(m, notifications.AddMsg{Content: "second", Severity: notifications.SeverityWarning, TTL: 0})
 
 	if got := m.notifMgr.Count(); got != 2 {
 		t.Fatalf("expected 2 active notifications, got %d", got)
@@ -511,7 +522,7 @@ func TestHistoryPanelDismissAllKey(t *testing.T) {
 	}
 
 	// Press 'd' — the panel footer advertises this as "dismiss all".
-	m, _ = updateRouter(m, tea.KeyPressMsg{Text: "d"})
+	m = updateRouter(m, tea.KeyPressMsg{Text: "d"})
 
 	if got := m.notifMgr.Count(); got != 0 {
 		t.Errorf("dismiss-all key 'd': expected 0 active after pressing 'd', got %d — 'd' key is not wired in the history panel handler", got)
@@ -525,7 +536,7 @@ func TestHistoryPanelEnterDismissRemovesSelected(t *testing.T) {
 	m := setupRouter(t)
 
 	for i := range 3 {
-		m, _ = updateRouter(m, notifications.AddMsg{
+		m = updateRouter(m, notifications.AddMsg{
 			Content:  fmt.Sprintf("dismiss-enter-%d", i),
 			Severity: notifications.SeverityInfo,
 			TTL:      0,
@@ -539,7 +550,7 @@ func TestHistoryPanelEnterDismissRemovesSelected(t *testing.T) {
 	}
 	selected := before[m.status.HistoryCursor()].Content
 
-	m, _ = updateRouter(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updateRouter(m, tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	after := m.notifMgr.Active()
 	if len(after) != 2 {
@@ -558,7 +569,7 @@ func TestHistoryPanelKeyboardScrollKeepsSelectionVisible(t *testing.T) {
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 18})
 
 	for i := range 24 {
-		m, _ = updateRouter(m, notifications.AddMsg{
+		m = updateRouter(m, notifications.AddMsg{
 			Content:  fmt.Sprintf("kbd-scroll-%02d", i),
 			Severity: notifications.SeverityInfo,
 			TTL:      0,
@@ -567,7 +578,7 @@ func TestHistoryPanelKeyboardScrollKeepsSelectionVisible(t *testing.T) {
 	_ = m.status.ToggleNotifications()
 
 	for range 14 {
-		m, _ = updateRouter(m, tea.KeyPressMsg{Code: tea.KeyDown})
+		m = updateRouter(m, tea.KeyPressMsg{Code: tea.KeyDown})
 	}
 
 	active := m.notifMgr.Active()
@@ -589,7 +600,7 @@ func TestHistoryPanelWheelScrollKeepsSelectionVisible(t *testing.T) {
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 18})
 
 	for i := range 24 {
-		m, _ = updateRouter(m, notifications.AddMsg{
+		m = updateRouter(m, notifications.AddMsg{
 			Content:  fmt.Sprintf("wheel-scroll-%02d", i),
 			Severity: notifications.SeverityInfo,
 			TTL:      0,
@@ -658,7 +669,7 @@ func TestHiddenStatusBarDoesNotHandleClicks(t *testing.T) {
 		_ = cmd
 	}
 	for range 10 {
-		m, _ = updateRouter(m, status.TickMsg{})
+		m = updateRouter(m, status.TickMsg{})
 	}
 	_ = m.handleResizeCmd()
 
@@ -746,7 +757,7 @@ func TestToggleSidebarKey(t *testing.T) {
 	m.sidebarFocused = false
 
 	// First press: focus the sidebar (not hide it).
-	_, _ = m.Update(tea.KeyPressMsg{Text: "ctrl+b"})
+	_, _ = m.Update(tea.KeyPressMsg{Text: testKeyCtrlB})
 	if !m.navigationVisible {
 		t.Fatal("first ctrl+b should focus sidebar, not hide it")
 	}
@@ -755,7 +766,7 @@ func TestToggleSidebarKey(t *testing.T) {
 	}
 
 	// Second press: hide the sidebar.
-	_, _ = m.Update(tea.KeyPressMsg{Text: "ctrl+b"})
+	_, _ = m.Update(tea.KeyPressMsg{Text: testKeyCtrlB})
 	if m.navigationVisible {
 		t.Fatal("second ctrl+b should hide sidebar")
 	}
@@ -764,7 +775,7 @@ func TestToggleSidebarKey(t *testing.T) {
 	}
 
 	// Third press: show the sidebar again (unfocused).
-	_, _ = m.Update(tea.KeyPressMsg{Text: "ctrl+b"})
+	_, _ = m.Update(tea.KeyPressMsg{Text: testKeyCtrlB})
 	if !m.navigationVisible {
 		t.Fatal("third ctrl+b should show sidebar")
 	}
@@ -777,13 +788,13 @@ func TestOpenSettingsKey(t *testing.T) {
 	t.Parallel()
 	m := New()
 	m.keys = keys.DefaultKeyMap()
-	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID == "settings" {
+	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID == navigation.PageIDSettings {
 		t.Fatalf("expected test to start on a non-settings page")
 	}
 
 	_, _ = m.Update(tea.KeyPressMsg{Text: "ctrl+,"})
 
-	if got := m.nav.GetPages()[m.nav.GetActiveIndex()].ID; got != "settings" {
+	if got := m.nav.GetPages()[m.nav.GetActiveIndex()].ID; got != navigation.PageIDSettings {
 		t.Fatalf("active page = %q; want settings", got)
 	}
 }
@@ -880,7 +891,7 @@ func TestNewWithRegisteredPages_AppendsExtraPages(t *testing.T) {
 	if pages[0].ID != "app" || pages[0].Title != "App" {
 		t.Fatalf("pages[0] = %+v; want app/App", pages[0])
 	}
-	if pages[1].ID != "settings" {
+	if pages[1].ID != navigation.PageIDSettings {
 		t.Fatalf("pages[1] = %+v; want settings/Settings", pages[1])
 	}
 
@@ -913,10 +924,10 @@ func TestNewWithOptions_DefaultPageSelection(t *testing.T) {
 
 	r := NewWithOptions(Options{
 		ExtraPages: []RegisteredPage{{
-			Title: "aSettings",
+			Title: testPageTitle,
 			Model: stubPage{},
 		}},
-		DefaultPage: "aSettings",
+		DefaultPage: testPageTitle,
 	})
 
 	idx := r.nav.GetActiveIndex()
@@ -924,8 +935,8 @@ func TestNewWithOptions_DefaultPageSelection(t *testing.T) {
 	if idx < 0 || idx >= len(pages) {
 		t.Fatalf("active index out of range: %d", idx)
 	}
-	if pages[idx].Title != "aSettings" {
-		t.Fatalf("active page title = %q; want %q", pages[idx].Title, "aSettings")
+	if pages[idx].Title != testPageTitle {
+		t.Fatalf("active page title = %q; want %q", pages[idx].Title, testPageTitle)
 	}
 }
 
@@ -972,8 +983,8 @@ func BenchmarkRouterViewWithSidebar(b *testing.B) {
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = m.View().Content
 	}
 }
@@ -985,8 +996,8 @@ func BenchmarkRouterViewNoSidebar(b *testing.B) {
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = m.View().Content
 	}
 }

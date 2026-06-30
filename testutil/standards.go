@@ -28,6 +28,9 @@ func CheckCodeStandards(t *testing.T, patterns ...string) {
 
 	for _, pkg := range pkgs {
 		if len(pkg.Errors) > 0 {
+			for _, e := range pkg.Errors {
+				t.Logf("skipping package %s due to load error: %v", pkg.PkgPath, e)
+			}
 			continue
 		}
 
@@ -60,52 +63,15 @@ func isUIPackage(pkgPath string) bool {
 }
 
 func checkKeyMappings(t *testing.T, fset *token.FileSet, path string, n ast.Node) {
+	t.Helper()
 	switch x := n.(type) {
 	case *ast.FuncDecl:
 		name := x.Name.Name
 		if name == "ShortHelp" || name == "FullHelp" || name == "Update" {
-			ast.Inspect(x.Body, func(bodyNode ast.Node) bool {
-				if call, ok := bodyNode.(*ast.CallExpr); ok {
-					if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-						if pkg, ok := sel.X.(*ast.Ident); ok {
-							if pkg.Name == "key" && sel.Sel.Name == "NewBinding" {
-								t.Errorf("%s:%d: %s() must not call key.NewBinding inline",
-									path, fset.Position(call.Pos()).Line, name)
-							}
-							if pkg.Name == "shared" && sel.Sel.Name == "HelpBinding" {
-								t.Errorf("%s:%d: %s() must not call shared.HelpBinding inline",
-									path, fset.Position(call.Pos()).Line, name)
-							}
-						}
-					}
-				}
-				return true
-			})
+			checkFuncBodyForInlineBindings(t, fset, path, name, x.Body)
 		}
-
 	case *ast.CallExpr:
-		if sel, ok := x.Fun.(*ast.SelectorExpr); ok {
-			if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "key" && sel.Sel.Name == "WithKeys" {
-				hasDirection := false
-				hasVim := ""
-				for _, arg := range x.Args {
-					if basicLit, ok := arg.(*ast.BasicLit); ok && basicLit.Kind == token.STRING {
-						val := strings.Trim(basicLit.Value, "\"")
-						if val == "up" || val == "down" || val == "left" || val == "right" {
-							hasDirection = true
-						}
-						if val == "j" || val == "k" || val == "h" || val == "l" {
-							hasVim = val
-						}
-					}
-				}
-				if hasDirection && hasVim != "" {
-					t.Errorf("%s:%d: key.WithKeys contains prohibited vim fallback '%s' alongside directional key",
-						path, fset.Position(x.Pos()).Line, hasVim)
-				}
-			}
-		}
-
+		checkWithKeysVimFallback(t, fset, path, x)
 	case *ast.StructType:
 		for _, field := range x.Fields.List {
 			for _, name := range field.Names {
@@ -115,44 +81,116 @@ func checkKeyMappings(t *testing.T, fset *token.FileSet, path string, n ast.Node
 				}
 			}
 		}
+	}
+}
 
+func checkFuncBodyForInlineBindings(t *testing.T, fset *token.FileSet, path, funcName string, body *ast.BlockStmt) {
+	t.Helper()
+	ast.Inspect(body, func(bodyNode ast.Node) bool {
+		call, ok := bodyNode.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		pkg, ok := sel.X.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		if pkg.Name == "key" && sel.Sel.Name == "NewBinding" {
+			t.Errorf("%s:%d: %s() must not call key.NewBinding inline",
+				path, fset.Position(call.Pos()).Line, funcName)
+		}
+		if pkg.Name == "shared" && sel.Sel.Name == "HelpBinding" {
+			t.Errorf("%s:%d: %s() must not call shared.HelpBinding inline",
+				path, fset.Position(call.Pos()).Line, funcName)
+		}
+		return true
+	})
+}
+
+func checkWithKeysVimFallback(t *testing.T, fset *token.FileSet, path string, x *ast.CallExpr) {
+	t.Helper()
+	sel, ok := x.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	if !ok || pkg.Name != "key" || sel.Sel.Name != "WithKeys" {
+		return
+	}
+	hasDirection := false
+	hasVim := ""
+	for _, arg := range x.Args {
+		basicLit, ok := arg.(*ast.BasicLit)
+		if !ok || basicLit.Kind != token.STRING {
+			continue
+		}
+		val := strings.Trim(basicLit.Value, "\"")
+		if val == "up" || val == "down" || val == "left" || val == "right" {
+			hasDirection = true
+		}
+		if val == "j" || val == "k" || val == "h" || val == "l" {
+			hasVim = val
+		}
+	}
+	if hasDirection && hasVim != "" {
+		t.Errorf("%s:%d: key.WithKeys contains prohibited vim fallback '%s' alongside directional key",
+			path, fset.Position(x.Pos()).Line, hasVim)
 	}
 }
 
 func checkLayoutCalculations(t *testing.T, pkg *packages.Package, path string, n ast.Node) {
+	t.Helper()
 	call, ok := n.(*ast.CallExpr)
 	if !ok {
 		return
 	}
+	checkStringsCountNewline(t, pkg, path, call)
+	checkLenOnString(t, pkg, path, n, call)
+}
 
-	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-		if id, ok := sel.X.(*ast.Ident); ok && id.Name == "strings" && sel.Sel.Name == "Count" {
-			if len(call.Args) == 2 {
-				if lit, ok := call.Args[1].(*ast.BasicLit); ok && lit.Value == `"\n"` {
-					pos := pkg.Fset.Position(call.Pos())
-					t.Errorf("%s:%d: Use lipgloss.Height() instead of strings.Count(x, \"\\n\") for visual height", path, pos.Line)
-				}
-			}
+func checkStringsCountNewline(t *testing.T, pkg *packages.Package, path string, call *ast.CallExpr) {
+	t.Helper()
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return
+	}
+	id, ok := sel.X.(*ast.Ident)
+	if !ok || id.Name != "strings" || sel.Sel.Name != "Count" {
+		return
+	}
+	if len(call.Args) == 2 {
+		if lit, ok := call.Args[1].(*ast.BasicLit); ok && lit.Value == `"\n"` {
+			pos := pkg.Fset.Position(call.Pos())
+			t.Errorf("%s:%d: Use lipgloss.Height() instead of strings.Count(x, \"\\n\") for visual height", path, pos.Line)
 		}
 	}
+}
 
-	if id, ok := call.Fun.(*ast.Ident); ok && id.Name == "len" && len(call.Args) == 1 {
-		arg := call.Args[0]
-		if typeInfo := pkg.TypesInfo.Types[arg]; typeInfo.Type != nil {
-			typeString := typeInfo.Type.Underlying().String()
-			if typeString == "string" || typeString == "untyped string" {
-				if binaryExpr, isBinary := n.(*ast.BinaryExpr); isBinary {
-					if lit, isLit := binaryExpr.Y.(*ast.BasicLit); isLit {
-						if lit.Value == "0" || lit.Value == "1" {
-							return
-						}
-					}
-				}
-				pos := pkg.Fset.Position(call.Pos())
-				t.Errorf("%s:%d: Use lipgloss.Width() or ansi.StringWidth() instead of len() for string visual width", path, pos.Line)
-			}
+func checkLenOnString(t *testing.T, pkg *packages.Package, path string, n ast.Node, call *ast.CallExpr) {
+	t.Helper()
+	id, ok := call.Fun.(*ast.Ident)
+	if !ok || id.Name != "len" || len(call.Args) != 1 {
+		return
+	}
+	typeInfo := pkg.TypesInfo.Types[call.Args[0]]
+	if typeInfo.Type == nil {
+		return
+	}
+	typeString := typeInfo.Type.Underlying().String()
+	if typeString != "string" && typeString != "untyped string" {
+		return
+	}
+	if binaryExpr, isBinary := n.(*ast.BinaryExpr); isBinary {
+		if lit, isLit := binaryExpr.Y.(*ast.BasicLit); isLit && (lit.Value == "0" || lit.Value == "1") {
+			return
 		}
 	}
+	pos := pkg.Fset.Position(call.Pos())
+	t.Errorf("%s:%d: Use lipgloss.Width() or ansi.StringWidth() instead of len() for string visual width", path, pos.Line)
 }
 
 // CheckDescriptiveStructNames verifies that structs are not generically named "Model" or "model".
@@ -172,6 +210,9 @@ func CheckDescriptiveStructNames(t *testing.T, patterns ...string) {
 
 	for _, pkg := range pkgs {
 		if len(pkg.Errors) > 0 {
+			for _, e := range pkg.Errors {
+				t.Logf("skipping package %s due to load error: %v", pkg.PkgPath, e)
+			}
 			continue
 		}
 

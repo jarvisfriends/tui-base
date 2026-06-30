@@ -1,21 +1,104 @@
 {
+  // ─── Go Language Server ───────────────────────────────────────────────
   "go.useLanguageServer": true,
   "go.toolsManagement.autoUpdate": true,
+
+  // ─── Go Formatting (gofumpt via gopls) ────────────────────────────────
+  // gofumpt is a stricter gofmt superset: sorts imports, enforces
+  // consistent block formatting, removes unnecessary empty lines.
+  // All gofmt-compatible code passes; gofumpt just tightens the rules.
+  "gopls": {
+    "formatting.gofumpt": true,
+    "ui.vulncheck": "Imports",
+    "analyses": {
+      "nilness": true,
+      "unusedwrite": true,
+      "shadow": true,
+      "copylocks": true
+    }
+  },
+
+  // ─── Go Linting ──────────────────────────────────────────────────────
+  // --new-from-rev=HEAD reports issues only in lines changed since the last
+  // commit, keeping the editor fast on slower machines. local_verify.sh still
+  // checks everything; this flag is editor-only.
   "go.lintTool": "golangci-lint",
-  "go.lintFlags": ["--fast"],
+  "go.lintFlags": ["--new-from-rev=HEAD"],
   "go.vetOnSave": "workspace",
   "go.buildOnSave": "workspace",
-  "go.testFlags": ["-v"],
-  "go.testTimeout": "30s",
-  "go.coverOnSave": false,
+
+  // ─── Go Testing ──────────────────────────────────────────────────────
+  // Race detector on all editor test runs to catch data races early.
+  // Requires CGO_ENABLED=1 and gcc on PATH (see tools/setup_race_*.sh).
+  "go.testFlags": ["-v", "-race", "-count=1"],
+  "go.buildFlags": ["-race"],
+  "go.testTimeout": "60s",
+  "go.coverOnSave": true,
+  "go.coverageDecorator": {
+    "type": "gutter",
+    "coveredGutterStyle": "blockgreen",
+    "uncoveredGutterStyle": "blockred",
+    "coveredHighlightColor": "rgba(64, 128, 64, 0.12)",
+    "uncoveredHighlightColor": "rgba(128, 64, 64, 0.12)"
+  },
   "go.testEnvVars": {
     "TERM": "xterm-256color"
   },
+
+  // ─── Language-specific formatting on save ─────────────────────────────
+  "[go]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "golang.go",
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "always"
+    }
+  },
+  "[json]": {
+    "editor.formatOnSave": true,
+    "editor.tabSize": 2,
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "[jsonc]": {
+    "editor.formatOnSave": true,
+    "editor.tabSize": 2,
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "[yaml]": {
+    "editor.formatOnSave": true,
+    "editor.tabSize": 2,
+    "editor.defaultFormatter": "redhat.vscode-yaml"
+  },
+  "[markdown]": {
+    "editor.wordWrap": "on",
+    "editor.rulers": [120],
+    "editor.formatOnSave": false
+  },
+  "[shellscript]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true
+  },
+
+  // ─── File handling ────────────────────────────────────────────────────
+  "files.eol": "\n",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+
+  // ─── Search / Problems exclusions ─────────────────────────────────────
+  "search.exclude": {
+    "**/vendor/**": true,
+    "**/tmp/**": true,
+    "**/dist/**": true,
+    "**/*.exe": true
+  },
+
+  // ─── Terminal (Windows → Git Bash) ────────────────────────────────────
+  // "source": "Git Bash" uses VS Code's built-in registry auto-detection,
+  // avoiding a hardcoded path that breaks on non-default Git installs.
   "terminal.integrated.defaultProfile.windows": "Git Bash",
   "terminal.integrated.profiles.windows": {
     "Git Bash": {
-      "path": "C:\\Program Files\\Git\\bin\\bash.exe",
-      "args": ["--login", "-i"]
+      "source": "Git Bash"
     }
   }
 }

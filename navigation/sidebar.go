@@ -112,9 +112,9 @@ type Sidebar struct {
 // New creates a Sidebar with the standard Home / Inspector / Settings pages.
 func New() *Sidebar {
 	pages := []Page{
-		{ID: "home", Title: "Home"},
-		{ID: "debug", Title: "Inspector"},
-		{ID: "settings", Title: "Settings"},
+		{ID: pageIDHome, Title: pageHome},
+		{ID: pageIDInspector, Title: pageInspector},
+		{ID: pageIDSettings, Title: pageSettings},
 	}
 	sb := &Sidebar{
 		Pages:       pages,
@@ -321,14 +321,15 @@ func (m *Sidebar) expandedView(c *theme.AppStyle) tea.View {
 	listAreaH := max(m.height-headerH-sepH-settingsH, 1)
 	paddedList := lipgloss.NewStyle().Height(listAreaH).Render(listStr)
 
-	inner := lipgloss.JoinVertical(lipgloss.Left,
+	inner := lipgloss.JoinVertical(
+		lipgloss.Left,
 		header,
 		paddedList,
 		sep,
 		settingsStr,
 	)
 
-	// Border colour signals focus state to the user.
+	// Border color signals focus state to the user.
 	var borderFg color.Color
 	if m.focused {
 		borderFg = c.Accent
@@ -427,27 +428,34 @@ func (m *Sidebar) handleMouse(mm tea.MouseMsg, height int) tea.Cmd {
 	listY := me.Y - 1
 	numMain := m.numMainItems()
 	if listY >= 0 && listY%navItemStride == 0 {
-		idx := listY / navItemStride
-		if idx < numMain {
-			// Adjust for any pages that appear at/after settingsIdx in the full slice.
-			if m.settingsIdx >= 0 && idx >= m.settingsIdx {
-				idx++
-			}
-			if idx >= 0 && idx < len(m.Pages) {
-				m.ActiveIndex = idx
-				m.syncListCursor()
-				capturedIdx := idx
-				return tea.Batch(
-					func() tea.Msg { return NavFocusMsg{Focused: true} },
-					func() tea.Msg { return SelectedMsg{PageIndex: capturedIdx} },
-				)
-			}
+		if cmd := m.selectMainItem(listY/navItemStride, numMain); cmd != nil {
+			return cmd
 		}
 	}
 
 	// Click in the padding area: focus the sidebar without switching pages.
 	m.focused = true
 	return func() tea.Msg { return NavFocusMsg{Focused: true} }
+}
+
+func (m *Sidebar) selectMainItem(idx, numMain int) tea.Cmd {
+	if idx >= numMain {
+		return nil
+	}
+	// Adjust for any pages that appear at/after settingsIdx in the full slice.
+	if m.settingsIdx >= 0 && idx >= m.settingsIdx {
+		idx++
+	}
+	if idx >= 0 && idx < len(m.Pages) {
+		m.ActiveIndex = idx
+		m.syncListCursor()
+		capturedIdx := idx
+		return tea.Batch(
+			func() tea.Msg { return NavFocusMsg{Focused: true} },
+			func() tea.Msg { return SelectedMsg{PageIndex: capturedIdx} },
+		)
+	}
+	return nil
 }
 
 // ─── Navigator interface ──────────────────────────────────────────────────────

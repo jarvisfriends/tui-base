@@ -1,6 +1,7 @@
 package inspector
 
 import (
+	"os"
 	"testing"
 
 	"github.com/jarvisfriends/tui-base/testutil"
@@ -8,8 +9,9 @@ import (
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
-func init() {
+func TestMain(m *testing.M) {
 	tint.NewDefaultRegistry()
+	os.Exit(m.Run())
 }
 
 func TestInspectorLayoutOverflows(t *testing.T) {

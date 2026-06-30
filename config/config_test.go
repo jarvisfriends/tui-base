@@ -1,25 +1,23 @@
 package config
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 
 	huh "charm.land/huh/v2"
 )
 
 type stubConfigurable struct {
-	section Section
+	section Section[string]
 }
 
-func (s stubConfigurable) ConfigSection() Section { return s.section }
+func (s stubConfigurable) ConfigSection() Section[string] { return s.section }
 
 func TestFieldDefValueRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	value := "INFO"
-	field := FieldDef{
-		Key:   "log-level",
-		Title: "Log Level",
+	field := FieldDef[string]{
 		Kind:  FieldSelect,
 		Value: &value,
 	}
@@ -36,8 +34,8 @@ func TestFieldDefValueRoundTrip(t *testing.T) {
 func TestConfigurableInterfaceProvidesSection(t *testing.T) {
 	t.Parallel()
 
-	section := Section{Title: "Logging"}
-	var configurable Configurable = stubConfigurable{section: section}
+	section := Section[string]{Title: "Logging"}
+	var configurable Configurable[string] = stubConfigurable{section: section}
 	if got := configurable.ConfigSection(); got.Title != section.Title {
 		t.Fatalf("section title = %q; want %q", got.Title, section.Title)
 	}
@@ -45,10 +43,10 @@ func TestConfigurableInterfaceProvidesSection(t *testing.T) {
 
 func TestBoolFieldConstructor(t *testing.T) {
 	t.Parallel()
-	val := "true"
-	applied := ""
-	apply := func(v string) error {
-		applied = v
+	val := true
+	applied := false
+	apply := func(v bool) error {
+		applied = true
 		return nil
 	}
 
@@ -56,27 +54,24 @@ func TestBoolFieldConstructor(t *testing.T) {
 	if field.Key != "bkey" || field.Title != "btitle" || field.Description != "bdesc" {
 		t.Errorf("incorrect fields in BoolField: %+v", field)
 	}
-	if err := field.Validate("true"); err != nil {
+	if err := field.Validate(true); err != nil {
 		t.Errorf("expected valid for true: %v", err)
 	}
-	if err := field.Validate("false"); err != nil {
+	if err := field.Validate(false); err != nil {
 		t.Errorf("expected valid for false: %v", err)
 	}
-	if err := field.Validate("invalid"); err == nil {
-		t.Errorf("expected invalid for non-bool string")
-	}
-	_ = field.Apply("true")
-	if applied != "true" {
-		t.Errorf("expected apply callback to run; got %q", applied)
+	_ = field.Apply(true)
+	if !applied {
+		t.Errorf("expected apply callback to run; got %v", applied)
 	}
 }
 
 func TestYesNoFieldConstructor(t *testing.T) {
 	t.Parallel()
-	val := "false"
-	applied := ""
-	apply := func(v string) error {
-		applied = v
+	val := false
+	applied := false
+	apply := func(v bool) error {
+		applied = true
 		return nil
 	}
 
@@ -84,18 +79,15 @@ func TestYesNoFieldConstructor(t *testing.T) {
 	if field.Key != "ynkey" || field.Title != "yntitle" || field.Description != "yndesc" {
 		t.Errorf("incorrect fields in YesNoField: %+v", field)
 	}
-	if err := field.Validate("true"); err != nil {
+	if err := field.Validate(true); err != nil {
 		t.Errorf("expected valid for true: %v", err)
 	}
-	if err := field.Validate("false"); err != nil {
+	if err := field.Validate(false); err != nil {
 		t.Errorf("expected valid for false: %v", err)
 	}
-	if err := field.Validate("invalid"); err == nil {
-		t.Errorf("expected invalid for non-bool string")
-	}
-	_ = field.Apply("false")
-	if applied != "false" {
-		t.Errorf("expected apply callback to run; got %q", applied)
+	_ = field.Apply(false)
+	if !applied {
+		t.Errorf("expected apply callback to run; got %v", applied)
 	}
 }
 
@@ -135,7 +127,7 @@ func TestTextFieldConstructor(t *testing.T) {
 	}
 	validate := func(v string) error {
 		if len(v) < 3 {
-			return fmt.Errorf("too short")
+			return errors.New("too short")
 		}
 		return nil
 	}

@@ -49,7 +49,7 @@ func TestStaticSelfRegistration(t *testing.T) {
 	if pages[1].Title != "Global Page B" {
 		t.Errorf("expected page 1 to be Global Page B, got %q", pages[1].Title)
 	}
-	if pages[2].Title != "Settings" {
+	if pages[2].Title != pageTitleSettings {
 		t.Errorf("expected page 2 to be Settings, got %q", pages[2].Title)
 	}
 
@@ -86,7 +86,7 @@ func TestRuntimeDynamicRegistration(t *testing.T) {
 	if pages[0].Title != "Runtime Dynamic Page" {
 		t.Errorf("expected page 0 to be Runtime Dynamic Page, got %q", pages[0].Title)
 	}
-	if pages[1].Title != "Settings" {
+	if pages[1].Title != pageTitleSettings {
 		t.Errorf("expected page 1 to be Settings, got %q", pages[1].Title)
 	}
 

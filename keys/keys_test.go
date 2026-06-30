@@ -14,6 +14,7 @@ func TestDefaultKeyMapProvidesExpectedBindings(t *testing.T) {
 	km := DefaultKeyMap()
 	if km == nil {
 		t.Fatal("DefaultKeyMap() returned nil")
+		return
 	}
 	if len(km.ShortHelp()) == 0 {
 		t.Fatal("ShortHelp() returned no bindings")

@@ -13,6 +13,14 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+const (
+	testLogMsgDbg         = "dbg-msg"
+	testLogMsgInfo        = "info-msg"
+	testLogMsgWarn        = "warn-msg"
+	testLogMsgErr         = "err-msg"
+	testLogMsgIntercepted = "intercepted-msg"
+)
+
 func TestLogCapturesMessage(t *testing.T) {
 	t.Parallel()
 	m := New()
@@ -67,17 +75,17 @@ func TestLogLevelFilterWarnPlus(t *testing.T) {
 	m.SetColors(theme.Active())
 
 	m.Logs = []MsgLog{
-		{Timestamp: time.Now(), Type: "DEBUG", Content: "dbg-msg", Count: 1},
-		{Timestamp: time.Now(), Type: "INFO", Content: "info-msg", Count: 1},
-		{Timestamp: time.Now(), Type: "WARN", Content: "warn-msg", Count: 1},
-		{Timestamp: time.Now(), Type: "ERROR", Content: "err-msg", Count: 1},
-		{Timestamp: time.Now(), Type: "tea.KeyPressMsg", Content: "intercepted-msg", Count: 1},
+		{Timestamp: time.Now(), Type: "DEBUG", Content: testLogMsgDbg, Count: 1},
+		{Timestamp: time.Now(), Type: "INFO", Content: testLogMsgInfo, Count: 1},
+		{Timestamp: time.Now(), Type: "WARN", Content: testLogMsgWarn, Count: 1},
+		{Timestamp: time.Now(), Type: "ERROR", Content: testLogMsgErr, Count: 1},
+		{Timestamp: time.Now(), Type: "tea.KeyPressMsg", Content: testLogMsgIntercepted, Count: 1},
 	}
 	c := m.Colors()
 
 	// Unfiltered: every entry is rendered.
 	all := m.renderLogContent(c)
-	for _, want := range []string{"dbg-msg", "info-msg", "warn-msg", "err-msg", "intercepted-msg"} {
+	for _, want := range []string{testLogMsgDbg, testLogMsgInfo, testLogMsgWarn, testLogMsgErr, testLogMsgIntercepted} {
 		if !strings.Contains(all, want) {
 			t.Errorf("unfiltered log missing %q", want)
 		}
@@ -89,12 +97,12 @@ func TestLogLevelFilterWarnPlus(t *testing.T) {
 		t.Fatal("expected logWarnPlus=true after pressing 'f'")
 	}
 	filtered := m.renderLogContent(c)
-	for _, want := range []string{"warn-msg", "err-msg"} {
+	for _, want := range []string{testLogMsgWarn, testLogMsgErr} {
 		if !strings.Contains(filtered, want) {
 			t.Errorf("filtered log should keep %q", want)
 		}
 	}
-	for _, gone := range []string{"dbg-msg", "info-msg", "intercepted-msg"} {
+	for _, gone := range []string{testLogMsgDbg, testLogMsgInfo, testLogMsgIntercepted} {
 		if strings.Contains(filtered, gone) {
 			t.Errorf("filtered log should drop %q", gone)
 		}
@@ -285,9 +293,9 @@ func TestRuntimeColumnWidthNeverBelowTitle(t *testing.T) {
 	_ = m.View()
 
 	for i, col := range m.runtimeColumns {
-		title := "Metric"
+		title := settingsColMetric
 		if i%2 != 0 {
-			title = "Value"
+			title = settingsColValue
 		}
 		minW := len(title) // plain ASCII: visual width == byte length
 		if col.Width < minW {

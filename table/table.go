@@ -310,8 +310,8 @@ func (m *TableModel) openSelected() tea.Cmd {
 	if !ok {
 		return nil
 	}
-	key := r.Key
-	return func() tea.Msg { return OpenDetailMsg{Key: key} }
+	rowKey := r.Key
+	return func() tea.Msg { return OpenDetailMsg{Key: rowKey} }
 }
 
 // ─── sorting / filtering / nav ────────────────────────────────────────────────

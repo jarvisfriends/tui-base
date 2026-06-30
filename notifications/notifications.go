@@ -29,9 +29,10 @@ func (s Severity) String() string {
 		return "Warning"
 	case SeverityError:
 		return "Error"
-	default:
+	case SeverityInfo:
 		return "Info"
 	}
+	return "Info"
 }
 
 // ColorForSeverity returns a hex color string for the severity (for use with lipgloss.Color()).
@@ -41,9 +42,10 @@ func ColorForSeverity(s Severity) string {
 		return "#F9C513"
 	case SeverityError:
 		return "#FF5757"
-	default:
+	case SeverityInfo:
 		return "#4FC3F7"
 	}
+	return "#4FC3F7"
 }
 
 // Badge returns a 4-character badge string (padded with spaces).
@@ -53,9 +55,10 @@ func (s Severity) Badge() string {
 		return "WARN"
 	case SeverityError:
 		return "ERR "
-	default:
+	case SeverityInfo:
 		return "INFO"
 	}
+	return "INFO"
 }
 
 // DefaultTTL returns a sensible auto-dismiss duration per severity level.
@@ -65,9 +68,10 @@ func (s Severity) DefaultTTL() time.Duration {
 		return 10 * time.Second
 	case SeverityError:
 		return 15 * time.Second
-	default:
+	case SeverityInfo:
 		return 5 * time.Second
 	}
+	return 5 * time.Second
 }
 
 // Notification is one user-facing notification entry.
@@ -372,7 +376,7 @@ func (m *Manager) Save(dir string) error {
 func (m *Manager) Load(dir string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	path := filepath.Join(dir, "notifications.json")
+	path := filepath.Clean(filepath.Join(dir, "notifications.json"))
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return nil
@@ -438,5 +442,5 @@ func (m *Manager) writeFileLocked(path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+	return os.WriteFile(filepath.Clean(path), data, 0o600)
 }

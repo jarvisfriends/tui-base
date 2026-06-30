@@ -99,9 +99,9 @@ type DatePickerModel struct {
 }
 
 // New returns the Model of the datepicker
-func New(time time.Time) DatePickerModel {
-	return DatePickerModel{
-		Time:   time,
+func New(initial time.Time) *DatePickerModel {
+	return &DatePickerModel{
+		Time:   initial,
 		KeyMap: DefaultKeyMap(),
 		Styles: DefaultStyles(),
 
@@ -111,12 +111,12 @@ func New(time time.Time) DatePickerModel {
 }
 
 // Init satisfies the `tea.Model` interface. This sends a nil cmd
-func (m DatePickerModel) Init() tea.Cmd {
+func (m *DatePickerModel) Init() tea.Cmd {
 	return nil
 }
 
 // Update changes the state of the datepicker. Update satisfies the `tea.Model` interface
-func (m DatePickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *DatePickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch {
@@ -141,6 +141,8 @@ func (m DatePickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.SetFocus(FocusHeaderMonth)
 			case FocusCalendar:
 				m.SetFocus(FocusHeaderYear)
+			case FocusNone, FocusHeaderMonth:
+				// no previous field to move to
 			}
 
 		case key.Matches(msg, m.KeyMap.FocusNext):
@@ -149,6 +151,8 @@ func (m DatePickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.SetFocus(FocusHeaderYear)
 			case FocusHeaderYear:
 				m.SetFocus(FocusCalendar)
+			case FocusNone, FocusCalendar:
+				// no next field to move to
 			}
 		}
 	}
@@ -179,8 +183,8 @@ func (m *DatePickerModel) updateRight() {
 	case FocusNone:
 		// do nothing
 	}
-
 }
+
 func (m *DatePickerModel) updateDown() {
 	switch m.Focused {
 	case FocusHeaderYear:
@@ -193,6 +197,7 @@ func (m *DatePickerModel) updateDown() {
 		// do nothing
 	}
 }
+
 func (m *DatePickerModel) updateLeft() {
 	switch m.Focused {
 	case FocusHeaderYear:
@@ -208,8 +213,7 @@ func (m *DatePickerModel) updateLeft() {
 
 // View renders a month view as a multiline string in the bubbletea application.
 // View satisfies the `tea.Model` interface.
-func (m DatePickerModel) View() tea.View {
-
+func (m *DatePickerModel) View() tea.View {
 	b := strings.Builder{}
 	month := m.Time.Month()
 	year := m.Time.Year()
@@ -269,11 +273,12 @@ func (m DatePickerModel) View() tea.View {
 
 		style := m.Styles.Date
 		textStyle := m.Styles.Text
-		if !m.Selected {
+		switch {
+		case !m.Selected:
 			// skip modifications to the date
-		} else if day.Day() == m.Time.Day() && day.Month() == m.Time.Month() && m.Focused == FocusCalendar {
+		case day.Day() == m.Time.Day() && day.Month() == m.Time.Month() && m.Focused == FocusCalendar:
 			textStyle = m.Styles.FocusedText
-		} else if day.Day() == m.Time.Day() && day.Month() == m.Time.Month() {
+		case day.Day() == m.Time.Day() && day.Month() == m.Time.Month():
 			textStyle = m.Styles.SelectedText
 		}
 
@@ -286,7 +291,8 @@ func (m DatePickerModel) View() tea.View {
 		day = day.AddDate(0, 0, 1)
 	}
 
-	rows := []string{title}
+	rows := make([]string, 0, 1+len(cal))
+	rows = append(rows, title)
 	for _, row := range cal {
 		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Center, row...))
 	}

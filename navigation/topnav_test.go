@@ -63,11 +63,11 @@ func TestMinimalTopNav_ArrowsWrap(t *testing.T) {
 
 func TestMinimalTopNav_ShowNumbersTogglesPrefix(t *testing.T) {
 	m := NewMinimalTopNav()
-	if got := m.label(0, "Home"); got != "Home" {
-		t.Errorf("hidden numbers: want %q, got %q", "Home", got)
+	if got := m.label(0, pageHome); got != pageHome {
+		t.Errorf("hidden numbers: want %q, got %q", pageHome, got)
 	}
 	m.SetShowNumbers(true)
-	if got := m.label(0, "Home"); got != "1:Home" {
+	if got := m.label(0, pageHome); got != "1:Home" {
 		t.Errorf("shown numbers: want %q, got %q", "1:Home", got)
 	}
 	// The prefix appears in the rendered view too.

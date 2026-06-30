@@ -27,7 +27,7 @@ func DefaultMultiFileKeyMap() MultiFileKeyMap {
 		Down:   key.NewBinding(key.WithKeys("down")),
 		Submit: key.NewBinding(key.WithKeys("enter")),
 		Delete: key.NewBinding(key.WithKeys("delete", "d", "backspace")),
-		Save:   key.NewBinding(key.WithKeys("ctrl+s")),
+		Save:   key.NewBinding(key.WithKeys(keyCtrlS)),
 	}
 }
 
@@ -85,6 +85,8 @@ func (m *MultiFileEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case huh.StateAborted:
 			m.picking = false
 			m.pickerForm = nil
+		case huh.StateNormal:
+			// form still in progress — no action
 		}
 		return m, cmd
 	}

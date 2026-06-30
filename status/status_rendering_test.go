@@ -58,7 +58,7 @@ func firstEscape(s string) string {
 }
 
 // bgEscape asks lipgloss to render a single character with the given
-// background colour and returns just the ANSI escape code prefix.
+// background color and returns just the ANSI escape code prefix.
 // Returns "" when lipgloss emits no escape (e.g. NO_COLOR mode).
 func bgEscape(c color.Color) string {
 	return firstEscape(lipgloss.NewStyle().Background(c).Render("X"))
@@ -96,7 +96,7 @@ func iconPresent(s string) bool {
 // TestFullHelpIconsOnLastRow asserts that the ⚙/🔔/ℹ icons land on the LAST
 // row of the expanded full-help bar, not on the first row.
 //
-// Failing behaviour: lipgloss.JoinHorizontal(Left, …) top-aligns all columns,
+// Failing behavior: lipgloss.JoinHorizontal(Left, …) top-aligns all columns,
 // so the single-row icons column aligns with row 0 of the multi-line help text.
 func TestFullHelpIconsOnLastRow(t *testing.T) {
 	b := New()
@@ -126,9 +126,9 @@ func TestFullHelpIconsOnLastRow(t *testing.T) {
 // TestFullHelpAllRowsCarryStatusBg asserts that every row in the expanded
 // help bar contains the StatusBg background escape sequence.
 //
-// Failing behaviour: the gap/icon columns are single-row; JoinHorizontal pads
+// Failing behavior: the gap/icon columns are single-row; JoinHorizontal pads
 // them with unstyled whitespace to match the taller left column.  Those filler
-// rows contain no background code and revert to the terminal default colour.
+// rows contain no background code and revert to the terminal default color.
 func TestFullHelpAllRowsCarryStatusBg(t *testing.T) {
 	b := New()
 	b.SetKeys(keys.DefaultKeyMap())
@@ -201,7 +201,7 @@ func TestHistoryOverlayAllRowsCarryStatusBg(t *testing.T) {
 // is present (not missing) in the short-help rendered output after stripping
 // ANSI codes.
 //
-// The separator may be present but invisible when its foreground colour matches
+// The separator may be present but invisible when its foreground color matches
 // StatusBg; this test catches the case where the character is dropped entirely.
 func TestHelpSeparatorPresentInShortHelp(t *testing.T) {
 	b := New()
@@ -238,9 +238,9 @@ func TestHelpSeparatorStyleUsesStatusBg(t *testing.T) {
 }
 
 // TestHelpSeparatorForegroundVisibleAgainstStatusBg asserts that the separator
-// foreground colour is visually distinguishable from the status bar background.
+// foreground color is visually distinguishable from the status bar background.
 //
-// Failing behaviour: the separator style uses c.Border as foreground.  In many
+// Failing behavior: the separator style uses c.Border as foreground.  In many
 // dark themes c.Border maps to the "black" terminal slot, which is the same
 // dark shade as StatusBg — making the "•" effectively invisible.
 func TestHelpSeparatorForegroundVisibleAgainstStatusBg(t *testing.T) {
@@ -274,7 +274,7 @@ var resetSpaceRE = regexp.MustCompile("\x1b\\[0?m ")
 // TestHistoryOverlayHeaderNoTrailingUnstyled asserts that the notification history
 // overlay header row does NOT have a plain-space cell immediately after a reset code.
 //
-// Failing behaviour: headerStyle.Render(...) has no Width(innerW), so the rendered
+// Failing behavior: headerStyle.Render(...) has no Width(innerW), so the rendered
 // string is only as wide as the header text.  JoinVertical pads it with bare spaces
 // that carry no background — visible as a lighter band to the right of the header.
 func TestHistoryOverlayHeaderNoTrailingUnstyled(t *testing.T) {
@@ -302,7 +302,7 @@ func TestHistoryOverlayHeaderNoTrailingUnstyled(t *testing.T) {
 // TestHistoryOverlayNotifRowNoTrailingUnstyled asserts that a notification row
 // does NOT have a plain-space cell immediately after a reset code.
 //
-// Failing behaviour: gapW = maxContent - Width(badge) - Width(contentPart) subtracts
+// Failing behavior: gapW = maxContent - Width(badge) - Width(contentPart) subtracts
 // badge twice (maxContent already excludes badge), so the gap is Width(badge) cells
 // too small.  The row is too narrow and JoinVertical pads the right side with bare
 // terminal-default spaces.
@@ -333,7 +333,7 @@ func TestHistoryOverlayNotifRowNoTrailingUnstyled(t *testing.T) {
 // by the status bar has no plain (terminal-default background) space immediately
 // after a reset code.
 //
-// Failing behaviour: the bubbles help widget emits \x1b[m (reset) followed by a
+// Failing behavior: the bubbles help widget emits \x1b[m (reset) followed by a
 // bare space between styled key/desc elements (e.g. "q\x1b[m quit").  That bare
 // space carries no background escape so it punches a hole in the StatusBg bar.
 func TestShortHelpNoInterElementUnstyled(t *testing.T) {

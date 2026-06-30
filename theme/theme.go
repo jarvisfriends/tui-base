@@ -54,7 +54,7 @@ var (
 	themePrefsMu sync.RWMutex
 	themePrefs   = ThemePreferences{Mode: ThemeModeDark, Style: DefaultStylePreset}
 
-	// tintMu serialises writes to the bubbletint global registry. The library
+	// tintMu serializes writes to the bubbletint global registry. The library
 	// is not goroutine-safe; concurrent calls to tint.SetTintID or
 	// tint.NewDefaultRegistry produce data races. All callers in this module
 	// should use SetCurrentTint instead of calling tint.SetTintID directly.
@@ -164,7 +164,7 @@ func ThemePreferencesSnapshot() ThemePreferences {
 
 // ResolveTintIDForMode returns a tint ID matching the requested mode.
 // If requestedID already matches, it is returned unchanged.
-func ResolveTintIDForMode(requestedID string, mode string) string {
+func ResolveTintIDForMode(requestedID, mode string) string {
 	requestedModeDark := NormalizeMode(mode) == ThemeModeDark
 	tints := tint.Tints()
 	if len(tints) == 0 {
@@ -209,13 +209,20 @@ func tintForMode(current *tint.Tint, mode string) *tint.Tint {
 }
 
 // Active returns the current AppStyle palette derived from the active bubbletint.
-// It is safe to call before the registry has been initialised; a built-in
+// It is safe to call before the registry has been initialized; a built-in
 // fallback palette (matching the Dracula aesthetic) is returned in that case.
 func Active() *AppStyle {
 	prefs := ThemePreferencesSnapshot()
 	var t *tint.Tint
 	func() {
-		defer func() { recover() }() //nolint:errcheck
+		// tint.Current() and tint.Tints() both panic before the registry is
+		// initialized. This is expected before the first call to
+		// tint.NewDefaultRegistry(); the nil t triggers the fallback palette below.
+		defer func() {
+			if r := recover(); r != nil {
+				t = nil
+			}
+		}()
 		t = tint.Current()
 	}()
 	t = tintForMode(t, prefs.Mode)
@@ -258,7 +265,7 @@ func fromTint(t *tint.Tint, accessibility bool, preset StylePreset) *AppStyle {
 	}
 
 	if t == nil {
-		pairs := colorPairsFromSimple("250", "235")
+		pairs := colorPairsFromSimple()
 		colors := &AppStyle{
 			Fg:              lipgloss.Color("250"),
 			Bg:              lipgloss.Color("235"),
@@ -273,11 +280,11 @@ func fromTint(t *tint.Tint, accessibility bool, preset StylePreset) *AppStyle {
 			Error:           lipgloss.Color("9"),
 			Warning:         lipgloss.Color("11"),
 			OrigPairs:       pairs,
-			AccessiblePairs: colorPairsFromSimple("250", "235"),
+			AccessiblePairs: colorPairsFromSimple(),
 		}
 		if accessibility {
 			applyAccessibilityAdjustments(colors)
-			colors.AccessiblePairs = colorPairsFromSimple("250", "235")
+			colors.AccessiblePairs = colorPairsFromSimple()
 		}
 		colors.Styles = BuildStyles(colors)
 		colors.HuhStyles = BuildHuhStyles(colors, preset, true)
@@ -291,11 +298,12 @@ func fromTint(t *tint.Tint, accessibility bool, preset StylePreset) *AppStyle {
 	// Selection background: prefer the theme's explicit selection color, then
 	// fall back to its blue slot, then a reasonable default.
 	var sel color.Color
-	if t.SelectionBg != nil {
+	switch {
+	case t.SelectionBg != nil:
 		sel = lipgloss.Color(t.SelectionBg.Hex())
-	} else if t.Blue != nil {
+	case t.Blue != nil:
 		sel = lipgloss.Color(t.Blue.Hex())
-	} else {
+	default:
 		sel = lipgloss.Color("62")
 	}
 
@@ -336,18 +344,7 @@ func fromTint(t *tint.Tint, accessibility bool, preset StylePreset) *AppStyle {
 	// Ensure SelectionFg has high contrast against SelectionBg
 	selFgL := colorLuminance(colors.SelectionFg)
 	if math.Abs(selFgL-selL) < 40.0 {
-		// Contrast is too low, invert using the main background/foreground
-		if t.Dark {
-			colors.SelectionFg = colors.Bg
-			if selL < 50 { // if SelectionBg is still quite dark, use Fg instead
-				colors.SelectionFg = colors.Fg
-			}
-		} else {
-			colors.SelectionFg = colors.Bg
-			if selL > 50 {
-				colors.SelectionFg = colors.Fg
-			}
-		}
+		adjustSelectionFg(colors, t.Dark, selL)
 	}
 
 	if accessibility {
@@ -366,4 +363,18 @@ func fromTint(t *tint.Tint, accessibility bool, preset StylePreset) *AppStyle {
 func colorLuminance(c color.Color) float64 {
 	r, g, b, _ := c.RGBA()
 	return 0.299*float64(r>>8) + 0.587*float64(g>>8) + 0.114*float64(b>>8)
+}
+
+func adjustSelectionFg(colors *AppStyle, dark bool, selL float64) {
+	// Contrast is too low; invert using the main background/foreground.
+	colors.SelectionFg = colors.Bg
+	if dark {
+		if selL < 50 { // if SelectionBg is still quite dark, use Fg instead
+			colors.SelectionFg = colors.Fg
+		}
+	} else {
+		if selL > 50 {
+			colors.SelectionFg = colors.Fg
+		}
+	}
 }

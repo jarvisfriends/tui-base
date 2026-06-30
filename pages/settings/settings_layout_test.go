@@ -1,6 +1,7 @@
 package settings_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/jarvisfriends/tui-base/pages/settings"
@@ -9,13 +10,14 @@ import (
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
-func init() {
+func TestMain(m *testing.M) {
 	tint.NewDefaultRegistry()
+	os.Exit(m.Run())
 }
 
 func TestSettingsLayoutOverflows(t *testing.T) {
 	_ = theme.SetCurrentTint("dracula")
-	m := settings.New()
+	m := settings.NewWithOptions(settings.Options{})
 	m.SetColors(theme.Active())
 
 	testutil.CheckNoLineOverflowAtSizes(t, m)
@@ -23,7 +25,7 @@ func TestSettingsLayoutOverflows(t *testing.T) {
 
 func TestSettingsNarrowWidths(t *testing.T) {
 	_ = theme.SetCurrentTint("dracula")
-	m := settings.New()
+	m := settings.NewWithOptions(settings.Options{})
 	m.SetColors(theme.Active())
 
 	// Check narrow width rendering down to min width (30 columns)

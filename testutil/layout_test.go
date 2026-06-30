@@ -21,23 +21,26 @@ func (m mockModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
+
 func (m mockModel) View() tea.View {
 	return tea.NewView(m.content)
 }
 
+const testShortContent = "short"
+
 func TestCheckNoLineOverflow(t *testing.T) {
-	m := mockModel{content: "short"}
+	m := mockModel{content: testShortContent}
 	// should pass
 	CheckNoLineOverflow(t, m, []int{20, 30})
 }
 
 func TestCheckNoLineOverflowAtSizes(t *testing.T) {
-	m := mockModel{content: "short"}
+	m := mockModel{content: testShortContent}
 	CheckNoLineOverflowAtSizes(t, m)
 }
 
 func TestCheckNoBorderOverflow(t *testing.T) {
-	m := mockModel{content: "short"}
+	m := mockModel{content: testShortContent}
 	CheckNoBorderOverflow(t, m, 40, 24)
 }
 

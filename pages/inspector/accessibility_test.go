@@ -8,12 +8,7 @@ import (
 	"github.com/jarvisfriends/tui-base/theme"
 
 	tea "charm.land/bubbletea/v2"
-	tint "github.com/lrstanley/bubbletint/v2"
 )
-
-func init() {
-	tint.NewDefaultRegistry()
-}
 
 func TestAccessibilityPanel_LifecycleAndKeys(t *testing.T) {
 	p := NewAccessibilityPanel()

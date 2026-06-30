@@ -5,6 +5,7 @@ on:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
+  workflow_call: # allow release.yml to require CI to pass before releasing
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -62,6 +63,25 @@ jobs:
       - name: go mod verify
         if: matrix.os == 'ubuntu-24.04'
         run: go mod verify
+
+  go-generate:
+    name: go generate drift
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.x'
+      - name: Install stringer
+        run: go install golang.org/x/tools/cmd/stringer@latest
+      - name: Check for go generate drift
+        run: |
+          go generate ./...
+          if ! git diff --exit-code; then
+            echo "go generate produced changes — run 'go generate ./...' locally and commit the result"
+            exit 1
+          fi
 
   go-fix:
     name: go fix drift
@@ -165,7 +185,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [verify, lint]
     env:
-      COVERAGE_THRESHOLD: 45.0
+      COVERAGE_THRESHOLD: 55.0
     steps:
       - uses: actions/checkout@v6
       - name: Set up Go

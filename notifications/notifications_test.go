@@ -8,6 +8,8 @@ import (
 	"github.com/jarvisfriends/tui-base/notifications"
 )
 
+const testCredSource = "stopwatch-credentials"
+
 func TestManager_AddAndActive(t *testing.T) {
 	m := notifications.NewManager()
 	if m.Count() != 0 {
@@ -45,9 +47,9 @@ func TestManager_Dismiss(t *testing.T) {
 
 func TestManager_DismissAll(t *testing.T) {
 	m := notifications.NewManager()
-	m.Add("a", notifications.SeverityInfo, 0)    //nolint:errcheck
-	m.Add("b", notifications.SeverityWarning, 0) //nolint:errcheck
-	m.Add("c", notifications.SeverityInfo, 0)    //nolint:errcheck
+	m.Add("a", notifications.SeverityInfo, 0)
+	m.Add("b", notifications.SeverityWarning, 0)
+	m.Add("c", notifications.SeverityInfo, 0)
 
 	sev := notifications.SeverityInfo
 	m.DismissAll(&sev)
@@ -172,11 +174,11 @@ func TestSeverity_StringAndBadge(t *testing.T) {
 func TestManager_KeyedPendingNotificationReplacesOlderEntry(t *testing.T) {
 	m := notifications.NewManager()
 	first, _ := m.AddWithOptions("first", notifications.SeverityWarning, time.Second, notifications.AddOptions{
-		Key:     "stopwatch-credentials",
+		Key:     testCredSource,
 		Pending: true,
 	})
 	second, _ := m.AddWithOptions("second", notifications.SeverityWarning, time.Second, notifications.AddOptions{
-		Key:     "stopwatch-credentials",
+		Key:     testCredSource,
 		Pending: true,
 	})
 
@@ -211,7 +213,7 @@ func TestManager_DismissKey(t *testing.T) {
 func TestManager_ExpireRetainsPendingHistoryButHidesToast(t *testing.T) {
 	m := notifications.NewManager()
 	n, _ := m.AddWithOptions("needs action", notifications.SeverityWarning, time.Second, notifications.AddOptions{
-		Key:     "stopwatch-credentials",
+		Key:     testCredSource,
 		Pending: true,
 	})
 

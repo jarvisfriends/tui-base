@@ -21,7 +21,8 @@ func TestConformanceSuite(t *testing.T) {
 	})
 
 	t.Run("ThemeResponsive", func(t *testing.T) {
-		testutil.CheckThemeResponsive(t, New(),
+		testutil.CheckThemeResponsive(
+			t, New(),
 			settings.ThemeMsg{ID: "dracula", Mode: "dark", ApplyPreferences: true},
 			settings.ThemeMsg{ID: "dracula", Mode: "light", ApplyPreferences: true},
 		)
@@ -29,14 +30,15 @@ func TestConformanceSuite(t *testing.T) {
 
 	t.Run("StatusBarVisibleEverywhere", func(t *testing.T) {
 		m := New()
-		var states []tea.Msg
+		states := make([]tea.Msg, 0, len(m.nav.GetPages())+2)
 		// Visit every page.
 		for i := range m.nav.GetPages() {
 			states = append(states, navigation.SelectedMsg{PageIndex: i})
 		}
 		// Open the inspector overlay (Ctrl+D) and the settings page (Ctrl+,);
 		// the status bar must remain visible with overlays/prompts on screen.
-		states = append(states,
+		states = append(
+			states,
 			tea.KeyPressMsg{Text: "ctrl+d"},
 			tea.KeyPressMsg{Text: "ctrl+,"},
 		)
@@ -49,7 +51,7 @@ func TestConformanceSuite(t *testing.T) {
 // observed without being consumed.
 func TestKonamiSecretFiresNotification(t *testing.T) {
 	m := New()
-	seq := []string{"up", "up", "down", "down", "left", "right", "left", "right", "b"}
+	seq := []string{konamiKeyUp, konamiKeyUp, konamiKeyDown, konamiKeyDown, konamiKeyLeft, konamiKeyRight, konamiKeyLeft, konamiKeyRight, "b"}
 	for _, k := range seq {
 		_, cmd := m.Update(tea.KeyPressMsg{Text: k})
 		// Intermediate keys must not fire the easter egg.

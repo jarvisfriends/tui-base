@@ -112,8 +112,8 @@ func BenchmarkInspectorIdle(b *testing.B) {
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 140, Height: 48})
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = m.View().Content
 	}
 }
@@ -124,7 +124,7 @@ func BenchmarkInspectorMouseMotion(b *testing.B) {
 
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		x := i % 140
 		y := (i / 140) % 48
 		_, _ = m.Update(tea.MouseMotionMsg(tea.Mouse{X: x, Y: y, Button: tea.MouseLeft}))

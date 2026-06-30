@@ -3,7 +3,7 @@
 # Run locally with:
 #   golangci-lint run ./...
 #
-# Compatible with current golangci-lint versions.
+# Compatible with golangci-lint v2.
 version: "2"
 run:
   timeout: 5m
@@ -12,26 +12,137 @@ run:
 linters:
   default: none
   enable:
-    - govet      # suspicious constructs (printf args, shadowing, etc.)
-    - staticcheck # broad correctness + simplification analyses
-    - unused     # unused code (vars, funcs, types)
-    - errcheck   # unchecked error return values
-    - ineffassign # ineffectual assignments
+    # ── Core correctness ──────────────────────────────────────────────
+    - govet        # suspicious constructs (printf args, shadowing, etc.)
+    - staticcheck  # broad correctness + simplification analyses
+    - unused       # unused code (vars, funcs, types)
+    - errcheck     # unchecked error return values
+    - ineffassign  # ineffectual assignments
+
+    # ── Style & consistency ───────────────────────────────────────────
+    - misspell     # typos in comments and strings
+    - nolintlint   # requires //nolint directives to name specific linters
+    - gocritic     # opinionated but high-value checks
+    - revive       # comprehensive style checks (superset of golint)
+    - copyloopvar  # catches pre-Go-1.22 loop variable capture patterns
+    - modernize    # idiomatic rewrites: min/max builtins, strings.Cut, slices.*, etc.
+    - whitespace   # no leading/trailing blank lines inside blocks
+    - goconst      # repeated string literals should be named constants
+    - unconvert    # unnecessary type conversions
+    - reassign     # reassignment of variables declared in outer scope
+    - dupword      # duplicate words in comments/strings (e.g. "the the")
+    - intrange     # for loops that can use an integer range (Go 1.22+)
+    - mirror       # wrong mirror patterns of bytes/strings usage
+    - usestdlibvars # use Go stdlib constants instead of magic strings
+    - recvcheck    # receiver type consistency across all methods of a type
+
+    # ── Performance ───────────────────────────────────────────────────
+    - prealloc     # suggests slice pre-allocation
+    - perfsprint   # fmt.Sprintf → errors.New / strconv / string concat where possible
+    - wastedassign # assignments whose value is never read
+
+    # ── Correctness ───────────────────────────────────────────────────
+    - exhaustive          # all enum cases must be handled in switches
+    - nilnil              # functions should not return (nil, nil)
+    - nilerr              # errors should not be returned as nil interfaces
+    - unparam             # function parameters always receiving the same value
+    - errorlint           # misuse of error-wrapping (== instead of errors.Is, etc.)
+    - durationcheck       # accidental duration × duration multiplication
+    - gocheckcompilerdirectives # validates //go: compiler directive comments
+    - musttag             # enforce json/yaml/etc. tags on marshaled struct fields
+    - iface               # detect interface pollution (empty interfaces, single-method misuse)
+    - predeclared         # shadows a predeclared identifier (len, cap, new, etc.)
+    - errname             # sentinel errors must be Err-prefixed; error types must be -Error suffixed
+    - exptostd            # replace golang.org/x/exp functions with stdlib equivalents
+    - iotamixing          # iota in a const block must not mix with non-iota values
+    - fatcontext          # contexts nested in loops or function literals
+
+    # ── Complexity ────────────────────────────────────────────────────
+    - nestif       # flags deeply nested if blocks (default threshold: 5)
+    - nakedret     # naked returns in long functions are confusing
+
+    # ── Testing ───────────────────────────────────────────────────────
+    - thelper      # test helpers must call t.Helper()
+    - usetesting   # prefer t.Setenv / t.TempDir over os.Setenv / ioutil.TempDir
+    - gochecknoinits # no init() in non-test files; test files should use TestMain
+    - tparallel    # table-driven subtests should call t.Parallel()
+
+    # ── Safety ────────────────────────────────────────────────────────
+    - bodyclose    # unclosed HTTP response bodies
+    - gosec        # common security anti-patterns
+
   settings:
     govet:
       enable:
         - shadow
+        - nilness
+        - copylocks
+        - unusedwrite
     errcheck:
-      # Report `x, _ := f()` only for type assertions, not blank-assigned errors
-      # (the codebase intentionally uses `//nolint:errcheck` where appropriate).
+      # Report `x, _ := f()` only for type assertions, not blank-assigned
+      # errors (the codebase intentionally uses `//nolint:errcheck` where
+      # appropriate).
       check-type-assertions: true
       check-blank: false
+    gocritic:
+      # Start with the default set; tune down noisy checks as needed.
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - hugeParam          # noisy for TUI model structs (passed by value by design)
+        - rangeValCopy       # Charm v2 models are intentionally copied in range loops
+        - evalOrder          # false positive for Bubble Tea's `return m, cmd()` pattern
+        - singleCaseSwitch   # intentional for future extensibility in switch statements
+        - commentedOutCode   # some commented-out code is intentional (test references)
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        # NOTE: 'exported' (doc comments on all exported symbols) is disabled
+        # for now — the codebase needs ~182 doc comments added first.
+        # Tracked as Category 5 in .agent/code_review/Consolidated_review.md.
+        # Re-enable once doc.go files and godoc comments are in place.
+        - name: increment-decrement
+        - name: var-naming
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: superfluous-else
+        - name: unreachable-code
+    misspell:
+      locale: US
+
   exclusions:
     rules:
-      # Tests frequently ignore errors from setup/teardown helpers.
+      # G204 (subprocess with variable): the pprof browser-opener and
+      # 'go tool pprof' launcher use controlled internal URLs/paths, not
+      # external user input.
+      - linters:
+          - gosec
+        text: "G204:"
+      # G104 (unhandled errors in tests): test setup helpers like os.Setenv are
+      # already excluded from errcheck; gosec tracks the same pattern separately.
       - path: _test\.go
         linters:
-          - errcheck
+          - gosec
+        text: "G104:"
+
+formatters:
+  enable:
+    - gofumpt
+  settings:
+    gofumpt:
+      module-path: github.com/jarvisfriends/tui-base
+      extra-rules: true
 
 issues:
   # Show every finding rather than capping per-linter/per-message.

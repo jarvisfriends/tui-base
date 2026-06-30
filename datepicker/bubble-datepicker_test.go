@@ -5,9 +5,11 @@ import (
 	"time"
 )
 
-var halloween = time.Date(2023, time.October, 31, 0, 0, 0, 0, time.UTC)
-var thanksgiving = time.Date(2023, time.November, 23, 0, 0, 0, 0, time.UTC)
-var xmas = time.Date(2023, time.December, 25, 0, 0, 0, 0, time.UTC)
+var (
+	halloween    = time.Date(2023, time.October, 31, 0, 0, 0, 0, time.UTC)
+	thanksgiving = time.Date(2023, time.November, 23, 0, 0, 0, 0, time.UTC)
+	xmas         = time.Date(2023, time.December, 25, 0, 0, 0, 0, time.UTC)
+)
 
 func TestNew(t *testing.T) {
 	h := halloween

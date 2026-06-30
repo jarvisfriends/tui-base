@@ -59,10 +59,10 @@ func (m *InfoModal) Init() tea.Cmd {
 	return nil
 }
 
-func (m *InfoModal) Name() string                 { return "InfoModal" }
-func (m *InfoModal) SetKeys(keys *keys.AppKeyMap) { m.keys = keys }
-func (m *InfoModal) SetAppName(name string)       { m.appName = name }
-func (m *InfoModal) SetVersion(v string)          { m.appVersion = v }
+func (m *InfoModal) Name() string               { return "InfoModal" }
+func (m *InfoModal) SetKeys(km *keys.AppKeyMap) { m.keys = km }
+func (m *InfoModal) SetAppName(name string)     { m.appName = name }
+func (m *InfoModal) SetVersion(v string)        { m.appVersion = v }
 
 var _ tea.Model = (*InfoModal)(nil)
 
@@ -160,7 +160,7 @@ func (m *InfoModal) boxDims() (boxW, boxH, boxX, boxY int) {
 
 	boxX = max((m.availableW-boxW)/2, 0)
 	boxY = max((m.availableH-boxH)/2, 0)
-	return
+	return boxW, boxH, boxX, boxY
 }
 
 // vpDims returns the width and height of the inner viewport (content area
@@ -178,7 +178,7 @@ func (m *InfoModal) vpDims() (vpW, vpH int) {
 	if vpH < 1 {
 		vpH = 1
 	}
-	return
+	return vpW, vpH
 }
 
 // rebuildContent recreates the viewport with content matching the current
@@ -191,60 +191,65 @@ func (m *InfoModal) rebuildContent() {
 	accentStyle := c.Styles.Title
 	dimStyle := c.Styles.FilterDim
 
-	var lines []string
-
-	info := common.ExpandedBuildInfo()
-	if info != nil {
-		rev := info.VCS.Revision
-		if utf8.RuneCountInString(rev) > 8 {
-			rev = string([]rune(rev)[:8])
-		}
-		builtAt := ""
-		if info.VCS.Time != nil {
-			builtAt = " built " + info.VCS.Time.Format("2006-01-02")
-		}
-		modified := ""
-		if info.VCS.Modified != nil && *info.VCS.Modified {
-			modified = " (modified)"
-		}
-		lines = append(lines, dimStyle.Render(fmt.Sprintf(
-			"  Go: %-10s  OS: %s/%s  CPUs: %d",
-			info.GoVersion, info.Runtime.GOOS, info.Runtime.GOARCH, info.Runtime.CPUs,
-		)))
-		// "Executable", st.Launch.Executable,
-		// "Args", fmt.Sprintf("%v", st.Launch.Args),
-		// "Work Dir", st.Launch.WorkDir,
-		// "User@Host", fmt.Sprintf("%s@%s", st.Launch.Username, st.Launch.Hostname),
-		if rev != "" {
-			lines = append(lines, dimStyle.Render(fmt.Sprintf("  Rev: %s%s%s", rev, builtAt, modified)))
-		}
-		lines = append(lines, "")
-		lines = append(lines, accentStyle.Render("  Dependencies")+dimStyle.Render(fmt.Sprintf("  (total: %d)", len(info.Dependencies))))
-		lines = append(lines, mutedStyle.Render(fmt.Sprintf("  %-50s  %s", "Package", "Version")))
-		sepLen := min(vpW-2, 72)
-		lines = append(lines, mutedStyle.Render("  "+strings.Repeat("─", sepLen)))
-		for _, dep := range info.Dependencies {
-			path := dep.Path
-			if lipgloss.Width(path) > 50 {
-				runes := []rune(path)
-				path = "…" + string(runes[len(runes)-49:])
-			}
-			line := fmt.Sprintf("  %-50s  %s", path, dep.Version)
-			if dep.Replace != "" {
-				line += "  ⇒ " + dep.Replace
-			}
-			lines = append(lines, mutedStyle.Render(line))
-		}
-	} else {
-		lines = append(lines, mutedStyle.Render("  (build info unavailable)"))
-	}
+	lines := m.buildInfoLines(vpW, accentStyle, mutedStyle, dimStyle)
 
 	m.vp = viewport.New(viewport.WithWidth(vpW), viewport.WithHeight(vpH))
 	m.vp.SetContentLines(lines)
 }
 
-func (m *InfoModal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *InfoModal) buildInfoLines(vpW int, accentStyle, mutedStyle, dimStyle lipgloss.Style) []string {
+	var lines []string
+	info := common.ExpandedBuildInfo()
+	if info == nil {
+		return append(lines, mutedStyle.Render("  (build info unavailable)"))
+	}
+	rev := info.VCS.Revision
+	if utf8.RuneCountInString(rev) > 8 {
+		rev = string([]rune(rev)[:8])
+	}
+	builtAt := ""
+	if info.VCS.Time != nil {
+		builtAt = " built " + info.VCS.Time.Format("2006-01-02")
+	}
+	modified := ""
+	if info.VCS.Modified != nil && *info.VCS.Modified {
+		modified = " (modified)"
+	}
+	lines = append(lines, dimStyle.Render(fmt.Sprintf(
+		"  Go: %-10s  OS: %s/%s  CPUs: %d",
+		info.GoVersion, info.Runtime.GOOS, info.Runtime.GOARCH, info.Runtime.CPUs,
+	)))
+	// "Executable", st.Launch.Executable,
+	// "Args", fmt.Sprintf("%v", st.Launch.Args),
+	// "Work Dir", st.Launch.WorkDir,
+	// "User@Host", fmt.Sprintf("%s@%s", st.Launch.Username, st.Launch.Hostname),
+	if rev != "" {
+		lines = append(lines, dimStyle.Render(fmt.Sprintf("  Rev: %s%s%s", rev, builtAt, modified)))
+	}
+	lines = append(
+		lines,
+		"",
+		accentStyle.Render("  Dependencies")+dimStyle.Render(fmt.Sprintf("  (total: %d)", len(info.Dependencies))),
+		mutedStyle.Render(fmt.Sprintf("  %-50s  %s", "Package", "Version")),
+	)
+	sepLen := min(vpW-2, 72)
+	lines = append(lines, mutedStyle.Render("  "+strings.Repeat("─", sepLen)))
+	for _, dep := range info.Dependencies {
+		path := dep.Path
+		if lipgloss.Width(path) > 50 {
+			runes := []rune(path)
+			path = "…" + string(runes[len(runes)-49:])
+		}
+		line := fmt.Sprintf("  %-50s  %s", path, dep.Version)
+		if dep.Replace != "" {
+			line += "  ⇒ " + dep.Replace
+		}
+		lines = append(lines, mutedStyle.Render(line))
+	}
+	return lines
+}
 
+func (m *InfoModal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.Resize(msg.Width, msg.Height)
@@ -273,12 +278,10 @@ func (m *InfoModal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(keyMsg, m.keys.Bottom):
 			m.GotoBottom()
 			return m, nil
-
 		}
 	}
 
 	return m, nil
-
 }
 
 // Render returns the fully rendered modal string and its top-left position
@@ -295,7 +298,7 @@ func (m *InfoModal) View() (content tea.View) {
 	mutedStyle := c.Styles.Subtitle
 	sepStyle := c.Styles.Title
 
-	// Title centred in the content area.
+	// Title centered in the content area.
 	name := m.appName
 	if name == "" {
 		name = "TUI Base"
@@ -317,7 +320,8 @@ func (m *InfoModal) View() (content tea.View) {
 	footerText := "↑/↓ • PgUp/PgDn • Esc or click outside to close" + scrollBadge
 	footerLine := lipgloss.PlaceHorizontal(vpW, lipgloss.Center, mutedStyle.Render(footerText))
 
-	inner := lipgloss.JoinVertical(lipgloss.Left,
+	inner := lipgloss.JoinVertical(
+		lipgloss.Left,
 		titleLine,
 		sep,
 		m.vp.View(),
@@ -336,15 +340,3 @@ func (m *InfoModal) View() (content tea.View) {
 	rendered := borderStyle.Width(boxW).Render(inner)
 	return tea.NewView(rendered)
 }
-
-// func newCard(str string) *lipgloss.Layer {
-// 	return lipgloss.NewLayer(
-// 		lipgloss.NewStyle().
-// 			Width(20).
-// 			Height(10).
-// 			Border(lipgloss.RoundedBorder()).
-// 			BorderForeground(charmtone.Charple).
-// 			Align(lipgloss.Center, lipgloss.Center).
-// 			Render(str),
-// 	)
-// }
