@@ -23,13 +23,13 @@ jobs:
       matrix:
         os: [ubuntu-24.04, windows-2022]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version: '1.26.x'
       - name: Cache Go modules
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/go-build
@@ -68,7 +68,7 @@ jobs:
     name: go generate drift
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -87,7 +87,7 @@ jobs:
     name: go fix drift
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -110,7 +110,7 @@ jobs:
       GOOS: ${{ matrix.target_goos }}
       GOARCH: amd64
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -124,7 +124,7 @@ jobs:
     name: Workflow Lint (actionlint)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: actionlint
         uses: reviewdog/action-actionlint@v1
 
@@ -132,7 +132,7 @@ jobs:
     name: Docs Lint and Links
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Markdown lint
         uses: DavidAnson/markdownlint-cli2-action@v23
         with:
@@ -148,7 +148,7 @@ jobs:
     name: Shellcheck
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Shellcheck scripts
         uses: ludeeus/action-shellcheck@2.0.0
         with:
@@ -162,7 +162,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Dependency review
         uses: actions/dependency-review-action@v5
 
@@ -170,7 +170,7 @@ jobs:
     name: govulncheck
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -187,13 +187,13 @@ jobs:
     env:
       COVERAGE_THRESHOLD: 55.0
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version: '1.26.x'
       - name: Cache Go modules
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/go-build
