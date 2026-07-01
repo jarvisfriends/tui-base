@@ -1,0 +1,35 @@
+{
+  "name": "tui-base",
+
+  // Official Go devcontainer image — includes Go toolchain, gopls, gcc (for race detector).
+  // Bump the minor version here when upgrading Go (match go.mod).
+  "image": "mcr.microsoft.com/devcontainers/go:1-1.26-bookworm",
+
+  // Named volumes persist the module and build caches across container rebuilds,
+  // avoiding a full re-download every time you "Rebuild Container".
+  "mounts": [
+    "source=tui-base-gomod,target=/go/pkg/mod,type=volume",
+    "source=tui-base-gobuild,target=/home/vscode/.cache/go-build,type=volume"
+  ],
+
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+
+  "customizations": {
+    "vscode": {
+      // Mirror the recommendations from .vscode/extensions.json so they
+      // install automatically when the container is first opened.
+      "extensions": [
+        "golang.go",
+        "timonwong.shellcheck",
+        "redhat.vscode-yaml",
+        "editorconfig.editorconfig",
+        "davidanson.vscode-markdownlint",
+        "tamasfe.even-better-toml",
+        "github.vscode-github-actions",
+        "usernamehw.errorlens",
+        "mhutchie.git-graph",
+        "streetsidesoftware.code-spell-checker"
+      ]
+    }
+  }
+}

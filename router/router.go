@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/charmbracelet/colorprofile"
 	cfg "github.com/jarvisfriends/tui-base/config"
@@ -1044,7 +1043,7 @@ func (m *RouterModel) cyclePageTo(index int) tea.Cmd {
 // navDigitIndex maps a "1".."9" key press to a zero-based page index.
 func navDigitIndex(keyMsg tea.KeyPressMsg) (int, bool) {
 	s := keyMsg.Text
-	if utf8.RuneCountInString(s) == 1 && s[0] >= '1' && s[0] <= '9' {
+	if lipgloss.Width(s) == 1 && s[0] >= '1' && s[0] <= '9' {
 		return int(s[0] - '1'), true
 	}
 	return 0, false

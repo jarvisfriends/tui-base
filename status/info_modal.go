@@ -3,7 +3,6 @@ package status
 import (
 	"fmt"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/jarvisfriends/tui-base/common"
 	"github.com/jarvisfriends/tui-base/keys"
@@ -163,15 +162,29 @@ func (m *InfoModal) boxDims() (boxW, boxH, boxX, boxY int) {
 	return boxW, boxH, boxX, boxY
 }
 
+// modalChromeRows is the number of rendered lines inside the box border that
+// are not part of the scrollable viewport: the title line, two separator
+// rules, and the footer line (see the boxDims diagram above).
+const modalChromeRows = 4
+
+// modalFrameStyle returns the border+padding configuration shared by every
+// caller that needs to measure or draw the modal's outer frame. Keeping the
+// geometry in one place (rather than duplicating the border type and padding
+// amounts as separate literals in vpDims and View) means GetHorizontalFrameSize
+// / GetVerticalFrameSize always reflect what actually gets rendered. It is a
+// var (not a func literal) so tests can swap in other border/padding
+// combinations and confirm vpDims and View still agree.
+var modalFrameStyle = func() lipgloss.Style {
+	return lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
+}
+
 // vpDims returns the width and height of the inner viewport (content area
-// minus the border and padding of the outer box).
-//
-//	Content width  = boxW - 2 (border L+R) - 2 (padding L+R) = boxW - 4
-//	Content height = boxH - 2 (border T+B) - 4 (title+sep+sep+footer) = boxH - 6
+// minus the outer box's border/padding frame and the fixed chrome rows).
 func (m *InfoModal) vpDims() (vpW, vpH int) {
 	boxW, boxH, _, _ := m.boxDims()
-	vpW = boxW - 4
-	vpH = boxH - 6
+	frame := modalFrameStyle()
+	vpW = boxW - frame.GetHorizontalFrameSize()
+	vpH = boxH - frame.GetVerticalFrameSize() - modalChromeRows
 	if vpW < 10 {
 		vpW = 10
 	}
@@ -204,7 +217,7 @@ func (m *InfoModal) buildInfoLines(vpW int, accentStyle, mutedStyle, dimStyle li
 		return append(lines, mutedStyle.Render("  (build info unavailable)"))
 	}
 	rev := info.VCS.Revision
-	if utf8.RuneCountInString(rev) > 8 {
+	if lipgloss.Width(rev) > 8 {
 		rev = string([]rune(rev)[:8])
 	}
 	builtAt := ""
@@ -329,13 +342,13 @@ func (m *InfoModal) View() (content tea.View) {
 		footerLine,
 	)
 
-	// Width(boxW) = total rendered width including border+padding.
-	// Border L+R = 2, Padding L+R = 2 → content width = boxW-4 = vpW  ✓
-	borderStyle := c.Styles.OverlayBorder.
-		Border(lipgloss.RoundedBorder()).
+	// Width(boxW) = total rendered width including border+padding, so the
+	// content area lipgloss produces here always matches vpDims (same
+	// modalFrameStyle backs both).
+	borderStyle := modalFrameStyle().
+		BorderForeground(c.Accent).
 		Background(c.Styles.TextOnBg.GetBackground()).
-		Foreground(c.Styles.TextOnBg.GetForeground()).
-		Padding(0, 1)
+		Foreground(c.Styles.TextOnBg.GetForeground())
 
 	rendered := borderStyle.Width(boxW).Render(inner)
 	return tea.NewView(rendered)

@@ -78,6 +78,14 @@ const (
 	sidebarCollapsedWidth = 3 // columns when collapsed (shows expand button only)
 )
 
+// sidebarFrame carries the border configuration collapsedView and
+// expandedView draw (right edge only), kept in one place so
+// GetHorizontalFrameSize() reflects whatever border those two render sites
+// actually use instead of a hand-counted literal.
+func sidebarFrame() lipgloss.Style {
+	return lipgloss.NewStyle().Border(lipgloss.NormalBorder(), false, true, false, false)
+}
+
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
 // Sidebar is a panel-style Navigator backed by a bubbles/list for the main
@@ -126,6 +134,12 @@ func New() *Sidebar {
 	sb.width = sb.expandedWidth
 	sb.rebuildList()
 	return sb
+}
+
+// innerWidth returns the content width available inside the sidebar's outer
+// frame (border only; the sidebar carries no padding of its own).
+func (m *Sidebar) innerWidth() int {
+	return max(m.width-sidebarFrame().GetHorizontalFrameSize(), 1)
 }
 
 // computeExpandedWidth derives the sidebar width from the longest page title.
@@ -203,7 +217,7 @@ func (m *Sidebar) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.width = min(m.expandedWidth, max(msg.Width-10, sidebarCollapsedWidth))
 		}
 		m.height = msg.Height
-		innerW := max(m.width-2, 1)
+		innerW := m.innerWidth()
 		// Reserve header(1) + separator(1) + settings(1) rows; list gets the rest.
 		listH := max(m.height-3, 1)
 		m.mainList.SetWidth(innerW)
@@ -282,7 +296,7 @@ func (m *Sidebar) collapsedView(c *theme.AppStyle) tea.View {
 }
 
 func (m *Sidebar) expandedView(c *theme.AppStyle) tea.View {
-	innerW := max(m.width-2, 1)
+	innerW := m.innerWidth()
 
 	// Push current theme + focus state into the delegate before rendering.
 	m.mainList.SetDelegate(m.buildDelegate(c, innerW))

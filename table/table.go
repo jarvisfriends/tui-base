@@ -26,6 +26,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	ltable "charm.land/lipgloss/v2/table"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jarvisfriends/tui-base/theme"
 )
@@ -33,6 +34,13 @@ import (
 // doubleClickWindow is how close two clicks on the same row must land to count
 // as a double-click (which opens the row's details).
 const doubleClickWindow = 450 * time.Millisecond
+
+// tableBorder is the border used for the rendered table. columnAtX locates
+// column separators by scanning the rendered top border for this border's
+// MiddleTop rune, so the two must stay in sync — changing tableBorder alone
+// (e.g. to lipgloss.ThickBorder() or lipgloss.DoubleBorder(), whose junction
+// glyphs differ from "┬") is sufficient; no other code needs updating.
+var tableBorder = lipgloss.RoundedBorder()
 
 // Column describes one column header.
 type Column struct {
@@ -424,8 +432,8 @@ func (m *TableModel) clampCursor() {
 
 func (m *TableModel) moveCursor(d int) { m.cursor += d; m.clampCursor() }
 
-// columnAtX maps a page-relative X to a column index using the ┬ separators
-// parsed from the rendered top border.
+// columnAtX maps a page-relative X to a column index using the column-junction
+// separators parsed from the rendered top border (see tableBorder).
 func (m *TableModel) columnAtX(x int) int {
 	for i, b := range m.colBoundaries {
 		if x < b {
@@ -485,7 +493,7 @@ func (m *TableModel) View(c *theme.AppStyle, originY int) string {
 	zebraStyle := st.Subtitle.Padding(0, 1)
 
 	tbl := ltable.New().
-		Border(lipgloss.RoundedBorder()).
+		Border(tableBorder).
 		BorderStyle(lipgloss.NewStyle().Foreground(c.Border)).
 		Wrap(false).
 		Width(m.width).
@@ -510,13 +518,27 @@ func (m *TableModel) View(c *theme.AppStyle, originY int) string {
 	out := tbl.String()
 
 	// Record geometry: top border (originY), header (originY+1), header
-	// separator (originY+2), data rows from originY+3.
+	// separator (originY+2), data rows from originY+3. The border's top/bottom
+	// edges are always exactly one row tall in lipgloss regardless of border
+	// style, so these row offsets hold for any tableBorder; only the column
+	// junction glyph below varies with the border style.
 	m.headerY = originY + 1
 	m.dataStartY = originY + 3
 	m.colBoundaries = m.colBoundaries[:0]
-	if lines := strings.Split(out, "\n"); len(lines) > 0 {
-		for x, ch := range []rune(lines[0]) {
-			if ch == '┬' {
+	junction := []rune(tableBorder.MiddleTop)
+	if lines := strings.Split(out, "\n"); len(lines) > 0 && len(junction) > 0 {
+		// BorderStyle colors the top border, so the raw line carries ANSI SGR
+		// sequences interleaved with the border runes. Strip them first —
+		// otherwise the rune index recorded here (and later compared against
+		// real screen-column mouse coordinates in HandleClick/columnAtX) is
+		// offset by however many escape-sequence runes preceded it, silently
+		// misaligning every column boundary whenever color output is active.
+		top := []rune(ansi.Strip(lines[0]))
+		// Skip the first and last rune: some border presets (ASCII, Markdown)
+		// reuse the same glyph for corners and column junctions, and the
+		// corners must never be mistaken for a column boundary.
+		for x := 1; x < len(top)-1; x++ {
+			if top[x] == junction[0] {
 				m.colBoundaries = append(m.colBoundaries, x)
 			}
 		}

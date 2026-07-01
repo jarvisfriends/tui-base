@@ -10,6 +10,7 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
@@ -75,6 +76,67 @@ func TestInfoModal_Lifecycle(t *testing.T) {
 	im.Toggle(80, 24)
 	if im.IsVisible() {
 		t.Error("expected not visible after Toggle from open")
+	}
+}
+
+// TestInfoModalViewportMatchesFrameForVariedBorders sweeps modalFrameStyle
+// across several border/padding combinations (standing in for border
+// "thickness" — a wider Padding stresses the same GetHorizontalFrameSize /
+// GetVerticalFrameSize arithmetic as a thicker border would) and checks
+// vpDims() against an independently computed expectation. If vpDims ever
+// reverts to hardcoded literals (boxW-4, boxH-6) instead of deriving from the
+// live frame style, this fails the moment the frame stops being exactly
+// 1-cell-border + Padding(0,1) — which is exactly what changes once a themed
+// border option lands. It also renders the full modal and checks no line
+// overflows the box, so a viewport sized larger than its frame allows is
+// caught too.
+func TestInfoModalViewportMatchesFrameForVariedBorders(t *testing.T) {
+	original := modalFrameStyle
+	t.Cleanup(func() { modalFrameStyle = original })
+
+	cases := []struct {
+		name       string
+		border     lipgloss.Border
+		padV, padH int
+	}{
+		{"rounded-default", lipgloss.RoundedBorder(), 0, 1},
+		{"thick-wide-padding", lipgloss.ThickBorder(), 1, 3},
+		{"double-tall-padding", lipgloss.DoubleBorder(), 2, 2},
+		{"normal-no-padding", lipgloss.NormalBorder(), 0, 0},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			padV, padH := tc.padV, tc.padH
+			modalFrameStyle = func() lipgloss.Style {
+				return lipgloss.NewStyle().Border(tc.border).Padding(padV, padH)
+			}
+
+			im := NewInfoModal()
+			im.SetAppName("TestApp")
+			im.SetVersion("v1.2.3")
+			im.Open(100, 40)
+			_ = theme.SetCurrentTint("dracula")
+
+			boxW, boxH, _, _ := im.boxDims()
+			// Every standard lipgloss border contributes exactly 1 cell per
+			// edge; padH/padV apply to both sides, matching Padding(v, h).
+			wantVpW := max(boxW-2*padH-2, 10)
+			wantVpH := max(boxH-2*padV-2-modalChromeRows, 1)
+
+			gotVpW, gotVpH := im.vpDims()
+			if gotVpW != wantVpW || gotVpH != wantVpH {
+				t.Fatalf("%s: vpDims() = (%d, %d), want (%d, %d) for boxW=%d boxH=%d padV=%d padH=%d",
+					tc.name, gotVpW, gotVpH, wantVpW, wantVpH, boxW, boxH, padV, padH)
+			}
+
+			v := im.View()
+			for i, line := range strings.Split(v.Content, "\n") {
+				if w := lipgloss.Width(line); w > boxW {
+					t.Errorf("%s: line %d overflows box width %d by %d: %q", tc.name, i, boxW, w-boxW, line)
+				}
+			}
+		})
 	}
 }
 
