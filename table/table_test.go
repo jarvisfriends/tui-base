@@ -1,9 +1,13 @@
 package table
 
 import (
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jarvisfriends/tui-base/theme"
 )
@@ -178,5 +182,81 @@ func TestViewRecordsGeometry(t *testing.T) {
 	}
 	if len(m.colBoundaries) != len(sampleCols())-1 {
 		t.Errorf("expected %d column boundaries, got %d", len(sampleCols())-1, len(m.colBoundaries))
+	}
+}
+
+// TestColumnBoundariesAreScreenColumns confirms colBoundaries are recorded in
+// the same coordinate space HandleClick receives from a real mouse: visual
+// screen columns on the ANSI-stripped line, not rune indices into the raw
+// (color-escaped) render. BorderStyle colors the top border, so the raw
+// string carries SGR escape sequences; without stripping them first, every
+// recorded boundary is offset by however many escape-sequence runes preceded
+// it, and clicks landing on real screen coordinates would silently resolve to
+// the wrong column (or none) the moment color output is enabled.
+func TestColumnBoundariesAreScreenColumns(t *testing.T) {
+	m := New(sampleCols())
+	m.SetRows(sampleRows())
+	m.SetSize(60, 20)
+	out := m.View(theme.Active(), 1)
+
+	top := ansi.Strip(strings.Split(out, "\n")[0])
+	topRunes := []rune(top)
+	junction, _ := utf8.DecodeRuneInString(tableBorder.MiddleTop)
+
+	if len(m.colBoundaries) == 0 {
+		t.Fatal("no column boundaries recorded")
+	}
+	for _, x := range m.colBoundaries {
+		if x < 0 || x >= len(topRunes) {
+			t.Fatalf("boundary x=%d out of range for stripped top border (len %d): %q", x, len(topRunes), top)
+		}
+		if topRunes[x] != junction {
+			t.Errorf("boundary x=%d lands on %q in the visual top border, want junction glyph %q: %q",
+				x, topRunes[x], junction, top)
+		}
+	}
+}
+
+// TestColumnBoundariesTrackBorderStyle sweeps every standard lipgloss border
+// preset through tableBorder and re-verifies header-click sorting still
+// works for each one. Column-boundary detection scans the rendered top
+// border for tableBorder's own junction glyph; if that ever regresses back
+// to a hardcoded literal (e.g. "┬"), this fails the moment the border style
+// changes to one with a different junction glyph (Thick "┳", Double "╦"),
+// which is exactly the failure mode a future themed-border feature would
+// otherwise trigger silently — header clicks would stop sorting anything.
+func TestColumnBoundariesTrackBorderStyle(t *testing.T) {
+	original := tableBorder
+	t.Cleanup(func() { tableBorder = original })
+
+	borders := map[string]lipgloss.Border{
+		"normal":  lipgloss.NormalBorder(),
+		"rounded": lipgloss.RoundedBorder(),
+		"thick":   lipgloss.ThickBorder(),
+		"double":  lipgloss.DoubleBorder(),
+		"ascii":   lipgloss.ASCIIBorder(),
+	}
+
+	for name, b := range borders {
+		t.Run(name, func(t *testing.T) {
+			tableBorder = b
+
+			m := New(sampleCols())
+			m.SetRows(sampleRows())
+			m.SetSize(60, 20)
+			_ = m.View(theme.Active(), 1)
+
+			if len(m.colBoundaries) != len(sampleCols())-1 {
+				t.Fatalf("border=%s: expected %d column boundaries, got %d (junction glyph %q not found in rendered top border)",
+					name, len(sampleCols())-1, len(m.colBoundaries), b.MiddleTop)
+			}
+
+			x := m.colBoundaries[0] + 1
+			m.HandleClick(x, m.headerY)
+			if !m.sortActive || m.sortCol != 1 || !m.sortAsc {
+				t.Fatalf("border=%s: header click should sort col 1 ascending; got active=%v col=%d asc=%v",
+					name, m.sortActive, m.sortCol, m.sortAsc)
+			}
+		})
 	}
 }

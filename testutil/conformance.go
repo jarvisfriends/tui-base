@@ -126,9 +126,10 @@ func CheckThemeResponsive(t *testing.T, m tea.Model, themeA, themeB tea.Msg) {
 
 func longestLine(s string) string {
 	var best string
+	bestW := -1
 	for l := range strings.SplitSeq(s, "\n") {
-		if l = strings.TrimSpace(l); len(l) > len(best) {
-			best = l
+		if l = strings.TrimSpace(l); lipgloss.Width(l) > bestW {
+			best, bestW = l, lipgloss.Width(l)
 		}
 	}
 	return best

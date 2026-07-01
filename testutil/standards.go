@@ -3,6 +3,7 @@ package testutil
 import (
 	"go/ast"
 	"go/token"
+	"slices"
 	"strings"
 	"testing"
 
@@ -17,7 +18,7 @@ func CheckCodeStandards(t *testing.T, patterns ...string) {
 
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
-			packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
+			packages.NeedImports | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
 		Tests: false,
 	}
 
@@ -34,30 +35,41 @@ func CheckCodeStandards(t *testing.T, patterns ...string) {
 			continue
 		}
 
-		uiPkg := isUIPackage(pkg.PkgPath)
+		uiPkg := isUIPackage(pkg)
 
 		for _, file := range pkg.Syntax {
 			filename := pkg.Fset.Position(file.Pos()).Filename
+			// ancestors holds the chain of enclosing AST nodes (outermost first,
+			// immediate parent last) for the node currently being visited. The
+			// layout checks use it to inspect how a len() result is consumed.
+			var ancestors []ast.Node
 			ast.Inspect(file, func(n ast.Node) bool {
+				if n == nil {
+					ancestors = ancestors[:len(ancestors)-1]
+					return true
+				}
 				checkKeyMappings(t, pkg.Fset, filename, n)
 				if uiPkg {
-					checkLayoutCalculations(t, pkg, filename, n)
+					checkLayoutCalculations(t, pkg, filename, ancestors, n)
 				}
+				ancestors = append(ancestors, n)
 				return true
 			})
 		}
 	}
 }
 
-func isUIPackage(pkgPath string) bool {
-	uiDirs := []string{"/pages", "/cui", "/tui/", "/theme", "/navigation", "/overlay", "/status", "/table", "/router", "/creator"}
-	for _, d := range uiDirs {
-		if strings.Contains(pkgPath, d) {
+// isUIPackage reports whether a package participates in terminal rendering, by
+// checking whether it imports one of the Charm rendering libraries. This is a
+// self-maintaining replacement for a hardcoded list of directory names: any
+// package that lays out or measures text for the screen necessarily imports
+// lipgloss or bubbletea, and packages that do neither are exempt from the
+// layout-width checks.
+func isUIPackage(pkg *packages.Package) bool {
+	for path := range pkg.Imports {
+		if strings.Contains(path, "charm.land/lipgloss") || strings.Contains(path, "charm.land/bubbletea") {
 			return true
 		}
-	}
-	if strings.Contains(pkgPath, "tui-base/page") || strings.Contains(pkgPath, "tui-base/notifications") {
-		return true
 	}
 	return false
 }
@@ -142,14 +154,14 @@ func checkWithKeysVimFallback(t *testing.T, fset *token.FileSet, path string, x 
 	}
 }
 
-func checkLayoutCalculations(t *testing.T, pkg *packages.Package, path string, n ast.Node) {
+func checkLayoutCalculations(t *testing.T, pkg *packages.Package, path string, ancestors []ast.Node, n ast.Node) {
 	t.Helper()
 	call, ok := n.(*ast.CallExpr)
 	if !ok {
 		return
 	}
 	checkStringsCountNewline(t, pkg, path, call)
-	checkLenOnString(t, pkg, path, n, call)
+	checkLenOnString(t, pkg, path, ancestors, call)
 }
 
 func checkStringsCountNewline(t *testing.T, pkg *packages.Package, path string, call *ast.CallExpr) {
@@ -170,7 +182,7 @@ func checkStringsCountNewline(t *testing.T, pkg *packages.Package, path string, 
 	}
 }
 
-func checkLenOnString(t *testing.T, pkg *packages.Package, path string, n ast.Node, call *ast.CallExpr) {
+func checkLenOnString(t *testing.T, pkg *packages.Package, path string, ancestors []ast.Node, call *ast.CallExpr) {
 	t.Helper()
 	id, ok := call.Fun.(*ast.Ident)
 	if !ok || id.Name != "len" || len(call.Args) != 1 {
@@ -184,13 +196,124 @@ func checkLenOnString(t *testing.T, pkg *packages.Package, path string, n ast.No
 	if typeString != "string" && typeString != "untyped string" {
 		return
 	}
-	if binaryExpr, isBinary := n.(*ast.BinaryExpr); isBinary {
-		if lit, isLit := binaryExpr.Y.(*ast.BasicLit); isLit && (lit.Value == "0" || lit.Value == "1") {
-			return
-		}
+	// len() on a string returns a byte count, which only differs from the
+	// terminal cell width for multi-byte / wide / zero-width runes. That
+	// distinction is harmless when the result is used for byte-level work
+	// (indexing, slicing, allocation, emptiness/loop bounds) but wrong when it
+	// is used as a display dimension that feeds rendered output. Only flag the
+	// latter so legitimate ASCII/byte uses don't need to be rewritten.
+	if lenUsedForByteSemantics(ancestors, call) {
+		return
 	}
 	pos := pkg.Fset.Position(call.Pos())
 	t.Errorf("%s:%d: Use lipgloss.Width() or ansi.StringWidth() instead of len() for string visual width", path, pos.Line)
+}
+
+// lenUsedForByteSemantics reports whether the result of a len() call is consumed
+// in a way that is content-independent (and therefore safe), as opposed to being
+// used as a visual width. It walks outward from the call through its enclosing
+// expressions and decides based on the first meaningful consumer:
+//
+//   - index / slice bound (s[len(x)-1], s[:len(x)])      -> safe (byte offset)
+//   - argument to make / cap                             -> safe (allocation)
+//   - comparison against an integer literal (len(s) > 0) -> safe (emptiness/size)
+//   - the condition of an enclosing for loop             -> safe (iteration bound)
+//   - anything else (width arithmetic, comparison to a   -> flagged
+//     non-literal dimension, padding, struct fields, …)
+//
+// Arithmetic (len(s)-1, len(a)+len(b)) is transparent: the classifier keeps
+// climbing and decides on whatever ultimately consumes the computed value.
+func lenUsedForByteSemantics(ancestors []ast.Node, call *ast.CallExpr) bool {
+	cur := ast.Node(call)
+	for _, a := range slices.Backward(ancestors) {
+		switch p := a.(type) {
+		case *ast.ParenExpr:
+			cur = p
+		case *ast.BinaryExpr:
+			if isComparisonOp(p.Op) {
+				other := p.X
+				if sameNode(cur, p.X) {
+					other = p.Y
+				}
+				if isIntLiteral(other) {
+					return true
+				}
+				// for i := 0; i < len(s); i++ { … s[i] … } — iterating bytes.
+				return inForCond(ancestors, call)
+			}
+			// Arithmetic operand: the len result is being combined into a larger
+			// expression; defer the decision to its eventual consumer.
+			cur = p
+		case *ast.IndexExpr:
+			return sameNode(cur, p.Index)
+		case *ast.SliceExpr:
+			return sameNode(cur, p.Low) || sameNode(cur, p.High) || sameNode(cur, p.Max)
+		case *ast.CallExpr:
+			if fn, ok := p.Fun.(*ast.Ident); ok && (fn.Name == "make" || fn.Name == "cap") {
+				return true
+			}
+			return false
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+func isComparisonOp(op token.Token) bool {
+	switch op { //nolint:exhaustive // only comparison operators are relevant; default handles every other token
+	case token.EQL, token.NEQ, token.LSS, token.LEQ, token.GTR, token.GEQ:
+		return true
+	default:
+		return false
+	}
+}
+
+func isIntLiteral(expr ast.Expr) bool {
+	switch e := expr.(type) {
+	case *ast.BasicLit:
+		return e.Kind == token.INT
+	case *ast.ParenExpr:
+		return isIntLiteral(e.X)
+	case *ast.UnaryExpr:
+		// -1, +1
+		return (e.Op == token.SUB || e.Op == token.ADD) && isIntLiteral(e.X)
+	default:
+		return false
+	}
+}
+
+// inForCond reports whether call sits within the condition expression of an
+// enclosing for loop, where a byte-count bound is the idiomatic choice.
+func inForCond(ancestors []ast.Node, call ast.Node) bool {
+	for _, a := range ancestors {
+		if f, ok := a.(*ast.ForStmt); ok && f.Cond != nil && nodeContains(f.Cond, call) {
+			return true
+		}
+	}
+	return false
+}
+
+func nodeContains(root, target ast.Node) bool {
+	found := false
+	ast.Inspect(root, func(n ast.Node) bool {
+		if found {
+			return false
+		}
+		if n == target {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+// sameNode compares an ast.Node against an ast.Expr by identity. The conversion
+// is needed because == between the two interface types is a compile error even
+// though they hold the same concrete pointer.
+func sameNode(n ast.Node, e ast.Expr) bool {
+	return e != nil && n == ast.Node(e)
 }
 
 // CheckDescriptiveStructNames verifies that structs are not generically named "Model" or "model".

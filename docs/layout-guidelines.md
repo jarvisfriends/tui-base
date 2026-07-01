@@ -185,19 +185,26 @@ every widget box to be 2 cells narrower than its allocated grid column, leaving 
 
 ## 7. Always test rendered widths and use the AST linter
 
-Visual width miscalculations are the #1 cause of TUI corruption (e.g., borders breaking, layouts wrapping). 
+Visual width miscalculations are the #1 cause of TUI corruption (e.g., borders breaking, layouts wrapping).
 To prevent this, `tui-base` provides two powerful safety nets that **must** be used:
 
-### A. The `TestLayoutCalculations` AST Linter
-Our `tui-base/keys/standards_test.go` contains an AST-based linter that scans all UI packages across the workspaces. 
-It enforces that you never use `len("string")` or `strings.Count(s, "\n")` for layout math (which only measures bytes),
-and forces the use of `lipgloss.Width()` and `lipgloss.Height()` instead. 
+### A. The `TestCodeStandards` AST Linter
+Our `tui-base/conformance_test.go` runs an AST-based linter (in `testutil/standards.go`) that scans every package
+which imports lipgloss or bubbletea — i.e. anything that renders to the screen. It enforces that you never use
+`len("string")` or `strings.Count(s, "\n")` for layout math (which only measures bytes), and forces the use of
+`lipgloss.Width()` and `lipgloss.Height()` instead.
 
-**How to use:** It runs automatically with `go test ./keys/...` in `tui-base`. If it flags your code, replace `len(x)`
-with `lipgloss.Width(x)` (for layout) or `utf8.RuneCountInString(x)` (for slicing/iteration).
+The `len()` check is **use-aware**: it only flags a `len()` on a string when the result is consumed as a display
+dimension (width arithmetic like `width - len(s)`, comparison against a non-literal width, padding via
+`strings.Repeat`, assignment to a width field, …). Byte-level uses are recognized as safe and left alone:
+indexing/slicing (`s[len(s)-1]`, `s[:len(s)]`), allocation (`make([]byte, len(s))`), emptiness/size checks against
+an integer literal (`len(s) == 0`, `len(s) > 80`), and `for`-loop bounds.
+
+**How to use:** It runs automatically with `go test .` in `tui-base`. If it flags your code, the `len()` really is
+being used as a visual width — replace it with `lipgloss.Width(x)`.
 
 ### B. The `AssertBounds` Layout Stress Test
-Static analysis can't catch dynamic text overflowing the window. Every UI component should have a test that calls 
+Static analysis can't catch dynamic text overflowing the window. Every UI component should have a test that calls
 `testutil.AssertBounds(t, model, width, height)`.
 
 This helper automatically:
