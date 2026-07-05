@@ -154,13 +154,12 @@ func TestFullHelpAllRowsCarryStatusBg(t *testing.T) {
 	}
 }
 
-// TestHistoryOverlayAllRowsCarryStatusBg asserts that every row rendered by the
-// notification history overlay contains the StatusBg background escape sequence.
-//
-// The overlay border is wrapped with Background(StatusBg), but inner join-filler
-// cells may revert to the terminal default.  The main Bg escape code must not
-// appear anywhere in the overlay output.
-func TestHistoryOverlayAllRowsCarryStatusBg(t *testing.T) {
+// TestHistoryOverlayAllRowsCarryMainBg asserts that every row rendered by the
+// notification history overlay carries the MAIN app background — the panel
+// reads as part of the page, not the status bar (deliberate design choice,
+// 2026-07-03). Inner join-filler cells must not revert to the terminal
+// default, and the StatusBg escape code must not appear anywhere.
+func TestHistoryOverlayAllRowsCarryMainBg(t *testing.T) {
 	overlay := NewUserNotificationOverlay()
 	nm := notifications.NewManager()
 	overlay.SetNotifManager(nm)
@@ -176,7 +175,7 @@ func TestHistoryOverlayAllRowsCarryStatusBg(t *testing.T) {
 	statusBgParams := bgNumericParams(c.StatusBg)
 	mainBgParams := bgNumericParams(c.Bg)
 
-	if statusBgParams == "" {
+	if mainBgParams == "" {
 		t.Skip("no ANSI background code — running in no-color mode")
 	}
 	if mainBgParams == statusBgParams {
@@ -184,13 +183,17 @@ func TestHistoryOverlayAllRowsCarryStatusBg(t *testing.T) {
 	}
 
 	for i, line := range nonBlankLines(rendered) {
-		if !strings.Contains(line, statusBgParams) {
-			t.Errorf("overlay row %d missing StatusBg params %q\n  stripped: %q",
-				i, statusBgParams, stripANSI(line))
-		}
-		if strings.Contains(line, mainBgParams) {
-			t.Errorf("overlay row %d contains main Bg params %q — should use StatusBg throughout\n  stripped: %q",
+		if !strings.Contains(line, mainBgParams) {
+			t.Errorf("overlay row %d missing main Bg params %q\n  stripped: %q",
 				i, mainBgParams, stripANSI(line))
+		}
+		if strings.Contains(line, statusBgParams) {
+			t.Errorf(
+				"overlay row %d contains StatusBg params %q — should use the main Bg throughout\n  stripped: %q",
+				i,
+				statusBgParams,
+				stripANSI(line),
+			)
 		}
 	}
 }
@@ -231,7 +234,8 @@ func TestHelpSeparatorStyleUsesStatusBg(t *testing.T) {
 
 	sepRendered := c.Styles.Help.ShortSeparator.Render("•")
 
-	if strings.Contains(sepRendered, mainBgParams) && !strings.Contains(sepRendered, statusBgParams) {
+	if strings.Contains(sepRendered, mainBgParams) &&
+		!strings.Contains(sepRendered, statusBgParams) {
 		t.Errorf("separator uses main Bg params %q instead of StatusBg params %q\n  rendered: %q",
 			mainBgParams, statusBgParams, sepRendered)
 	}
@@ -292,8 +296,11 @@ func TestHistoryOverlayHeaderNoTrailingUnstyled(t *testing.T) {
 	// Row 0 = top border ╭───╮, row 1 = header.
 	headerLine := lines[1]
 	if resetSpaceRE.MatchString(headerLine) {
-		t.Errorf("header row has unstyled space after reset — right-side background will be terminal default\n"+
-			"  stripped: %q", stripANSI(headerLine))
+		t.Errorf(
+			"header row has unstyled space after reset — right-side background will be terminal default\n"+
+				"  stripped: %q",
+			stripANSI(headerLine),
+		)
 	}
 }
 

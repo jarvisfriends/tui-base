@@ -103,6 +103,12 @@ func TestInfoModalViewportMatchesFrameForVariedBorders(t *testing.T) {
 		{"thick-wide-padding", lipgloss.ThickBorder(), 1, 3},
 		{"double-tall-padding", lipgloss.DoubleBorder(), 2, 2},
 		{"normal-no-padding", lipgloss.NormalBorder(), 0, 0},
+		// A theme option to remove the border entirely (border contributes 0
+		// cells per edge, not 1) must collapse vpDims the same way — this is
+		// the scenario a live GetHorizontalFrameSize()/GetVerticalFrameSize()
+		// call handles automatically but a hardcoded "-2" constant would not.
+		{"no-border-with-padding", lipgloss.Border{}, 1, 2},
+		{"no-border-no-padding", lipgloss.Border{}, 0, 0},
 	}
 
 	for _, tc := range cases {
@@ -119,21 +125,43 @@ func TestInfoModalViewportMatchesFrameForVariedBorders(t *testing.T) {
 			_ = theme.SetCurrentTint("dracula")
 
 			boxW, boxH, _, _ := im.boxDims()
-			// Every standard lipgloss border contributes exactly 1 cell per
-			// edge; padH/padV apply to both sides, matching Padding(v, h).
-			wantVpW := max(boxW-2*padH-2, 10)
-			wantVpH := max(boxH-2*padV-2-modalChromeRows, 1)
+			// A real border contributes exactly 1 cell per edge; an empty
+			// Border{} (lipgloss.noBorder) contributes 0. padH/padV apply to
+			// both sides, matching Padding(v, h).
+			borderCols := 2
+			if tc.border == (lipgloss.Border{}) {
+				borderCols = 0
+			}
+			wantVpW := max(boxW-2*padH-borderCols, 10)
+			wantVpH := max(boxH-2*padV-borderCols-modalChromeRows, 1)
 
 			gotVpW, gotVpH := im.vpDims()
 			if gotVpW != wantVpW || gotVpH != wantVpH {
-				t.Fatalf("%s: vpDims() = (%d, %d), want (%d, %d) for boxW=%d boxH=%d padV=%d padH=%d",
-					tc.name, gotVpW, gotVpH, wantVpW, wantVpH, boxW, boxH, padV, padH)
+				t.Fatalf(
+					"%s: vpDims() = (%d, %d), want (%d, %d) for boxW=%d boxH=%d padV=%d padH=%d",
+					tc.name,
+					gotVpW,
+					gotVpH,
+					wantVpW,
+					wantVpH,
+					boxW,
+					boxH,
+					padV,
+					padH,
+				)
 			}
 
 			v := im.View()
 			for i, line := range strings.Split(v.Content, "\n") {
 				if w := lipgloss.Width(line); w > boxW {
-					t.Errorf("%s: line %d overflows box width %d by %d: %q", tc.name, i, boxW, w-boxW, line)
+					t.Errorf(
+						"%s: line %d overflows box width %d by %d: %q",
+						tc.name,
+						i,
+						boxW,
+						w-boxW,
+						line,
+					)
 				}
 			}
 		})

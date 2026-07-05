@@ -10,7 +10,7 @@ before:
 builds:
   - id: tui-base
     binary: tui-base
-    main: ./
+    main: ./cmd/tui-base
     env:
       - CGO_ENABLED=0
     goos:

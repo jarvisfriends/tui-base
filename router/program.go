@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"os"
 	"strings"
 
@@ -108,11 +109,34 @@ func NewProgram(m tea.Model, opts ...tea.ProgramOption) *tea.Program {
 //
 //	m := router.NewWithOptions(router.Options{AppName: "My App"})
 //	p := router.NewProgramWithEnvVar(m, m.ColorProfileEnvVar())
-func NewProgramWithEnvVar(m tea.Model, colorProfileEnvVar string, opts ...tea.ProgramOption) *tea.Program {
+func NewProgramWithEnvVar(
+	m tea.Model,
+	colorProfileEnvVar string,
+	opts ...tea.ProgramOption,
+) *tea.Program {
 	var base []tea.ProgramOption
 	if profile, ok := forcedColorProfileForEnvVar(colorProfileEnvVar); ok {
 		base = append(base, tea.WithColorProfile(profile))
 	}
 	base = append(base, opts...)
 	return tea.NewProgram(m, base...)
+}
+
+// NewProgramWithContext is NewProgramWithEnvVar bound to a context: when ctx
+// is canceled (e.g. by signal.NotifyContext on SIGINT/SIGTERM) the program
+// shuts down cleanly and restores the terminal, so consumers embedding
+// tui-base in services get graceful-shutdown behavior without wiring
+// tea.WithContext themselves:
+//
+//	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+//	defer stop()
+//	p := router.NewProgramWithContext(ctx, m, m.ColorProfileEnvVar())
+func NewProgramWithContext(
+	ctx context.Context,
+	m tea.Model,
+	colorProfileEnvVar string,
+	opts ...tea.ProgramOption,
+) *tea.Program {
+	withCtx := append([]tea.ProgramOption{tea.WithContext(ctx)}, opts...)
+	return NewProgramWithEnvVar(m, colorProfileEnvVar, withCtx...)
 }

@@ -13,14 +13,14 @@ fi
 echo "tinygo version: $(tinygo version)" >>"$LOG" 2>&1
 
 echo "Attempting TinyGo wasm build..." | tee -a "$LOG"
-if tinygo build -o dist/tui-base.wasm -target wasm ./ 2>>"$LOG"; then
+if tinygo build -o dist/tui-base.wasm -target wasm ./cmd/tui-base 2>>"$LOG"; then
   echo "WASM build succeeded" >>"$LOG"
 else
   echo "WASM build failed" >>"$LOG"
 fi
 
 echo "Attempting TinyGo native (linux/amd64) build..." | tee -a "$LOG"
-if tinygo build -o dist/tui-base-tinygo-native -target linux/amd64 ./ 2>>"$LOG"; then
+if tinygo build -o dist/tui-base-tinygo-native -target linux/amd64 ./cmd/tui-base 2>>"$LOG"; then
   echo "native linux/amd64 build succeeded" >>"$LOG"
 else
   echo "native linux/amd64 build failed" >>"$LOG"

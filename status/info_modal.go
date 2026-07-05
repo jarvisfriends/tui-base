@@ -12,6 +12,7 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // CloseInfoModalMsg is sent (via tea.Cmd) when the user clicks outside the
@@ -210,7 +211,10 @@ func (m *InfoModal) rebuildContent() {
 	m.vp.SetContentLines(lines)
 }
 
-func (m *InfoModal) buildInfoLines(vpW int, accentStyle, mutedStyle, dimStyle lipgloss.Style) []string {
+func (m *InfoModal) buildInfoLines(
+	vpW int,
+	accentStyle, mutedStyle, dimStyle lipgloss.Style,
+) []string {
 	var lines []string
 	info := common.ExpandedBuildInfo()
 	if info == nil {
@@ -239,21 +243,29 @@ func (m *InfoModal) buildInfoLines(vpW int, accentStyle, mutedStyle, dimStyle li
 	if rev != "" {
 		lines = append(lines, dimStyle.Render(fmt.Sprintf("  Rev: %s%s%s", rev, builtAt, modified)))
 	}
+	// Package column padded by display cells (A-5): fmt's %-50s pads by
+	// bytes, which misaligns the Version column for any non-ASCII path.
+	const pkgColW = 50
+	pkgCell := lipgloss.NewStyle().Width(pkgColW)
 	lines = append(
 		lines,
 		"",
-		accentStyle.Render("  Dependencies")+dimStyle.Render(fmt.Sprintf("  (total: %d)", len(info.Dependencies))),
-		mutedStyle.Render(fmt.Sprintf("  %-50s  %s", "Package", "Version")),
+		accentStyle.Render(
+			"  Dependencies",
+		)+dimStyle.Render(
+			fmt.Sprintf("  (total: %d)", len(info.Dependencies)),
+		),
+		mutedStyle.Render("  "+pkgCell.Render("Package")+"  Version"),
 	)
 	sepLen := min(vpW-2, 72)
 	lines = append(lines, mutedStyle.Render("  "+strings.Repeat("─", sepLen)))
 	for _, dep := range info.Dependencies {
 		path := dep.Path
-		if lipgloss.Width(path) > 50 {
-			runes := []rune(path)
-			path = "…" + string(runes[len(runes)-49:])
+		if w := ansi.StringWidth(path); w > pkgColW {
+			// Keep the tail — the module name matters more than the host.
+			path = ansi.TruncateLeft(path, w-pkgColW+1, "…")
 		}
-		line := fmt.Sprintf("  %-50s  %s", path, dep.Version)
+		line := "  " + pkgCell.Render(path) + "  " + dep.Version
 		if dep.Replace != "" {
 			line += "  ⇒ " + dep.Replace
 		}

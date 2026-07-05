@@ -29,12 +29,24 @@ func TestStylePresetsPreserveStructureAndApplyColor(t *testing.T) {
 			// independent of color) must match the preset's own huh theme.
 			want := presetThemes[p](isDark).Focused.SelectedPrefix.Value()
 			if got := s.Focused.SelectedPrefix.Value(); got != want {
-				t.Errorf("preset %s isDark=%v: SelectedPrefix glyph = %q, want %q (structure not preserved)", p, isDark, got, want)
+				t.Errorf(
+					"preset %s isDark=%v: SelectedPrefix glyph = %q, want %q (structure not preserved)",
+					p,
+					isDark,
+					got,
+					want,
+				)
 			}
 
 			// Color is applied from the tint: focused title fg == palette Accent.
 			if fg := s.Focused.Title.GetForeground(); fg != app.Accent {
-				t.Errorf("preset %s isDark=%v: focused title fg = %v, want accent %v", p, isDark, fg, app.Accent)
+				t.Errorf(
+					"preset %s isDark=%v: focused title fg = %v, want accent %v",
+					p,
+					isDark,
+					fg,
+					app.Accent,
+				)
 			}
 		}
 	}
@@ -44,7 +56,10 @@ func TestStylePresetsPreserveStructureAndApplyColor(t *testing.T) {
 	base := BuildHuhStyles(app, PresetBase, true)
 	charm := BuildHuhStyles(app, PresetCharm, true)
 	if base.Focused.SelectedPrefix.Value() == charm.Focused.SelectedPrefix.Value() {
-		t.Errorf("expected Base and Charm presets to differ in SelectedPrefix glyph; both = %q", base.Focused.SelectedPrefix.Value())
+		t.Errorf(
+			"expected Base and Charm presets to differ in SelectedPrefix glyph; both = %q",
+			base.Focused.SelectedPrefix.Value(),
+		)
 	}
 }
 

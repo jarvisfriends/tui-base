@@ -179,7 +179,10 @@ func (h *FormOverlayHost) Update(msg tea.Msg) (huh.FormState, tea.Cmd) {
 	if h.form == nil {
 		return huh.StateNormal, nil
 	}
-	_, cmd := h.form.Update(msg)
+	model, cmd := h.form.Update(msg)
+	if f, ok := model.(*huh.Form); ok {
+		h.form = f
+	}
 	return h.form.State, cmd
 }
 
@@ -212,6 +215,14 @@ func (h *FormOverlayHost) Composite(base string, borderStyle lipgloss.Style) str
 // visual breathing room.
 func FormWidth(termW int) int {
 	return max(30, min(termW-14, 120))
+}
+
+// FormHeight returns the standard responsive form height for fields that
+// expand vertically (e.g. file pickers): most of the available area, keeping a
+// 6-row gutter for the overlay border, padding, and breathing room, with a
+// 5-row floor so tiny terminals stay usable.
+func FormHeight(termH int) int {
+	return max(5, termH-6)
 }
 
 // ─── ModelOverlayHost ─────────────────────────────────────────────────────────

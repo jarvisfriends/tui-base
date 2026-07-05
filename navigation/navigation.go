@@ -45,6 +45,35 @@ type Focusable interface {
 	SetFocused(bool)
 }
 
+// horizontalWheelDelta maps a horizontal mouse-wheel event (a tilt wheel, or
+// the shift+wheel chord most terminals emit for horizontal scrolling) to a
+// page step: -1 for left/previous, +1 for right/next, and 0 for anything that
+// is not a horizontal scroll.
+func horizontalWheelDelta(mm tea.MouseMsg) int {
+	ev, ok := mm.(tea.MouseWheelMsg)
+	if !ok {
+		return 0
+	}
+	me := ev.Mouse()
+	switch me.Button {
+	case tea.MouseWheelLeft:
+		return -1
+	case tea.MouseWheelRight:
+		return 1
+	case tea.MouseWheelUp:
+		if me.Mod&tea.ModShift != 0 {
+			return -1
+		}
+	case tea.MouseWheelDown:
+		if me.Mod&tea.ModShift != 0 {
+			return 1
+		}
+	default:
+		return 0
+	}
+	return 0
+}
+
 // NumberLabeled is implemented by navigators that can optionally show a leading
 // per-item number prefix (the minimal top nav). The router applies the user's
 // preference via this capability without asserting a concrete type.

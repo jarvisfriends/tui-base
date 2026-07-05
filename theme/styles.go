@@ -101,8 +101,11 @@ func BuildStyles(c *AppStyle) *Styles {
 
 		OverlayBorder: base.Border(lipgloss.RoundedBorder()).BorderForeground(c.Accent),
 
-		NavTitle:     base.Bold(true).Foreground(c.Accent),
-		NavActive:    base.Background(c.SelectionBg).Foreground(c.SelectionFg).Bold(true).Underline(true),
+		NavTitle: base.Bold(true).Foreground(c.Accent),
+		NavActive: base.Background(c.SelectionBg).
+			Foreground(c.SelectionFg).
+			Bold(true).
+			Underline(true),
 		NavInactive:  base.Foreground(c.Muted),
 		NavContainer: base.BorderForeground(c.Border),
 
@@ -143,19 +146,59 @@ func StyleCombosFromAppStyle(c *AppStyle) []StyleCombo {
 	}
 	combos := []StyleCombo{
 		{Name: "Title", Fg: c.Styles.Title.GetForeground(), Bg: c.Styles.Title.GetBackground()},
-		{Name: "Subtitle", Fg: c.Styles.Subtitle.GetForeground(), Bg: c.Styles.Subtitle.GetBackground()},
-		{Name: "TextOnBg", Fg: c.Styles.TextOnBg.GetForeground(), Bg: c.Styles.TextOnBg.GetBackground()},
+		{
+			Name: "Subtitle",
+			Fg:   c.Styles.Subtitle.GetForeground(),
+			Bg:   c.Styles.Subtitle.GetBackground(),
+		},
+		{
+			Name: "TextOnBg",
+			Fg:   c.Styles.TextOnBg.GetForeground(),
+			Bg:   c.Styles.TextOnBg.GetBackground(),
+		},
 		{Name: "Dim", Fg: c.Styles.Dim.GetForeground(), Bg: c.Styles.Dim.GetBackground()},
-		{Name: "SelectedItem", Fg: c.Styles.SelectedItem.GetForeground(), Bg: c.Styles.SelectedItem.GetBackground()},
-		{Name: "StatusBase", Fg: c.Styles.StatusBase.GetForeground(), Bg: c.Styles.StatusBase.GetBackground()},
-		{Name: "StatusKey", Fg: c.Styles.StatusKey.GetForeground(), Bg: c.Styles.StatusKey.GetBackground()},
-		{Name: "StatusDesc", Fg: c.Styles.StatusDesc.GetForeground(), Bg: c.Styles.StatusDesc.GetBackground()},
-		{Name: "NavActive", Fg: c.Styles.NavActive.GetForeground(), Bg: c.Styles.NavActive.GetBackground()},
-		{Name: "NavInactive", Fg: c.Styles.NavInactive.GetForeground(), Bg: c.Styles.NavInactive.GetBackground()},
+		{
+			Name: "SelectedItem",
+			Fg:   c.Styles.SelectedItem.GetForeground(),
+			Bg:   c.Styles.SelectedItem.GetBackground(),
+		},
+		{
+			Name: "StatusBase",
+			Fg:   c.Styles.StatusBase.GetForeground(),
+			Bg:   c.Styles.StatusBase.GetBackground(),
+		},
+		{
+			Name: "StatusKey",
+			Fg:   c.Styles.StatusKey.GetForeground(),
+			Bg:   c.Styles.StatusKey.GetBackground(),
+		},
+		{
+			Name: "StatusDesc",
+			Fg:   c.Styles.StatusDesc.GetForeground(),
+			Bg:   c.Styles.StatusDesc.GetBackground(),
+		},
+		{
+			Name: "NavActive",
+			Fg:   c.Styles.NavActive.GetForeground(),
+			Bg:   c.Styles.NavActive.GetBackground(),
+		},
+		{
+			Name: "NavInactive",
+			Fg:   c.Styles.NavInactive.GetForeground(),
+			Bg:   c.Styles.NavInactive.GetBackground(),
+		},
 		{Name: "Send", Fg: c.Styles.Send.GetForeground(), Bg: c.Styles.Send.GetBackground()},
-		{Name: "Success", Fg: c.Styles.Success.GetForeground(), Bg: c.Styles.Success.GetBackground()},
+		{
+			Name: "Success",
+			Fg:   c.Styles.Success.GetForeground(),
+			Bg:   c.Styles.Success.GetBackground(),
+		},
 		{Name: "Error", Fg: c.Styles.Error.GetForeground(), Bg: c.Styles.Error.GetBackground()},
-		{Name: "Warning", Fg: c.Styles.Warning.GetForeground(), Bg: c.Styles.Warning.GetBackground()},
+		{
+			Name: "Warning",
+			Fg:   c.Styles.Warning.GetForeground(),
+			Bg:   c.Styles.Warning.GetBackground(),
+		},
 	}
 	out := make([]StyleCombo, 0, len(combos))
 	for _, combo := range combos {

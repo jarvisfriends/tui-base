@@ -67,7 +67,7 @@ func colorPairsFromTint(t *tint.Tint, adjustForAccess bool) []ColorPair {
 
 	var pairs []ColorPair
 	if t.Bg != nil {
-		bg := lipgloss.Color(t.Bg.Hex())
+		bg := t.Bg
 		pairs = append(
 			pairs,
 			ColorPair{Name: "Black", Fg: col(t.Black, "16"), Bg: bg},
@@ -89,7 +89,7 @@ func colorPairsFromTint(t *tint.Tint, adjustForAccess bool) []ColorPair {
 		)
 	}
 	if t.SelectionBg != nil {
-		bg := lipgloss.Color(t.SelectionBg.Hex())
+		bg := t.SelectionBg
 		pairs = append(
 			pairs,
 			ColorPair{Name: "Select Black", Fg: col(t.Black, "16"), Bg: bg},
@@ -175,16 +175,25 @@ func tryAdjustForAccess(fgColor, bgColor color.Color) color.Color {
 	normalContrast := cvdContrast(fgC, bgC)
 	if normalContrast < minContrast {
 		// Need adjustment.
-		suggested := suggestAccessibleForeground(fgC, bgC, minContrast, minCVDistance, minCVContrast)
+		suggested := suggestAccessibleForeground(
+			fgC,
+			bgC,
+			minContrast,
+			minCVDistance,
+			minCVContrast,
+		)
 		if suggested != nil && !almostEqualColor(*suggested, fgC) {
-			return lipgloss.Color(suggested.Hex())
+			return suggested
 		}
 	}
 
 	return nil
 }
 
-func suggestAccessibleForeground(fg, bg colorful.Color, minContrast, minCVDist, minCVContrast float64) *colorful.Color {
+func suggestAccessibleForeground(
+	fg, bg colorful.Color,
+	minContrast, minCVDist, minCVContrast float64,
+) *colorful.Color {
 	step := 0.02
 	targets := []colorful.Color{{R: 0, G: 0, B: 0}, {R: 1, G: 1, B: 1}}
 	bestPassing := colorful.Color{}
@@ -209,7 +218,10 @@ func suggestAccessibleForeground(fg, bg colorful.Color, minContrast, minCVDist, 
 	return nil
 }
 
-func meetsAccessibilityThreshold(fg, bg colorful.Color, minContrast, minCVDist, minCVContrast float64) bool {
+func meetsAccessibilityThreshold(
+	fg, bg colorful.Color,
+	minContrast, minCVDist, minCVContrast float64,
+) bool {
 	if cvdContrast(fg, bg) < minContrast {
 		return false
 	}

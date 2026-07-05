@@ -90,6 +90,12 @@ func (m *RouterModel) overlayHandleKey(k tea.KeyPressMsg) (tea.Cmd, bool) {
 // overlay. Returns ok=true when an overlay consumed the event (modal), so the
 // caller skips base routing. Passive overlays (the toast) are transparent to the
 // mouse and let the event reach the page beneath.
+//
+// Positional events (clicks, motion) are delivered only when the pointer is
+// inside the overlay's bounds; a release outside closes OutsideCloser overlays.
+// Wheel events are positionless scrolling intent: they always go to the overlay
+// — the active view — no matter where the pointer sits, matching how keyboard
+// scrolling targets the overlay while it is open.
 func (m *RouterModel) overlayHandleMouse(mm tea.MouseMsg) (tea.Cmd, bool) {
 	for _, o := range slices.Backward(m.overlays) {
 		if !o.Visible() {
@@ -101,7 +107,8 @@ func (m *RouterModel) overlayHandleMouse(mm tea.MouseMsg) (tea.Cmd, bool) {
 			continue // passive overlay: not modal for mouse
 		}
 		inside := o.Bounds().Contains(mm.Mouse().X, mm.Mouse().Y)
-		if inside && isMouse {
+		_, isWheel := mm.(tea.MouseWheelMsg)
+		if isMouse && (inside || isWheel) {
 			return mc.OverlayMouse(mm), true
 		}
 		if !inside && isCloser {
@@ -112,6 +119,27 @@ func (m *RouterModel) overlayHandleMouse(mm tea.MouseMsg) (tea.Cmd, bool) {
 		return nil, true // modal: consume everything else
 	}
 	return nil, false
+}
+
+// mouseModalOverlayVisible reports whether the topmost visible overlay owns
+// mouse input (it is a MouseConsumer or OutsideCloser). Mirrors the modality
+// decision of overlayHandleMouse: while such an overlay is open, mouse
+// messages arriving through Update must not reach the nav or pages beneath —
+// Bubble Tea delivers every mouse event to both View.OnMouse and Update, and
+// only the OnMouse path is bounds-aware.
+func (m *RouterModel) mouseModalOverlayVisible() bool {
+	for _, o := range slices.Backward(m.overlays) {
+		if !o.Visible() {
+			continue
+		}
+		if _, ok := o.(MouseConsumer); ok {
+			return true
+		}
+		if _, ok := o.(OutsideCloser); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // renderOverlays composites every visible overlay onto base, bottom-up by Z.
@@ -261,6 +289,18 @@ func (o *historyOverlay) OverlayKey(k tea.KeyPressMsg) tea.Cmd {
 		if m.notifMgr != nil {
 			m.notifMgr.DismissAll(nil)
 		}
+	default:
+		// Consumer-registered action handlers (E-4): invoked with the
+		// selected notification. Built-in keys above take precedence.
+		if m.notifMgr != nil {
+			if fn, ok := m.notifMgr.Action(k.String()); ok {
+				active := m.notifMgr.Active()
+				cursor := m.status.HistoryCursor()
+				if cursor >= 0 && cursor < len(active) {
+					return tea.Batch(fn(active[cursor]), m.handleResizeCmd())
+				}
+			}
+		}
 	}
 	// Consume every key while open (modal), matching the historical behavior.
 	return m.handleResizeCmd()
@@ -293,9 +333,10 @@ type inspectorOverlay struct {
 	rect Rect
 }
 
-func (o *inspectorOverlay) Name() string  { return "inspector" }
-func (o *inspectorOverlay) Z() int        { return zInspector }
-func (o *inspectorOverlay) Bounds() Rect  { return o.rect }
+func (o *inspectorOverlay) Name() string { return "inspector" }
+func (o *inspectorOverlay) Z() int       { return zInspector }
+func (o *inspectorOverlay) Bounds() Rect { return o.rect }
+
 func (o *inspectorOverlay) Visible() bool { return o.m.inspector != nil && o.m.inspector.IsVisible() }
 
 func (o *inspectorOverlay) ShortHelp() []key.Binding {
@@ -312,7 +353,7 @@ func (o *inspectorOverlay) Render(ctx layoutContext) string {
 	ox := max((ctx.Width-ow)/2, 0)
 	oy := max((ctx.Height-oh)/2, 0)
 	iw, ih := m.inspectorOverlayInnerSize()
-	_, _ = m.inspector.Update(tea.WindowSizeMsg{Width: iw, Height: ih})
+	_ = m.updateInspector(tea.WindowSizeMsg{Width: iw, Height: ih})
 	o.rect = Rect{X: ox, Y: oy, W: ow, H: oh}
 	return m.inspector.View().Content
 }
@@ -325,7 +366,7 @@ func (o *inspectorOverlay) OverlayKey(k tea.KeyPressMsg) tea.Cmd {
 		m.updatePageKeys()
 		return m.handleResizeCmd()
 	default:
-		_, cmd := m.inspector.Update(k)
+		cmd := m.updateInspector(k)
 		return tea.Batch(cmd, m.handleResizeCmd())
 	}
 }
@@ -385,7 +426,11 @@ func (o *infoOverlay) Render(ctx layoutContext) string {
 }
 
 func (o *infoOverlay) OverlayKey(k tea.KeyPressMsg) tea.Cmd {
-	if _, cmd := o.m.infoModal.Update(k); cmd != nil {
+	model, cmd := o.m.infoModal.Update(k)
+	if im, ok := model.(*status.InfoModal); ok {
+		o.m.infoModal = im
+	}
+	if cmd != nil {
 		return cmd
 	}
 	return o.m.handleResizeCmd() // consume all other keys

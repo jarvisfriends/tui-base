@@ -84,7 +84,10 @@ func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
 // The window is the left-most range that still reaches the active tab, so
 // paging right reveals the active tab at the right edge and paging left reveals
 // it at the left edge — predictable, terminal-pager behavior with no wrapping.
-func computeTabWindow(widths []int, avail, active, leftW, rightW int) (first, last int, showLeft, showRight bool) {
+func computeTabWindow(
+	widths []int,
+	avail, active, leftW, rightW int,
+) (first, last int, showLeft, showRight bool) {
 	n := len(widths)
 	if n == 0 {
 		return 0, -1, false, false
@@ -163,7 +166,13 @@ func (m *Tabs) View() tea.View {
 	leftArrowW := lipgloss.Width(leftArrow)
 	rightArrowW := lipgloss.Width(rightArrow)
 
-	first, last, showLeft, showRight := computeTabWindow(tabWidths, m.width, m.ActiveIndex, leftArrowW, rightArrowW)
+	first, last, showLeft, showRight := computeTabWindow(
+		tabWidths,
+		m.width,
+		m.ActiveIndex,
+		leftArrowW,
+		rightArrowW,
+	)
 
 	// Assemble the visible row (optional left arrow, windowed tabs, optional
 	// right arrow) and record on-screen X ranges so clicks map to the right tab.
@@ -203,7 +212,8 @@ func (m *Tabs) View() tea.View {
 	rowWidth := lipgloss.Width(row)
 	styled := row
 	if rowWidth < m.width {
-		rightStyle := c.Styles.TabInactive.Width(m.width-rowWidth).Border(inactiveTabBorder, false, false, true, false)
+		rightStyle := c.Styles.TabInactive.Width(m.width-rowWidth).
+			Border(inactiveTabBorder, false, false, true, false)
 		styled = lipgloss.JoinHorizontal(lipgloss.Top, row, rightStyle.Render("\n"))
 	}
 
@@ -214,6 +224,16 @@ func (m *Tabs) View() tea.View {
 	v.MouseMode = tea.MouseModeCellMotion
 
 	v.OnMouse = func(mm tea.MouseMsg) tea.Cmd {
+		// Horizontal wheel scrolls through the tabs; the render window follows
+		// the active tab, so this also pages hidden tabs into view.
+		if d := horizontalWheelDelta(mm); d != 0 && len(m.Pages) > 0 {
+			me := mm.Mouse()
+			if me.Y < 0 || me.Y >= lipgloss.Height(v.Content) {
+				return nil
+			}
+			m.ActiveIndex = (m.ActiveIndex + d + len(m.Pages)) % len(m.Pages)
+			return func() tea.Msg { return SelectedMsg{PageIndex: m.ActiveIndex} }
+		}
 		switch ev := mm.(type) {
 		case tea.MouseClickMsg, tea.MouseReleaseMsg:
 			me := ev.Mouse()

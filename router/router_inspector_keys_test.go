@@ -34,7 +34,10 @@ func TestClosedInspectorIgnoresKeys(t *testing.T) {
 
 	after := stripANSI(m.inspector.View().Content)
 	if !strings.Contains(after, "Runtime Profiling (Inspector)") {
-		t.Fatalf("closed inspector acted on the → key (its tab changed); it must ignore keys while hidden. Got:\n%s", after)
+		t.Fatalf(
+			"closed inspector acted on the → key (its tab changed); it must ignore keys while hidden. Got:\n%s",
+			after,
+		)
 	}
 
 	// Sanity: once visible, the overlay path DOES drive the inspector (one tab
@@ -44,6 +47,9 @@ func TestClosedInspectorIgnoresKeys(t *testing.T) {
 	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
 	visibleAfter := stripANSI(m.inspector.View().Content)
 	if strings.Contains(visibleAfter, "Runtime Profiling (Inspector)") {
-		t.Fatalf("open inspector did not respond to →; expected it to leave the Runtime tab. Got:\n%s", visibleAfter)
+		t.Fatalf(
+			"open inspector did not respond to →; expected it to leave the Runtime tab. Got:\n%s",
+			visibleAfter,
+		)
 	}
 }

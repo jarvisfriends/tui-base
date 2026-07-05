@@ -31,6 +31,30 @@ func resetLoggerState(t *testing.T) {
 	})
 }
 
+// TestNotifySubscriberCanRegisterSubscriber is the B-3 regression test: a
+// subscriber that calls back into the logger's registration path must not
+// deadlock. Before the fix, notify held subsMu.RLock() while invoking
+// subscribers, so RegisterSubscriber's Lock() inside a subscriber blocked
+// forever.
+func TestNotifySubscriberCanRegisterSubscriber(t *testing.T) {
+	resetLoggerState(t)
+
+	done := make(chan struct{})
+	RegisterSubscriber(func(_ string, _ time.Time, _ string) {
+		RegisterSubscriber(func(string, time.Time, string) {})
+		close(done)
+	})
+
+	// Run in a goroutine so a regression fails the test instead of hanging it.
+	go Infof("trigger")
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("notify deadlocked: subscriber could not register another subscriber")
+	}
+}
+
 func TestInitFromSettingsFileModeSetsCurrentLogFile(t *testing.T) {
 	resetLoggerState(t)
 

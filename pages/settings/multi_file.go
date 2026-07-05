@@ -8,6 +8,7 @@ import (
 	huh "charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/jarvisfriends/tui-base/overlay"
 	"github.com/jarvisfriends/tui-base/theme"
 )
 
@@ -67,28 +68,47 @@ func (m *MultiFileEditor) Init() tea.Cmd {
 	return nil
 }
 
+// updatePicker forwards msg to the active picker form (keeping any replacement
+// model it returns) and applies the completed/aborted result.
+func (m *MultiFileEditor) updatePicker(msg tea.Msg) tea.Cmd {
+	model, cmd := m.pickerForm.Update(msg)
+	if f, ok := model.(*huh.Form); ok {
+		m.pickerForm = f
+	}
+	switch m.pickerForm.State {
+	case huh.StateCompleted:
+		m.applyPickedPath(m.pickerForm.GetString("path"))
+		m.picking = false
+		m.pickerForm = nil
+	case huh.StateAborted:
+		m.picking = false
+		m.pickerForm = nil
+	case huh.StateNormal:
+		// form still in progress — no action
+	}
+	return cmd
+}
+
+// applyPickedPath stores a non-empty picker result at the pending index,
+// appending when the pick targeted the "add new" slot.
+func (m *MultiFileEditor) applyPickedPath(val string) {
+	if val == "" {
+		return
+	}
+	if m.pickerIndex == len(m.paths) {
+		m.paths = append(m.paths, val)
+	} else {
+		m.paths[m.pickerIndex] = val
+	}
+}
+
 func (m *MultiFileEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if ws, ok := msg.(tea.WindowSizeMsg); ok {
+		m.Width, m.Height = ws.Width, ws.Height
+	}
+
 	if m.picking && m.pickerForm != nil {
-		_, cmd := m.pickerForm.Update(msg)
-		switch m.pickerForm.State {
-		case huh.StateCompleted:
-			val := m.pickerForm.GetString("path")
-			if val != "" {
-				if m.pickerIndex == len(m.paths) {
-					m.paths = append(m.paths, val)
-				} else {
-					m.paths[m.pickerIndex] = val
-				}
-			}
-			m.picking = false
-			m.pickerForm = nil
-		case huh.StateAborted:
-			m.picking = false
-			m.pickerForm = nil
-		case huh.StateNormal:
-			// form still in progress — no action
-		}
-		return m, cmd
+		return m, m.updatePicker(msg)
 	}
 
 	switch msg := msg.(type) {
@@ -137,9 +157,19 @@ func (m *MultiFileEditor) startPicking(index int) {
 		Title("Select Path").
 		DirAllowed(true).
 		FileAllowed(true).
+		// Open directly in browse mode: the embedded picker otherwise
+		// defaults to a one-row list.
+		Picking(true).
 		Value(&initialValue)
+	if m.Height > 0 {
+		// Fill most of the available area with the file listing.
+		fp.Height(overlay.FormHeight(m.Height))
+	}
 
-	m.pickerForm = huh.NewForm(huh.NewGroup(fp)).WithTheme(theme.HuhThemeFunc())
+	m.pickerForm = huh.NewForm(huh.NewGroup(fp)).
+		WithTheme(theme.HuhThemeFunc()).
+		WithKeyMap(filePickerKeyMap()).
+		WithWidth(overlayContentWidth(m.Width))
 	m.pickerForm.Init()
 	m.picking = true
 }
@@ -149,12 +179,14 @@ func (m *MultiFileEditor) View() tea.View {
 		return tea.NewView(m.pickerForm.View())
 	}
 
-	title := lipgloss.NewStyle().Bold(true).Padding(0, 1).Render("Multi-File Picker")
+	c := theme.Active()
+	maxW := overlayContentWidth(m.Width)
+	title := c.Styles.Title.Bold(true).Padding(0, 1).Render("Multi-File Picker")
 
 	var rows []string
-	selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
-	normStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
-	delStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	selStyle := c.Styles.SelectedItem.Bold(true)
+	normStyle := c.Styles.TextOnBg
+	delStyle := c.Styles.Dim
 
 	for i, p := range m.paths {
 		prefix := "  "
@@ -163,7 +195,7 @@ func (m *MultiFileEditor) View() tea.View {
 			prefix = "▶ "
 			style = selStyle
 		}
-		rows = append(rows, style.Render(prefix+p))
+		rows = append(rows, fitLine(style.Render(prefix+p), maxW))
 	}
 
 	addPrefix := "  "
@@ -174,7 +206,10 @@ func (m *MultiFileEditor) View() tea.View {
 	}
 	rows = append(rows, addStyle.Render(addPrefix+"[ Add Path ]"))
 
-	help := delStyle.MarginTop(1).Render("↑/↓: Navigate • Enter: Edit/Add • Del: Remove • Ctrl+S: Save • Esc: Cancel")
+	help := delStyle.MarginTop(1).Render(fitLine(
+		"↑/↓: Navigate • Enter: Edit/Add • Del: Remove • Ctrl+S: Save • Esc: Cancel",
+		maxW,
+	))
 
 	body := lipgloss.JoinVertical(lipgloss.Left, rows...)
 	return tea.NewView(lipgloss.JoinVertical(lipgloss.Left, title, body, help))

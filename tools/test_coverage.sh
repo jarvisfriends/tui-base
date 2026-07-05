@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Running golangci-lint..."
-golangci-lint run ./...
+# SKIP_LINT=1 skips the lint pass — CI sets it in the coverage job because the
+# dedicated lint job has already run golangci-lint on the same commit (CI-7).
+if [[ "${SKIP_LINT:-0}" != "1" ]]; then
+  echo "Running golangci-lint..."
+  golangci-lint run ./...
+fi
 
 echo "Running tests with race detector and coverage..."
 go test -race ./... -coverprofile=coverage.out

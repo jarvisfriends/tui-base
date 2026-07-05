@@ -173,14 +173,24 @@ func TestSeverity_StringAndBadge(t *testing.T) {
 
 func TestManager_KeyedPendingNotificationReplacesOlderEntry(t *testing.T) {
 	m := notifications.NewManager()
-	first, _ := m.AddWithOptions("first", notifications.SeverityWarning, time.Second, notifications.AddOptions{
-		Key:     testCredSource,
-		Pending: true,
-	})
-	second, _ := m.AddWithOptions("second", notifications.SeverityWarning, time.Second, notifications.AddOptions{
-		Key:     testCredSource,
-		Pending: true,
-	})
+	first, _ := m.AddWithOptions(
+		"first",
+		notifications.SeverityWarning,
+		time.Second,
+		notifications.AddOptions{
+			Key:     testCredSource,
+			Pending: true,
+		},
+	)
+	second, _ := m.AddWithOptions(
+		"second",
+		notifications.SeverityWarning,
+		time.Second,
+		notifications.AddOptions{
+			Key:     testCredSource,
+			Pending: true,
+		},
+	)
 
 	if first.ID == second.ID {
 		t.Fatal("expected replacement entry to get a new ID")
@@ -199,7 +209,12 @@ func TestManager_KeyedPendingNotificationReplacesOlderEntry(t *testing.T) {
 
 func TestManager_DismissKey(t *testing.T) {
 	m := notifications.NewManager()
-	m.AddWithOptions("first", notifications.SeverityWarning, 0, notifications.AddOptions{Key: "alpha", Pending: true})
+	m.AddWithOptions(
+		"first",
+		notifications.SeverityWarning,
+		0,
+		notifications.AddOptions{Key: "alpha", Pending: true},
+	)
 	m.AddWithOptions("second", notifications.SeverityInfo, 0, notifications.AddOptions{Key: "beta"})
 	m.DismissKey("alpha")
 	if got := m.PendingCount(); got != 0 {
@@ -212,10 +227,15 @@ func TestManager_DismissKey(t *testing.T) {
 
 func TestManager_ExpireRetainsPendingHistoryButHidesToast(t *testing.T) {
 	m := notifications.NewManager()
-	n, _ := m.AddWithOptions("needs action", notifications.SeverityWarning, time.Second, notifications.AddOptions{
-		Key:     testCredSource,
-		Pending: true,
-	})
+	n, _ := m.AddWithOptions(
+		"needs action",
+		notifications.SeverityWarning,
+		time.Second,
+		notifications.AddOptions{
+			Key:     testCredSource,
+			Pending: true,
+		},
+	)
 
 	m.Handle(notifications.ExpireMsg{ID: n.ID})
 	if got := len(m.Visible()); got != 0 {

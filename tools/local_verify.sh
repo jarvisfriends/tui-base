@@ -103,32 +103,6 @@ if ! command -v stringer >/dev/null 2>&1; then
   echo ""
 fi
 
-echo "==> gofmt (check only)"
-mapfile -t GO_FILES < <(git ls-files '*.go')
-UNFORMATTED=$(gofmt -l "${GO_FILES[@]}" 2>/dev/null || true)
-if [[ -n "${UNFORMATTED}" ]]; then
-  echo "ERROR: gofmt required for:"
-  echo "${UNFORMATTED}"
-  exit 1
-fi
-
-# ─── gofumpt (stricter formatting + import sorting) ─────────────────────────
-if command -v gofumpt >/dev/null 2>&1; then
-  echo "==> gofumpt (check only)"
-  UNFUMPTED=$(gofumpt -l "${GO_FILES[@]}" 2>/dev/null || true)
-  if [[ -n "${UNFUMPTED}" ]]; then
-    echo "ERROR: gofumpt formatting required for:"
-    echo "${UNFUMPTED}"
-    echo "Run: gofumpt -w ."
-    exit 1
-  fi
-else
-  echo "WARN: 'gofumpt' not found; skipping strict format check."
-  echo "      Install with:"
-  echo "        go install mvdan.cc/gofumpt@latest"
-  echo "      Ensure \$GOBIN or \$GOPATH/bin is on your PATH."
-fi
-
 echo "==> golangci-lint"
 
 # Ensure golangci-lint is present and is v2. If users have an old v1 binary
@@ -166,12 +140,26 @@ check_golangci_lint() {
 }
 
 check_golangci_lint
-for target_os in windows linux; do
-  echo "==> golangci-lint (GOOS=${target_os})"
-  GOOS="${target_os}" GOARCH=amd64 run_go_tool "golangci-lint" \
+# Lint both GOOS targets like CI does, so platform-specific files
+# (disk_windows.go vs disk_unix.go, terminal_win.go, …) surface issues before
+# push regardless of the developer's OS (CI-9). Subshells keep the GOOS/GOARCH
+# exports from leaking into the rest of the script.
+echo "==> golangci-lint (GOOS=windows)"
+# shellcheck disable=SC2030,SC2031  # subshell-local GOOS/GOARCH is the point
+(
+  export GOOS=windows GOARCH=amd64
+  run_go_tool "golangci-lint" \
     "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest" \
     run ./...
-done
+)
+echo "==> golangci-lint (GOOS=linux)"
+# shellcheck disable=SC2030,SC2031  # subshell-local GOOS/GOARCH is the point
+(
+  export GOOS=linux GOARCH=amd64
+  run_go_tool "golangci-lint" \
+    "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest" \
+    run ./...
+)
 
 if command -v shellcheck >/dev/null 2>&1; then
   echo "==> shellcheck"

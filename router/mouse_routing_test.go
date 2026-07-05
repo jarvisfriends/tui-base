@@ -89,7 +89,14 @@ func TestMouseRoutingBoundaries(t *testing.T) {
 	}
 
 	// 2) Click in the content area (just right of the nav). OffX should equal navWidth.
-	t.Logf("dimensions: width=%d height=%d statusHeight=%d mainHeight=%d navWidth=%d", r.width, r.height, statusHeight, mainHeight, navWidth)
+	t.Logf(
+		"dimensions: width=%d height=%d statusHeight=%d mainHeight=%d navWidth=%d",
+		r.width,
+		r.height,
+		statusHeight,
+		mainHeight,
+		navWidth,
+	)
 	globalX = navWidth + (r.width-navWidth)/2
 	t.Logf("clicking content at globalX=%d globalY=%d", globalX, globalY)
 	msgs = execCmd(v.OnMouse(tea.MouseReleaseMsg(tea.Mouse{X: globalX, Y: globalY})))

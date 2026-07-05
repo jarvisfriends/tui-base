@@ -14,7 +14,7 @@
     {
       "label": "go: run TUI",
       "type": "shell",
-      "command": "go run .",
+      "command": "go run ./cmd/tui-base",
       "presentation": {
         "reveal": "always",
         "panel": "shared"

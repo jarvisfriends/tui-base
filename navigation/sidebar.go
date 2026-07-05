@@ -76,14 +76,45 @@ func (d navDelegate) Render(w io.Writer, _ list.Model, index int, item list.Item
 
 const (
 	sidebarCollapsedWidth = 3 // columns when collapsed (shows expand button only)
+
+	// sidebarMinContentWidth is the minimum width left for the page content
+	// area when sizing the sidebar against the full terminal width.
+	sidebarMinContentWidth = 10
+
+	// sidebarHeaderRows and sidebarFooterRows are the fixed single-line chrome
+	// rows drawn around the scrollable page list: one header row, plus one
+	// separator + one pinned Settings row at the bottom.
+	sidebarHeaderRows = 1
+	sidebarFooterRows = 2 // separator + settings
+
+	// sidebarPrefixWidth is the display width of the "▶ " / "● " / "  " cursor
+	// prefix drawn before every nav item's title.
+	sidebarPrefixWidth = 2
 )
 
 // sidebarFrame carries the border configuration collapsedView and
-// expandedView draw (right edge only), kept in one place so
-// GetHorizontalFrameSize() reflects whatever border those two render sites
-// actually use instead of a hand-counted literal.
-func sidebarFrame() lipgloss.Style {
+// expandedView draw (right edge only) — a var, not a hardcoded literal in
+// each of those two render sites, so GetHorizontalFrameSize() always
+// reflects what's actually rendered, including a theme that removes the
+// border entirely (BorderRight(false)), in which case innerWidth() and the
+// two render sites collapse to the full m.width together rather than
+// drifting apart.
+var sidebarFrame = func() lipgloss.Style {
 	return lipgloss.NewStyle().Border(lipgloss.NormalBorder(), false, true, false, false)
+}
+
+// withSidebarBorder copies sidebarFrame()'s border rune set and per-side
+// toggles onto style, so collapsedView/expandedView's actual rendered
+// border can never drift from what innerWidth() measured it as.
+func withSidebarBorder(style lipgloss.Style) lipgloss.Style {
+	frame := sidebarFrame()
+	return style.Border(
+		frame.GetBorderStyle(),
+		frame.GetBorderTop(),
+		frame.GetBorderRight(),
+		frame.GetBorderBottom(),
+		frame.GetBorderLeft(),
+	)
 }
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
@@ -164,7 +195,7 @@ func (m *Sidebar) rebuildList() {
 		items = append(items, pageItem{id: p.ID, title: p.Title})
 	}
 	// Height is corrected by the first WindowSizeMsg; use 1 as a safe default.
-	l := list.New(items, navDelegate{}, max(m.width-2, 1), max(len(items), 1))
+	l := list.New(items, navDelegate{}, m.innerWidth(), max(len(items), 1))
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
 	l.SetShowFilter(false)
@@ -213,13 +244,15 @@ func (m *Sidebar) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.width = sidebarCollapsedWidth
 		} else {
 			// Use the full expanded width unless the terminal is too narrow.
-			// Always leave at least 10 columns for the page content area.
-			m.width = min(m.expandedWidth, max(msg.Width-10, sidebarCollapsedWidth))
+			m.width = min(
+				m.expandedWidth,
+				max(msg.Width-sidebarMinContentWidth, sidebarCollapsedWidth),
+			)
 		}
 		m.height = msg.Height
 		innerW := m.innerWidth()
-		// Reserve header(1) + separator(1) + settings(1) rows; list gets the rest.
-		listH := max(m.height-3, 1)
+		// Reserve the header row and the separator+settings rows; list gets the rest.
+		listH := max(m.height-sidebarHeaderRows-sidebarFooterRows, 1)
 		m.mainList.SetWidth(innerW)
 		m.mainList.SetHeight(listH)
 		return m, nil
@@ -276,10 +309,9 @@ func (m *Sidebar) View() tea.View {
 }
 
 func (m *Sidebar) collapsedView(c *theme.AppStyle) tea.View {
-	strip := c.Styles.NavTitle.
+	strip := withSidebarBorder(c.Styles.NavTitle.
 		Width(sidebarCollapsedWidth).
-		Height(m.height).
-		Border(lipgloss.NormalBorder(), false, true, false, false).
+		Height(m.height)).
 		Render("≡")
 	v := tea.NewView(strip)
 	v.AltScreen = true
@@ -351,10 +383,9 @@ func (m *Sidebar) expandedView(c *theme.AppStyle) tea.View {
 		borderFg = c.Border
 	}
 
-	background := c.Styles.NavContainer.
+	background := withSidebarBorder(c.Styles.NavContainer.
 		Width(m.width).
-		Height(m.height).
-		Border(lipgloss.NormalBorder(), false, true, false, false).
+		Height(m.height)).
 		BorderForeground(borderFg)
 
 	rendered := background.Render(inner)
@@ -380,8 +411,7 @@ func (m *Sidebar) buildDelegate(c *theme.AppStyle, innerW int) navDelegate {
 		focusedStyle:   c.Styles.NavActive.Padding(0, 0).Bold(true),
 		activeStyle:    c.Styles.NavActive.Padding(0, 0),
 		normalStyle:    c.Styles.NavInactive.Padding(0, 0),
-		// 2 chars consumed by the prefix ("▶ " / "● " / "  ")
-		itemWidth: max(innerW-2, 1),
+		itemWidth:      max(innerW-sidebarPrefixWidth, 1),
 	}
 }
 
@@ -405,7 +435,7 @@ func (m *Sidebar) renderSettingsItem(c *theme.AppStyle, innerW int) string {
 	} else {
 		style = c.Styles.NavInactive.Padding(0, 0)
 	}
-	return fmt.Sprintf("%s%s", prefix, style.Width(max(innerW-2, 1)).Render(title))
+	return fmt.Sprintf("%s%s", prefix, style.Width(max(innerW-sidebarPrefixWidth, 1)).Render(title))
 }
 
 // handleMouse routes a mouse event to the correct sidebar zone.
@@ -425,9 +455,9 @@ func (m *Sidebar) handleMouse(mm tea.MouseMsg, height int) tea.Cmd {
 		return func() tea.Msg { return CollapseToggleMsg{} }
 	}
 
-	// The Settings row is at height-2 (1 header + listAreaH + 1 sep + 1 settings).
-	// Accept clicks from settingsRow onward as targeting Settings.
-	settingsRow := height - 2
+	// The Settings row starts sidebarFooterRows (separator + settings) from
+	// the bottom. Accept clicks from settingsRow onward as targeting Settings.
+	settingsRow := height - sidebarFooterRows
 	if m.settingsIdx >= 0 && me.Y >= settingsRow {
 		m.ActiveIndex = m.settingsIdx
 		return tea.Batch(

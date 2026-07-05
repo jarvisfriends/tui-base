@@ -1,6 +1,6 @@
 
 
-We are using Go 1.26+ with all the latest language features. Ensure that any code you suggest is compatible with this version. We are also using the latest versions of all Charm v2 libraries (`charm.land/…/v2` vanity imports). Verify any new dependency uses v2 vanity paths and does not pull in `github.com/charmbracelet/bubbletea` (the v1 path) as a transitive dependency.
+We are using Go 1.26.4+ (never lower the `go.mod` directive below 1.26.4 — 1.26.3 has a known CVE) with all the latest language features. Ensure that any code you suggest is compatible with this version. We are also using the latest versions of all Charm v2 libraries (`charm.land/…/v2` vanity imports). Verify any new dependency uses v2 vanity paths and does not pull in `github.com/charmbracelet/bubbletea` (the v1 path) as a transitive dependency.
 
 **Any time a new library could replace a homegrown solution, say so first** — describe what the library provides and why it is better before touching code. The human is new to Charm v2; always prefer the simplest, most idiomatic Charm solution.
 
@@ -8,12 +8,12 @@ We are using Go 1.26+ with all the latest language features. Ensure that any cod
 
 ## Session Checklist
 
-1. Build baseline: `go build -o tui_base_test_build.exe . && rm tui_base_test_build.exe`
+1. Build baseline: `go build ./...`
 2. Run tests: `go test ./... -v`
 3. Run race tests: `go test -race ./... -v`
 4. Run lint: `golangci-lint run ./...`
 5. Run local verify script: `bash tools/local_verify.sh`
-6. All TUI code lives in the root package and under `navigation/`, `pages/`, `router/`, `status/`, `theme/`, `logging/`, `keys/`.
+6. TUI code lives under `navigation/`, `pages/`, `router/`, `status/`, `theme/`, `logging/`, `keys/`; the root `tuibase` package is the thin consumer API and `cmd/tui-base/` is the reference app.
 7. Check [`.github/ROADMAP.md`](ROADMAP.md) for current tasks and status.
 8. Check [`.github/CHARM_ECOSYSTEM.md`](CHARM_ECOSYSTEM.md) for established patterns before writing any UI code.
 
@@ -34,7 +34,8 @@ We are using Go 1.26+ with all the latest language features. Ensure that any cod
 ## Package Layout
 
 ```
-main.go              — entry point; creates router, runs tea.Program
+tuibase.go           — root consumer package: Options/RegisteredPage aliases + Run()
+cmd/tui-base/        — reference app entry point; creates router, runs tea.Program
 router/              — root model; owns nav, pages, status, colors; dispatches all messages
 navigation/          — Navigator interface + Sidebar and Tabs implementations
 pages/
@@ -77,7 +78,10 @@ The **inspector** is a built-in debug overlay accessible via **Ctrl+D** from any
 - Refresh loop runs on ~1 Hz cadence via `statsTickMsg`; color-codes thresholds (warn/crit)
 
 **Custom metrics extension:**
-See `.agent/INSPECTOR_EXTENSION_GUIDE.md` for how consuming apps can add custom tabs or metrics.
+Consuming apps implement `inspector.MetricsProvider` (TabName/BuildRows/
+RefreshInterval/Start/Stop) and call `router.RegisterInspectorTab(p)`; the tab
+appears after the built-ins and the provider runs only while the inspector is
+open. See `docs/inspector-extensions.md`.
 
 ---
 
@@ -95,9 +99,20 @@ terminal canvas; child pages set them for their own content area.
 All I/O (file writes, network, DB) must happen inside `tea.Cmd` functions that
 return a message on completion. `Update()` must be non-blocking.
 
+Background (non-key/mouse) messages broadcast to every page so inactive pages
+receive their command results. High-frequency messages (tickers, progress
+streams) should implement `router.TargetedMsg` (`TargetPage() string`, returning
+the page's nav ID or title) so only their page is woken.
+
 Mouse events are dispatched manually: the router's `OnMouse` converts global
 coordinates to child-relative before calling the child view's `OnMouse`. Every
 child that has clickable regions must register an `OnMouse` handler.
+
+Bubble Tea delivers each mouse event to BOTH `View.OnMouse` and `Update`.
+While a modal overlay is open it owns the mouse on both paths: wheel events
+always go to the overlay (regardless of pointer position, matching keyboard
+scrolling), and `RouterModel.Update` drops mouse messages to nav/pages
+(`mouseModalOverlayVisible`) so nothing scrolls behind the overlay.
 
 ### Shared Color Pointer
 

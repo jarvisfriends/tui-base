@@ -51,10 +51,21 @@ func TestSidebarClickSelectsEveryMainItem(t *testing.T) {
 		cmd := v.OnMouse(tea.MouseReleaseMsg{X: 0, Y: y, Button: tea.MouseLeft})
 		sel, ok := selectedFrom(cmd)
 		if !ok {
-			t.Fatalf("clicking main item %d at y=%d did not emit SelectedMsg; got %T", idx, y, cmd())
+			t.Fatalf(
+				"clicking main item %d at y=%d did not emit SelectedMsg; got %T",
+				idx,
+				y,
+				cmd(),
+			)
 		}
 		if sel.PageIndex != idx {
-			t.Fatalf("clicking main item %d at y=%d selected PageIndex=%d, want %d", idx, y, sel.PageIndex, idx)
+			t.Fatalf(
+				"clicking main item %d at y=%d selected PageIndex=%d, want %d",
+				idx,
+				y,
+				sel.PageIndex,
+				idx,
+			)
 		}
 		if m.ActiveIndex != idx {
 			t.Fatalf("after click, ActiveIndex=%d, want %d", m.ActiveIndex, idx)

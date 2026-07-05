@@ -98,8 +98,14 @@ func TestInspectorPerfReport(t *testing.T) {
 
 	t.Logf("inspector idle: iterations=%d elapsed=%.2fs allocs/sec=%.2f bytes/sec=%.2f gc/sec=%.2f",
 		idle.iterations, idle.seconds, idle.allocsPerSec, idle.bytesPerSec, idle.gcPerSec)
-	t.Logf("inspector mouse: iterations=%d elapsed=%.2fs allocs/sec=%.2f bytes/sec=%.2f gc/sec=%.2f",
-		mouse.iterations, mouse.seconds, mouse.allocsPerSec, mouse.bytesPerSec, mouse.gcPerSec)
+	t.Logf(
+		"inspector mouse: iterations=%d elapsed=%.2fs allocs/sec=%.2f bytes/sec=%.2f gc/sec=%.2f",
+		mouse.iterations,
+		mouse.seconds,
+		mouse.allocsPerSec,
+		mouse.bytesPerSec,
+		mouse.gcPerSec,
+	)
 
 	assertMaxMetric(t, "idle allocs/sec", idle.allocsPerSec, "TUIBASE_MAX_IDLE_ALLOCS_PER_SEC")
 	assertMaxMetric(t, "idle gc/sec", idle.gcPerSec, "TUIBASE_MAX_IDLE_GC_PER_SEC")

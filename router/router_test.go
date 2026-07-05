@@ -17,20 +17,28 @@ import (
 )
 
 const (
-	testKeyCtrlB  = "ctrl+b"
-	testPageTitle = "aSettings"
+	testKeyCtrlB        = "ctrl+b"
+	testKeyOpenSettings = "ctrl+g"
+	testKeyInspector    = "ctrl+d"
+	testPageTitle       = "aSettings"
 )
 
 func TestTabCyclesPages(t *testing.T) {
 	t.Parallel()
 	m := New()
 	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != navigation.PageIDHome {
-		t.Fatalf("initial active page = %q; want \"home\"", m.nav.GetPages()[m.nav.GetActiveIndex()].ID)
+		t.Fatalf(
+			"initial active page = %q; want \"home\"",
+			m.nav.GetPages()[m.nav.GetActiveIndex()].ID,
+		)
 	}
 
 	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != navigation.PageIDSettings {
-		t.Fatalf("after tab active page = %q; want \"settings\"", m.nav.GetPages()[m.nav.GetActiveIndex()].ID)
+		t.Fatalf(
+			"after tab active page = %q; want \"settings\"",
+			m.nav.GetPages()[m.nav.GetActiveIndex()].ID,
+		)
 	}
 
 	// nav highlight should be in sync
@@ -175,7 +183,10 @@ func TestSelectedMsgChangesActivePageAndLogs(t *testing.T) {
 	m := New()
 	// verify initial state
 	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != navigation.PageIDHome {
-		t.Fatalf("expected initial active page 'home'; got %s", m.nav.GetPages()[m.nav.GetActiveIndex()].ID)
+		t.Fatalf(
+			"expected initial active page 'home'; got %s",
+			m.nav.GetPages()[m.nav.GetActiveIndex()].ID,
+		)
 	}
 
 	// send a WindowSizeMsg to initialize children
@@ -202,14 +213,21 @@ func TestSelectedMsgChangesActivePageAndLogs(t *testing.T) {
 	// send selection
 	_, _ = m.Update(navigation.SelectedMsg{PageIndex: idx})
 	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != navigation.PageIDSettings {
-		t.Fatalf("expected active page 'settings' after selection; got %s", m.nav.GetPages()[m.nav.GetActiveIndex()].ID)
+		t.Fatalf(
+			"expected active page 'settings' after selection; got %s",
+			m.nav.GetPages()[m.nav.GetActiveIndex()].ID,
+		)
 	}
 	if m.nav.GetActiveIndex() != idx {
 		t.Fatalf("expected nav.ActiveIndex=%d; got %d", idx, m.nav.GetActiveIndex())
 	}
 
 	if len(dm.Logs) <= initialLogs {
-		t.Fatalf("expected debug logs to increase after SelectedMsg; before=%d after=%d", initialLogs, len(dm.Logs))
+		t.Fatalf(
+			"expected debug logs to increase after SelectedMsg; before=%d after=%d",
+			initialLogs,
+			len(dm.Logs),
+		)
 	}
 }
 
@@ -244,10 +262,18 @@ func TestHandleResizeCmdProducesExpectedSizes(t *testing.T) {
 	activePageContent := m.GetActivePage().View().Content
 
 	if lipgloss.Width(activePageContent) != expectedContentWidth {
-		t.Fatalf("ContentWidth = %d; want %d", lipgloss.Width(activePageContent), expectedContentWidth)
+		t.Fatalf(
+			"ContentWidth = %d; want %d",
+			lipgloss.Width(activePageContent),
+			expectedContentWidth,
+		)
 	}
 	if lipgloss.Height(activePageContent) != expectedContentHeight {
-		t.Fatalf("ContentHeight = %d; want %d", lipgloss.Height(activePageContent), expectedContentHeight)
+		t.Fatalf(
+			"ContentHeight = %d; want %d",
+			lipgloss.Height(activePageContent),
+			expectedContentHeight,
+		)
 	}
 }
 
@@ -312,11 +338,17 @@ func TestTabWithNilNavCyclesPages(t *testing.T) {
 	m := New()
 	// ensure tab advances the active nav page
 	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != navigation.PageIDHome {
-		t.Fatalf("expected initial active page 'home'; got %q", m.nav.GetPages()[m.nav.GetActiveIndex()].ID)
+		t.Fatalf(
+			"expected initial active page 'home'; got %q",
+			m.nav.GetPages()[m.nav.GetActiveIndex()].ID,
+		)
 	}
 	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != navigation.PageIDSettings {
-		t.Fatalf("expected active page 'settings' after tab; got %q", m.nav.GetPages()[m.nav.GetActiveIndex()].ID)
+		t.Fatalf(
+			"expected active page 'settings' after tab; got %q",
+			m.nav.GetPages()[m.nav.GetActiveIndex()].ID,
+		)
 	}
 }
 
@@ -342,7 +374,10 @@ func navShouldContain(t *testing.T, label, content string) {
 	t.Helper()
 	stripped := stripANSI(content)
 	if !strings.Contains(stripped, "Home") {
-		t.Errorf("%s: nav sidebar was erased — expected to find \"Home\" in the rendered output", label)
+		t.Errorf(
+			"%s: nav sidebar was erased — expected to find \"Home\" in the rendered output",
+			label,
+		)
 	}
 }
 
@@ -354,7 +389,10 @@ func statusShouldContain(t *testing.T, label, content string) {
 	// The status bar always renders a ctrl-prefixed key binding (e.g., ctrl+h
 	// for help toggle). "ctrl" is a safe, theme-invariant sentinel.
 	if !strings.Contains(strings.ToLower(stripped), "ctrl") {
-		t.Errorf("%s: status bar content was erased — expected to find \"ctrl\" key hints in the rendered output", label)
+		t.Errorf(
+			"%s: status bar content was erased — expected to find \"ctrl\" key hints in the rendered output",
+			label,
+		)
 	}
 }
 
@@ -441,7 +479,8 @@ func TestHistoryPanelOverlayPreservesNavAndStatus(t *testing.T) {
 	stripped := stripANSI(v.Content)
 
 	// At least one notification badge must appear (INFO / WARN / ERR).
-	if !strings.Contains(stripped, "INFO") && !strings.Contains(stripped, "WARN") && !strings.Contains(stripped, "ERR") {
+	if !strings.Contains(stripped, "INFO") && !strings.Contains(stripped, "WARN") &&
+		!strings.Contains(stripped, "ERR") {
 		t.Error("history panel: no notification badges found in rendered output")
 	}
 
@@ -492,7 +531,10 @@ func TestTTLExpiryDismissesNotification(t *testing.T) {
 	m = updateRouter(m, notifications.ExpireMsg{ID: id})
 
 	if got := m.notifMgr.Count(); got != 0 {
-		t.Errorf("TTL expiry: expected 0 active notifications after ExpireMsg, got %d — ExpireMsg is not being routed to notifMgr.Handle()", got)
+		t.Errorf(
+			"TTL expiry: expected 0 active notifications after ExpireMsg, got %d — ExpireMsg is not being routed to notifMgr.Handle()",
+			got,
+		)
 	}
 }
 
@@ -508,8 +550,14 @@ func TestHistoryPanelDismissAllKey(t *testing.T) {
 	m := setupRouter(t)
 
 	// Add two notifications.
-	m = updateRouter(m, notifications.AddMsg{Content: "first", Severity: notifications.SeverityInfo, TTL: 0})
-	m = updateRouter(m, notifications.AddMsg{Content: "second", Severity: notifications.SeverityWarning, TTL: 0})
+	m = updateRouter(
+		m,
+		notifications.AddMsg{Content: "first", Severity: notifications.SeverityInfo, TTL: 0},
+	)
+	m = updateRouter(
+		m,
+		notifications.AddMsg{Content: "second", Severity: notifications.SeverityWarning, TTL: 0},
+	)
 
 	if got := m.notifMgr.Count(); got != 2 {
 		t.Fatalf("expected 2 active notifications, got %d", got)
@@ -525,7 +573,10 @@ func TestHistoryPanelDismissAllKey(t *testing.T) {
 	m = updateRouter(m, tea.KeyPressMsg{Text: "d"})
 
 	if got := m.notifMgr.Count(); got != 0 {
-		t.Errorf("dismiss-all key 'd': expected 0 active after pressing 'd', got %d — 'd' key is not wired in the history panel handler", got)
+		t.Errorf(
+			"dismiss-all key 'd': expected 0 active after pressing 'd', got %d — 'd' key is not wired in the history panel handler",
+			got,
+		)
 	}
 }
 
@@ -708,7 +759,10 @@ func TestInspectorNavKeyNotDoubleDispatched(t *testing.T) {
 	// Sanity: inspector must be on the first tab (Runtime) before we press anything.
 	before := stripANSI(m.inspector.View().Content)
 	if !strings.Contains(before, "Runtime Profiling (Inspector)") {
-		t.Fatalf("expected inspector to start on 'Runtime Profiling (Inspector)' tab, got:\n%s", before)
+		t.Fatalf(
+			"expected inspector to start on 'Runtime Profiling (Inspector)' tab, got:\n%s",
+			before,
+		)
 	}
 
 	// Press → once. With correct routing the active tab advances by exactly one
@@ -792,7 +846,7 @@ func TestOpenSettingsKey(t *testing.T) {
 		t.Fatalf("expected test to start on a non-settings page")
 	}
 
-	_, _ = m.Update(tea.KeyPressMsg{Text: "ctrl+,"})
+	_, _ = m.Update(tea.KeyPressMsg{Text: testKeyOpenSettings})
 
 	if got := m.nav.GetPages()[m.nav.GetActiveIndex()].ID; got != navigation.PageIDSettings {
 		t.Fatalf("active page = %q; want settings", got)
@@ -807,7 +861,11 @@ func TestInvalidSelectedMsgReturnsResizeCmd(t *testing.T) {
 
 	newPageIndex := m.nav.GetActiveIndex()
 	if newPageIndex != prePageIndex {
-		t.Fatalf("expected active page index to remain unchanged; got %d, want %d", newPageIndex, prePageIndex)
+		t.Fatalf(
+			"expected active page index to remain unchanged; got %d, want %d",
+			newPageIndex,
+			prePageIndex,
+		)
 	}
 }
 
@@ -833,7 +891,11 @@ func TestInspectorSummaryShownInStatusBarWhenClosed(t *testing.T) {
 		t.Fatal("precondition: StatusLineSummary should be non-empty when enabled")
 	}
 	if got := renderedStatus(m); !strings.Contains(got, "term") {
-		t.Fatalf("expected status bar to show inspector summary %q while inspector closed, got:\n%s", want, got)
+		t.Fatalf(
+			"expected status bar to show inspector summary %q while inspector closed, got:\n%s",
+			want,
+			got,
+		)
 	}
 
 	// Open the inspector: the brief summary should yield to the full overlay and

@@ -123,7 +123,11 @@ func TestWindowSizeIgnored(t *testing.T) {
 	// WindowSizeMsg should not be logged
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 10, Height: 5})
 	if len(m.Logs) != before {
-		t.Fatalf("expected no new logs after WindowSizeMsg; before=%d after=%d", before, len(m.Logs))
+		t.Fatalf(
+			"expected no new logs after WindowSizeMsg; before=%d after=%d",
+			before,
+			len(m.Logs),
+		)
 	}
 }
 
@@ -142,7 +146,8 @@ func TestViewShowsLogs(t *testing.T) {
 
 // Regression: some themes can produce SelectedItem fg/bg pairs that collide,
 // which made table headers look blank (same foreground and background color).
-// tableHeaderColors must always return a visible pair.
+// The shared theme.TableStyles (which baseTableStyles delegates to) must
+// always produce a visible header pair.
 func TestTableHeaderColorsFallbackAvoidsSameFgBg(t *testing.T) {
 	t.Parallel()
 
@@ -157,7 +162,9 @@ func TestTableHeaderColorsFallbackAvoidsSameFgBg(t *testing.T) {
 		},
 	}
 
-	headerBG, headerFG := tableHeaderColors(c)
+	s := theme.TableStyles(c)
+	headerBG := theme.ColorHex(s.Header.GetBackground())
+	headerFG := theme.ColorHex(s.Header.GetForeground())
 	if strings.EqualFold(headerBG, headerFG) {
 		t.Fatalf("regression: header foreground/background are identical (%s)", headerBG)
 	}
@@ -333,7 +340,11 @@ func TestSettingsTabAdjustsRefreshInterval(t *testing.T) {
 	before := m.latestValueInterval
 	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter}) // Enter increments by 100 ms
 	if m.latestValueInterval <= before {
-		t.Fatalf("expected latest value interval to increase; before=%s after=%s", before, m.latestValueInterval)
+		t.Fatalf(
+			"expected latest value interval to increase; before=%s after=%s",
+			before,
+			m.latestValueInterval,
+		)
 	}
 }
 
@@ -351,7 +362,9 @@ func TestTabsAreClickableWithMouse(t *testing.T) {
 	// tabsOriginY is the actual Y row of the tab bar in the inner-content
 	// coordinate space (after the router strips the top border char).
 	tabsY := m.tabsOriginY
-	if cmd := v.OnMouse(tea.MouseReleaseMsg(tea.Mouse{X: inputTab.StartX, Y: tabsY, Button: tea.MouseLeft})); cmd != nil {
+	if cmd := v.OnMouse(
+		tea.MouseReleaseMsg(tea.Mouse{X: inputTab.StartX, Y: tabsY, Button: tea.MouseLeft}),
+	); cmd != nil {
 		_ = cmd()
 	}
 
@@ -370,7 +383,9 @@ func TestSettingsRowsAreMouseSelectableAndActionable(t *testing.T) {
 
 	row := 2 // "Status summary on close"
 	y := m.sectionOriginY + row - m.sectionViewport.YOffset()
-	if cmd := v.OnMouse(tea.MouseReleaseMsg(tea.Mouse{X: 2, Y: y, Button: tea.MouseLeft})); cmd != nil {
+	if cmd := v.OnMouse(
+		tea.MouseReleaseMsg(tea.Mouse{X: 2, Y: y, Button: tea.MouseLeft}),
+	); cmd != nil {
 		_ = cmd()
 	}
 
@@ -386,19 +401,36 @@ func TestPerTabScrollPreservedAcrossSwitches(t *testing.T) {
 	t.Parallel()
 
 	m := New()
-	_, _ = m.Update(tea.WindowSizeMsg{Width: 90, Height: 10})
+	// Wide enough that the Runtime tab uses its bubbles table (the flat
+	// fallback at narrow widths keeps viewport scrolling instead).
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 160, Height: 10})
 	_ = m.View()
 
+	// Table tabs (Runtime) no longer scroll the section viewport: navigation
+	// keys move the table's row cursor instead.
 	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
-	before := m.tabScrollY[debugTabRuntime]
-	if before <= 0 {
-		t.Fatalf("expected runtime tab to scroll with KeyDown; got offset=%d", before)
+	if got := m.runtimeTbl.Cursor(); got != 1 {
+		t.Fatalf("expected runtime table cursor=1 after KeyDown; got %d", got)
+	}
+	if got := m.tabScrollY[debugTabRuntime]; got != 0 {
+		t.Fatalf("runtime KeyDown must move the table cursor, not the viewport; offset=%d", got)
 	}
 
-	_, _ = m.Update(tea.KeyPressMsg{Text: "6"}) // Log tab (accessibility tab inserted at position 5)
-	_, _ = m.Update(tea.KeyPressMsg{Text: "1"}) // Runtime tab
+	// Viewport tabs (Terminal) keep per-tab scroll state across switches.
+	_, _ = m.Update(tea.KeyPressMsg{Text: "4"}) // Terminal tab
+	_ = m.View()
+	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	before := m.tabScrollY[debugTabTerminal]
+	if before <= 0 {
+		t.Fatalf("expected terminal tab to scroll with KeyDown; got offset=%d", before)
+	}
+
+	_, _ = m.Update(tea.KeyPressMsg{Text: "6"}) // Log tab
+	_ = m.View()
+	_, _ = m.Update(tea.KeyPressMsg{Text: "4"}) // back to Terminal
+	_ = m.View()
 
 	if got := m.sectionViewport.YOffset(); got != before {
-		t.Fatalf("expected runtime tab scroll offset to be restored; got %d want %d", got, before)
+		t.Fatalf("expected terminal tab scroll offset to be restored; got %d want %d", got, before)
 	}
 }

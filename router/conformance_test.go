@@ -20,6 +20,24 @@ func TestConformanceSuite(t *testing.T) {
 		testutil.CheckFitsViewport(t, New())
 	})
 
+	t.Run("FitsViewportEverywhere", func(t *testing.T) {
+		// Replay page switches and overlay toggles at every standard size:
+		// overlays bypass the page layout math, so an over-wide overlay line
+		// (the 90x76 Log Path regression) is invisible to the initial-frame
+		// FitsViewport check above.
+		m := New()
+		states := make([]tea.Msg, 0, len(m.nav.GetPages())+2)
+		for i := range m.nav.GetPages() {
+			states = append(states, navigation.SelectedMsg{PageIndex: i})
+		}
+		states = append(
+			states,
+			tea.KeyPressMsg{Text: testKeyInspector}, // inspector overlay
+			tea.KeyPressMsg{Text: testKeyOpenSettings}, // settings page
+		)
+		testutil.CheckFitsViewport(t, m, states...)
+	})
+
 	t.Run("ThemeResponsive", func(t *testing.T) {
 		testutil.CheckThemeResponsive(
 			t, New(),
@@ -35,12 +53,12 @@ func TestConformanceSuite(t *testing.T) {
 		for i := range m.nav.GetPages() {
 			states = append(states, navigation.SelectedMsg{PageIndex: i})
 		}
-		// Open the inspector overlay (Ctrl+D) and the settings page (Ctrl+,);
+		// Open the inspector overlay (Ctrl+D) and the settings page (Ctrl+G);
 		// the status bar must remain visible with overlays/prompts on screen.
 		states = append(
 			states,
-			tea.KeyPressMsg{Text: "ctrl+d"},
-			tea.KeyPressMsg{Text: "ctrl+,"},
+			tea.KeyPressMsg{Text: testKeyInspector},
+			tea.KeyPressMsg{Text: testKeyOpenSettings},
 		)
 		testutil.CheckStatusBarVisible(t, m, states)
 	})
@@ -51,7 +69,17 @@ func TestConformanceSuite(t *testing.T) {
 // observed without being consumed.
 func TestKonamiSecretFiresNotification(t *testing.T) {
 	m := New()
-	seq := []string{konamiKeyUp, konamiKeyUp, konamiKeyDown, konamiKeyDown, konamiKeyLeft, konamiKeyRight, konamiKeyLeft, konamiKeyRight, "b"}
+	seq := []string{
+		konamiKeyUp,
+		konamiKeyUp,
+		konamiKeyDown,
+		konamiKeyDown,
+		konamiKeyLeft,
+		konamiKeyRight,
+		konamiKeyLeft,
+		konamiKeyRight,
+		"b",
+	}
 	for _, k := range seq {
 		_, cmd := m.Update(tea.KeyPressMsg{Text: k})
 		// Intermediate keys must not fire the easter egg.

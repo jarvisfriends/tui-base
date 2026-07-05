@@ -25,7 +25,12 @@ func listDriveStats() []diskStat {
 			stats = append(stats, diskStat{Path: letter, Error: err.Error()})
 			continue
 		}
-		if err := windows.GetDiskFreeSpaceEx(ptr, &freeToCaller, &totalBytes, &totalFree); err != nil {
+		if err := windows.GetDiskFreeSpaceEx(
+			ptr,
+			&freeToCaller,
+			&totalBytes,
+			&totalFree,
+		); err != nil {
 			stats = append(stats, diskStat{Path: letter, Error: err.Error()})
 			continue
 		}

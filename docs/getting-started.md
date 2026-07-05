@@ -5,7 +5,7 @@ observability, and maintainability from day one.
 
 ## 1. Prerequisites
 
-- Go 1.26+
+- Go 1.26.4+ (1.26.3 and below contain a known CVE)
 - A terminal that supports Bubble Tea interaction
 - Optional: VS Code tasks from this workspace
 
@@ -14,7 +14,7 @@ observability, and maintainability from day one.
 Run these before making changes:
 
 ```bash
-go build -o tui_base_test_build.exe . && rm tui_base_test_build.exe
+go build ./... && go run ./cmd/tui-base
 go test ./... -v
 ```
 
@@ -22,7 +22,8 @@ go test ./... -v
 
 High-level flow:
 
-1. `main.go` starts the router model.
+1. `cmd/tui-base/main.go` starts the router model (or call `tuibase.Run` from
+   the root package in your own app).
 2. `router/` owns global wiring (pages, nav, status, colors, notifications).
 3. Each page is a `tea.Model` with `Init`, `Update`, `View`.
 4. Shared app style pointer is passed into children with `SetColors`.

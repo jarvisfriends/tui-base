@@ -20,10 +20,12 @@ import (
 )
 
 // StandardWidths is the set of terminal widths every page is tested against.
-var StandardWidths = []int{40, 60, 80, 100, 120, 160, 200}
+// 90 pairs with height 76: a narrow-but-tall terminal (a vertical monitor
+// split) that catches overlays sized for the height without respecting width.
+var StandardWidths = []int{40, 60, 80, 90, 100, 120, 160, 200}
 
 // StandardHeights is the set of terminal heights paired with StandardWidths.
-var StandardHeights = []int{12, 20, 24, 30, 40, 50, 50}
+var StandardHeights = []int{12, 20, 24, 76, 30, 40, 50, 50}
 
 // CheckNoLineOverflow renders a tea.Model at each width in widths (paired with
 // height 24) and asserts that no rendered line exceeds the terminal width in
@@ -114,8 +116,13 @@ func CheckEmojiColumnWidths(t *testing.T, symbols []string, colW int) {
 		rendered := style.Render(sym)
 		got := lipgloss.Width(rendered)
 		if got != colW {
-			t.Errorf("symbol %q (display width %d) rendered in Width(%d) produced %d cells — column too narrow",
-				sym, lipgloss.Width(sym), colW, got)
+			t.Errorf(
+				"symbol %q (display width %d) rendered in Width(%d) produced %d cells — column too narrow",
+				sym,
+				lipgloss.Width(sym),
+				colW,
+				got,
+			)
 		}
 	}
 }

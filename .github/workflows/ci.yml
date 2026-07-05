@@ -21,7 +21,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-2022]
+        # macOS included (CI-2): darwin binaries are released, and
+        # disk_unix.go has a Darwin-specific int32/int64 divergence that only
+        # a darwin build+test run exercises.
+        os: [ubuntu-24.04, windows-2022, macos-14]
     steps:
       - uses: actions/checkout@v7
       - name: Set up Go
@@ -74,7 +77,8 @@ jobs:
         with:
           go-version: '1.26.x'
       - name: Install stringer
-        run: go install golang.org/x/tools/cmd/stringer@latest
+        # Pinned (CI-1): bump alongside the golang.org/x/tools dependency.
+        run: go install golang.org/x/tools/cmd/stringer@v0.47.0
       - name: Check for go generate drift
         run: |
           go generate ./...
@@ -118,7 +122,9 @@ jobs:
       - name: Lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          # Pinned (CI-1): keep in sync with tools/local_verify.sh and the
+          # coverage job below.
+          version: v2.12.2
 
   workflow-lint:
     name: Workflow Lint (actionlint)
@@ -140,9 +146,13 @@ jobs:
             **/*.md
       - name: Link check
         uses: lycheeverse/lychee-action@v2
+        env:
+          # Authenticated GitHub requests avoid the anonymous rate limit that
+          # made github.com links flake (CI-6).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           fail: true
-          args: --no-progress --verbose "./**/*.md"
+          args: --no-progress --verbose --max-retries 3 --retry-wait-time 5 "./**/*.md"
 
   shellcheck:
     name: Shellcheck
@@ -176,16 +186,76 @@ jobs:
         with:
           go-version: '1.26.x'
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        # Pinned (CI-1). Bump deliberately; a floating @latest made the
+        # vulnerability gate irreproducible.
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.5.0
       - name: Run govulncheck
         run: govulncheck ./...
+
+  fuzz-smoke:
+    name: Fuzz smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.x'
+      - name: Run fuzz targets (30s each)
+        # Short timed runs per target catch shallow regressions on every PR
+        # (CI-3); long exploratory fuzzing stays a local/scheduled activity.
+        env:
+          FUZZTIME: 30s
+        run: bash tools/fuzz.sh
+
+  bench:
+    name: Benchmarks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.x'
+      - name: Run benchmarks
+        # Informational (CI-4): results are uploaded for trend comparison
+        # (e.g. benchstat old.txt new.txt locally); no thresholds enforced —
+        # shared runners are too noisy for hard gates.
+        run: go test ./... -run '^$' -bench=. -benchmem -count=1 | tee bench.txt
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmarks
+          path: bench.txt
+
+  release-snapshot:
+    name: GoReleaser snapshot (packaging check)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.x'
+      - name: Install stringer
+        # Pinned (CI-1): needed by the goreleaser before-hook (go generate).
+        run: go install golang.org/x/tools/cmd/stringer@v0.47.0
+      - name: GoReleaser snapshot build
+        # Catches packaging failures (bad main path, ldflags, matrix) on every
+        # PR instead of on release day (CI-8). Nothing is published.
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: v2.16.0
+          args: release --snapshot --clean --skip=publish
 
   coverage:
     name: Coverage (ubuntu)
     runs-on: ubuntu-24.04
     needs: [verify, lint]
     env:
-      COVERAGE_THRESHOLD: 55.0
+      COVERAGE_THRESHOLD: 62.0
     steps:
       - uses: actions/checkout@v7
       - name: Set up Go
@@ -201,13 +271,12 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
-      - name: Run tests
-        run: go test ./... -v
-      - name: Install golangci-lint
-        run: |
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Run coverage script
+        # SKIP_LINT: the lint job already ran golangci-lint on this commit,
+        # and the script's race-enabled test run produces the coverage profile
+        # itself — no separate test step needed (CI-7).
+        env:
+          SKIP_LINT: "1"
         run: bash tools/test_coverage.sh
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v7
@@ -216,10 +285,26 @@ jobs:
           path: |
             coverage.out
             coverage.txt
+      - name: Upload coverage to Coveralls
+        uses: coverallsapp/github-action@v2.3.6
+        env:
+          # Optional: falls back to the workflow's GITHUB_TOKEN when unset
+          # (sufficient for public repos). Set the secret in
+          # Settings > Secrets and variables > Actions.
+          COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
+        with:
+          file: coverage.out
+          format: golang
+      - name: Upload coverage reports to Codecov
+        # Requires the CODECOV_TOKEN secret; without it the action attempts a
+        # tokenless upload on public repos and does not fail the build.
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.out
       - name: Check coverage threshold
         run: |
           cov=$(cat coverage.txt)
           echo "Coverage reported: $cov"
           percent=$(echo "$cov" | tr -d '%')
           awk -v p="$percent" -v t="${COVERAGE_THRESHOLD}" 'BEGIN { if (p+0 < t+0) { print "Coverage " p "% is below threshold " t "%"; exit 1 } else { print "Coverage " p "% meets threshold " t "%" } }'
-
