@@ -1,4 +1,4 @@
-package main_test
+package tuibase_test
 
 import (
 	"testing"

@@ -1,6 +1,8 @@
 package status
 
 import (
+	"strings"
+
 	"github.com/jarvisfriends/tui-base/keys"
 	"github.com/jarvisfriends/tui-base/notifications"
 	"github.com/jarvisfriends/tui-base/page"
@@ -34,6 +36,12 @@ type BarModel struct {
 	// closed). It is evaluated on every render so the text stays current without
 	// manual refresh calls.
 	summaryProvider func() string
+
+	// segmentOrder/segments hold named consumer-provided right-aligned
+	// segments (git branch, connection state, …), rendered before the summary
+	// in registration order and re-evaluated every render (E-1).
+	segmentOrder []string
+	segments     map[string]func() string
 }
 
 // SetSummaryProvider sets a callback that supplies the right-aligned status bar
@@ -43,13 +51,51 @@ func (b *BarModel) SetSummaryProvider(fn func() string) {
 	b.SetWidth(b.help.Width())
 }
 
-// summary returns the current right-aligned summary text, or "" when no
-// provider is set.
-func (b *BarModel) summary() string {
-	if b.summaryProvider == nil {
-		return ""
+// SetSegment registers (or replaces) a named right-aligned status bar segment
+// whose text is re-evaluated on every render — the consumer hook for live
+// widgets like a git branch or connection state. Segments render in first-
+// registration order, separated by " • ", before the summary text. A segment
+// returning "" is skipped for that frame; passing a nil fn removes the
+// segment entirely.
+func (b *BarModel) SetSegment(name string, fn func() string) {
+	if fn == nil {
+		if _, ok := b.segments[name]; ok {
+			delete(b.segments, name)
+			for i, n := range b.segmentOrder {
+				if n == name {
+					b.segmentOrder = append(b.segmentOrder[:i], b.segmentOrder[i+1:]...)
+					break
+				}
+			}
+		}
+		b.SetWidth(b.help.Width())
+		return
 	}
-	return b.summaryProvider()
+	if b.segments == nil {
+		b.segments = make(map[string]func() string)
+	}
+	if _, exists := b.segments[name]; !exists {
+		b.segmentOrder = append(b.segmentOrder, name)
+	}
+	b.segments[name] = fn
+	b.SetWidth(b.help.Width())
+}
+
+// summary returns the full right-aligned text: registered segments in order,
+// then the summary provider's text, joined with " • ".
+func (b *BarModel) summary() string {
+	parts := make([]string, 0, len(b.segmentOrder)+1)
+	for _, name := range b.segmentOrder {
+		if s := b.segments[name](); s != "" {
+			parts = append(parts, s)
+		}
+	}
+	if b.summaryProvider != nil {
+		if s := b.summaryProvider(); s != "" {
+			parts = append(parts, s)
+		}
+	}
+	return strings.Join(parts, " • ")
 }
 
 // Regions returns the interactive click regions computed during the last

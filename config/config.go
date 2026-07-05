@@ -124,7 +124,11 @@ func BoolField(key, title, description string, value *bool, apply func(bool) err
 
 // YesNoField is like BoolField but shows "Yes" / "No" instead of
 // "Enabled" / "Disabled".
-func YesNoField(key, title, description string, value *bool, apply func(bool) error) FieldDef[bool] {
+func YesNoField(
+	key, title, description string,
+	value *bool,
+	apply func(bool) error,
+) FieldDef[bool] {
 	return FieldDef[bool]{
 		Key:         key,
 		Title:       title,
@@ -143,7 +147,12 @@ func YesNoField(key, title, description string, value *bool, apply func(bool) er
 }
 
 // EnumField returns a FieldSelect FieldDef with arbitrary label/value pairs.
-func EnumField[T comparable](key, title, description string, options []huh.Option[T], value *T, apply func(T) error) FieldDef[T] {
+func EnumField[T comparable](
+	key, title, description string,
+	options []huh.Option[T],
+	value *T,
+	apply func(T) error,
+) FieldDef[T] {
 	return FieldDef[T]{
 		Key:         key,
 		Title:       title,
@@ -157,7 +166,11 @@ func EnumField[T comparable](key, title, description string, options []huh.Optio
 
 // TextField returns a FieldText FieldDef bound to a *string field with an
 // optional validation function.
-func TextField(key, title, description string, value *string, validate, apply func(string) error) FieldDef[string] {
+func TextField(
+	key, title, description string,
+	value *string,
+	validate, apply func(string) error,
+) FieldDef[string] {
 	return FieldDef[string]{
 		Key:         key,
 		Title:       title,
@@ -171,7 +184,11 @@ func TextField(key, title, description string, value *string, validate, apply fu
 
 // MultiFilePickerField returns a FieldMultiFilePicker FieldDef bound to a *string field
 // which should contain a semicolon-separated list of paths.
-func MultiFilePickerField(key, title, description string, value *string, apply func(string) error) FieldDef[string] {
+func MultiFilePickerField(
+	key, title, description string,
+	value *string,
+	apply func(string) error,
+) FieldDef[string] {
 	return FieldDef[string]{
 		Key:         key,
 		Title:       title,
@@ -183,7 +200,11 @@ func MultiFilePickerField(key, title, description string, value *string, apply f
 }
 
 // DateField returns a FieldDate FieldDef.
-func DateField(key, title, description string, value *time.Time, apply func(time.Time) error) FieldDef[time.Time] {
+func DateField(
+	key, title, description string,
+	value *time.Time,
+	apply func(time.Time) error,
+) FieldDef[time.Time] {
 	return FieldDef[time.Time]{
 		Key:         key,
 		Title:       title,
@@ -195,7 +216,11 @@ func DateField(key, title, description string, value *time.Time, apply func(time
 }
 
 // DurationField returns a FieldDuration FieldDef.
-func DurationField(key, title, description string, value *time.Duration, apply func(time.Duration) error) FieldDef[time.Duration] {
+func DurationField(
+	key, title, description string,
+	value *time.Duration,
+	apply func(time.Duration) error,
+) FieldDef[time.Duration] {
 	return FieldDef[time.Duration]{
 		Key:         key,
 		Title:       title,
@@ -207,7 +232,10 @@ func DurationField(key, title, description string, value *time.Duration, apply f
 }
 
 // CustomField returns a FieldCustom FieldDef that delegates to a custom tea.Model.
-func CustomField[T comparable](key, title, description, displayText string, builder func() tea.Model) FieldDef[T] {
+func CustomField[T comparable](
+	key, title, description, displayText string,
+	builder func() tea.Model,
+) FieldDef[T] {
 	return FieldDef[T]{
 		Key:                key,
 		Title:              title,

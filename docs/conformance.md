@@ -17,8 +17,18 @@ func TestMyAppConforms(t *testing.T) {
         })
     }
 
+    // Page switches and overlay/editor toggles: overlays bypass the page
+    // layout math, so replay these inside the viewport check as well —
+    // a too-wide overlay line is invisible to the initial-frame check.
+    states := []tea.Msg{
+        navigation.SelectedMsg{PageIndex: 0},
+        navigation.SelectedMsg{PageIndex: 1},
+        tea.KeyPressMsg{Text: "ctrl+d"}, // inspector overlay
+        tea.KeyPressMsg{Text: "ctrl+g"}, // settings
+    }
+
     t.Run("FitsViewport", func(t *testing.T) {
-        testutil.CheckFitsViewport(t, build())
+        testutil.CheckFitsViewport(t, build(), states...)
     })
 
     t.Run("ThemeResponsive", func(t *testing.T) {
@@ -28,14 +38,7 @@ func TestMyAppConforms(t *testing.T) {
     })
 
     t.Run("StatusBarVisibleEverywhere", func(t *testing.T) {
-        m := build()
-        states := []tea.Msg{
-            navigation.SelectedMsg{PageIndex: 0},
-            navigation.SelectedMsg{PageIndex: 1},
-            tea.KeyPressMsg{Text: "ctrl+d"}, // inspector overlay
-            tea.KeyPressMsg{Text: "ctrl+,"}, // settings
-        }
-        testutil.CheckStatusBarVisible(t, m, states)
+        testutil.CheckStatusBarVisible(t, build(), states)
     })
 }
 ```

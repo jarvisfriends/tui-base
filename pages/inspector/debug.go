@@ -90,6 +90,13 @@ type DebugKeyMap struct {
 	ExportLog     key.Binding // export inspector log to file
 	LevelFilter   key.Binding // toggle the Log tab's WARN+ only filter
 
+	// NextTab/PrevTab cycle the inspector tabs. The router syncs them with the
+	// application's NextPage/PreviousPage bindings (SetNavKeys) so switching
+	// inspector tabs feels identical to switching pages — including custom
+	// rebinds. ←/→ and 1-7 keep working as inspector-local shortcuts.
+	NextTab key.Binding
+	PrevTab key.Binding
+
 	// Help-only composite bindings
 	TabSwitch key.Binding
 	Scroll    key.Binding
@@ -99,15 +106,53 @@ type DebugKeyMap struct {
 // DefaultDebugKeys returns the default key bindings for the debug inspector.
 func DefaultDebugKeys() DebugKeyMap {
 	return DebugKeyMap{
-		Highlight:     key.NewBinding(key.WithKeys("h", "H"), key.WithHelp("h", "highlight toggle")),
-		NotifyInfo:    key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "test info notification")),
-		NotifyWarning: key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "test warning notification")),
-		NotifyError:   key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "test error notification")),
-		ExportLog:     key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "export log to file")),
-		LevelFilter:   key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter WARN+ only")),
-		TabSwitch:     key.NewBinding(key.WithKeys("left", "right", "1", "2", "3", "4", "5", "6", "7"), key.WithHelp("←/→ 1-7", "switch tab")),
-		Scroll:        key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "scroll")),
-		EnterRun:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "change/run")),
+		Highlight: key.NewBinding(
+			key.WithKeys("h", "H"),
+			key.WithHelp("h", "highlight toggle"),
+		),
+		NotifyInfo: key.NewBinding(
+			key.WithKeys("i"),
+			key.WithHelp("i", "test info notification"),
+		),
+		NotifyWarning: key.NewBinding(
+			key.WithKeys("w"),
+			key.WithHelp("w", "test warning notification"),
+		),
+		NotifyError: key.NewBinding(
+			key.WithKeys("e"),
+			key.WithHelp("e", "test error notification"),
+		),
+		ExportLog:   key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "export log to file")),
+		LevelFilter: key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter WARN+ only")),
+		NextTab: key.NewBinding(
+			key.WithKeys("tab"),
+			key.WithHelp("tab", "next tab"),
+		),
+		PrevTab: key.NewBinding(
+			key.WithKeys("shift+tab"),
+			key.WithHelp("shift+tab", "prev tab"),
+		),
+		TabSwitch: key.NewBinding(
+			key.WithKeys("tab", "shift+tab", "left", "right", "1", "2", "3", "4", "5", "6", "7"),
+			key.WithHelp("tab/←/→ 1-7", "switch tab"),
+		),
+		Scroll:   key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "scroll")),
+		EnterRun: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "change/run")),
+	}
+}
+
+// dataTableKeyMap returns the key bindings for the inspector's data tables
+// (Runtime, Input, Disks). Standardized navigation keys only — no vim
+// fallbacks (ADR-011), and no half-page bindings (they would shadow other
+// inspector shortcuts).
+func dataTableKeyMap() table.KeyMap {
+	return table.KeyMap{
+		LineUp:     key.NewBinding(key.WithKeys("up"), key.WithHelp("↑", "up")),
+		LineDown:   key.NewBinding(key.WithKeys("down"), key.WithHelp("↓", "down")),
+		PageUp:     key.NewBinding(key.WithKeys("pgup"), key.WithHelp("pgup", "page up")),
+		PageDown:   key.NewBinding(key.WithKeys("pgdown"), key.WithHelp("pgdn", "page down")),
+		GotoTop:    key.NewBinding(key.WithKeys("home"), key.WithHelp("home", "first")),
+		GotoBottom: key.NewBinding(key.WithKeys("end"), key.WithHelp("end", "last")),
 	}
 }
 
@@ -123,7 +168,15 @@ const (
 	debugTabSettings
 )
 
-var debugTabTitles = []string{"Runtime", "Input", "Disks", "Terminal", debugTabTitleAccessibility, "Log", "Settings"}
+var debugTabTitles = []string{
+	"Runtime",
+	"Input",
+	"Disks",
+	"Terminal",
+	debugTabTitleAccessibility,
+	"Log",
+	"Settings",
+}
 
 // pprof address constants — used in New() and handleSettingsKey to avoid
 // magic string literals scattered across the function.
@@ -301,6 +354,20 @@ type InspectorModel struct {
 	tabsHeight     int
 	sectionHeight  int
 
+	// tableActive records, per tab, whether the last render used the tab's
+	// bubbles table (vs. the flat narrow-terminal fallback). Navigation keys
+	// go to the table's row cursor only when it is actually on screen.
+	tableActive map[debugTab]bool
+
+	// providers are the registered custom tabs (E-5), rendered after the
+	// built-ins; providerRefreshed tracks each provider's last render time so
+	// RefreshInterval can force re-renders from the stats tick.
+	providers         []MetricsProvider
+	providerRefreshed map[string]time.Time
+
+	// logCapacity overrides the message-log ring size; 0 = default (I-7).
+	logCapacity int
+
 	// keys holds rebindable key bindings for the inspector.
 	keys DebugKeyMap
 
@@ -315,7 +382,19 @@ type InspectorModel struct {
 type latestValueFlushMsg struct{}
 
 func (m *InspectorModel) IsVisible() bool { return m.visible }
-func (m *InspectorModel) ToggleVisible()  { m.visible = !m.visible }
+
+// ToggleVisible shows/hides the inspector overlay. Registered tab providers
+// run only while the inspector is on screen (Q-8: startable and stoppable).
+func (m *InspectorModel) ToggleVisible() {
+	m.visible = !m.visible
+	for _, p := range m.providers {
+		if m.visible {
+			p.Start()
+		} else {
+			p.Stop()
+		}
+	}
+}
 
 // ShortHelp implements [help.KeyMap]. Returns a compact list of bindings for
 // the current tab shown in the status bar one-liner.
@@ -361,6 +440,56 @@ func (m *InspectorModel) SetColors(c *theme.AppStyle) {
 	}
 }
 
+// SetNavKeys aligns the inspector's tab cycling with the application's page
+// navigation bindings (typically AppKeyMap.NextPage/PreviousPage). The router
+// calls this at startup and again whenever the user rebinds keys, so the
+// inspector always honors the same next/previous keys as the main navigation.
+func (m *InspectorModel) SetNavKeys(next, prev key.Binding) {
+	m.keys.NextTab = key.NewBinding(
+		key.WithKeys(next.Keys()...),
+		key.WithHelp(next.Help().Key, "next tab"),
+	)
+	m.keys.PrevTab = key.NewBinding(
+		key.WithKeys(prev.Keys()...),
+		key.WithHelp(prev.Help().Key, "prev tab"),
+	)
+	tabKeys := append([]string{}, next.Keys()...)
+	tabKeys = append(tabKeys, prev.Keys()...)
+	tabKeys = append(tabKeys, "left", "right", "1", "2", "3", "4", "5", "6", "7")
+	m.keys.TabSwitch = key.NewBinding(
+		key.WithKeys(tabKeys...),
+		key.WithHelp(next.Help().Key+"/←/→ 1-7", "switch tab"),
+	)
+}
+
+// activeDataTable returns the bubbles table backing the active tab, or nil
+// when the active tab is not table-based or its last render fell back to the
+// flat layout (narrow terminals), in which case keys scroll the viewport.
+func (m *InspectorModel) activeDataTable() *table.Model {
+	if !m.tableActive[m.activeTab] {
+		return nil
+	}
+	switch m.activeTab { //nolint:exhaustive // non-table tabs fall through to nil
+	case debugTabRuntime:
+		return &m.runtimeTbl
+	case debugTabInput:
+		return &m.inputDbgTbl
+	case debugTabDisks:
+		return &m.diskTbl
+	default:
+		return nil
+	}
+}
+
+// setTableActive records whether a tab's last render used its bubbles table
+// (vs. the flat fallback), which decides where navigation keys are routed.
+func (m *InspectorModel) setTableActive(tab debugTab, active bool) {
+	if m.tableActive == nil {
+		m.tableActive = make(map[debugTab]bool)
+	}
+	m.tableActive[tab] = active
+}
+
 func (m *InspectorModel) saveActiveTabScroll() {
 	if m.tabScrollY == nil {
 		m.tabScrollY = make(map[debugTab]int)
@@ -382,7 +511,7 @@ func (m *InspectorModel) restoreActiveTabScroll() {
 }
 
 func (m *InspectorModel) switchTab(tab debugTab) {
-	if tab < 0 || int(tab) >= len(debugTabTitles) || tab == m.activeTab {
+	if tab < 0 || int(tab) >= m.tabCount() || tab == m.activeTab {
 		return
 	}
 	m.saveActiveTabScroll()
@@ -535,9 +664,10 @@ func New() *InspectorModel {
 	m.inputDbgTbl = table.New(
 		table.WithColumns(m.inputDbgColumns),
 		table.WithRows(nil),
-		table.WithFocused(false),
+		table.WithFocused(true),
 		table.WithHeight(2),
 		table.WithWidth(60),
+		table.WithKeyMap(dataTableKeyMap()),
 	)
 
 	m.diskHeader = []table.Column{
@@ -552,16 +682,18 @@ func New() *InspectorModel {
 	m.runtimeTbl = table.New(
 		table.WithColumns(m.runtimeColumns),
 		table.WithRows(nil),
-		table.WithFocused(false),
+		table.WithFocused(true),
 		table.WithHeight(2),
 		table.WithWidth(80),
+		table.WithKeyMap(dataTableKeyMap()),
 	)
 	m.diskTbl = table.New(
 		table.WithColumns(m.diskHeader),
 		table.WithRows(nil),
-		table.WithFocused(false),
+		table.WithFocused(true),
 		table.WithHeight(2),
 		table.WithWidth(80),
+		table.WithKeyMap(dataTableKeyMap()),
 	)
 	m.sectionViewport = viewport.New(viewport.WithWidth(80), viewport.WithHeight(10))
 	m.inputViewport = viewport.New(viewport.WithWidth(60), viewport.WithHeight(2))
@@ -660,26 +792,43 @@ func (m *InspectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, preCmd // size changes are silent — do not log
 	case tea.KeyMsg:
 		// When the accessibility tab is active, let the panel handle keys —
-		// except left/right, which always switch tabs so the user can never
-		// get stuck on this tab. (The panel claims 1/2/3 for CVD filters, so
-		// arrows are the reliable way out.)
+		// except the tab-switching keys (next/prev nav plus left/right), which
+		// always switch tabs so the user can never get stuck on this tab.
+		// (The panel claims 1/2/3 for CVD filters, so these are the reliable
+		// way out.)
 		if m.activeTab == debugTabAccessibility && m.acPanel != nil {
 			press, isPress := msg.(tea.KeyPressMsg)
-			if !isPress || (press.Code != tea.KeyLeft && press.Code != tea.KeyRight) {
-				_, cmd := m.acPanel.Update(msg)
+			if !isPress || (press.Code != tea.KeyLeft && press.Code != tea.KeyRight &&
+				!key.Matches(press, m.keys.NextTab) && !key.Matches(press, m.keys.PrevTab)) {
+				model, cmd := m.acPanel.Update(msg)
+				if p, ok := model.(*AccessibilityPanel); ok {
+					m.acPanel = p
+				}
 				return m, tea.Batch(preCmd, cmd)
 			}
 		}
 		switch km := msg.(type) {
 		case tea.KeyPressMsg:
-			if m.activeTab == debugTabSettings {
+			switch {
+			case m.activeTab == debugTabSettings:
 				// Settings tab: Up/Down navigate rows, Enter toggles/runs.
 				// Left/Right fall through so they always switch tabs.
 				switch km.Code {
 				case tea.KeyUp, tea.KeyDown, tea.KeyEnter:
 					return m, tea.Batch(preCmd, m.handleSettingsKey(km))
 				}
-			} else {
+			case m.activeDataTable() != nil:
+				// Table tabs (Runtime/Input/Disks): navigation keys move the
+				// table's row cursor; the table scrolls internally when its
+				// rows exceed the section height.
+				switch km.Code {
+				case tea.KeyUp, tea.KeyDown, tea.KeyPgUp, tea.KeyPgDown, tea.KeyHome, tea.KeyEnd:
+					tbl := m.activeDataTable()
+					*tbl, _ = tbl.Update(km)
+					m.dirty = true
+					return m, preCmd
+				}
+			default:
 				switch km.Code {
 				case tea.KeyUp:
 					m.scrollActiveSection(-1)
@@ -695,15 +844,17 @@ func (m *InspectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, preCmd
 				}
 			}
-			if km.Code == tea.KeyLeft {
-				m.switchTab(debugTab((int(m.activeTab) - 1 + len(debugTabTitles)) % len(debugTabTitles)))
+			if km.Code == tea.KeyLeft || key.Matches(km, m.keys.PrevTab) {
+				m.switchTab(
+					debugTab((int(m.activeTab) - 1 + m.tabCount()) % m.tabCount()),
+				)
 				return m, preCmd
 			}
-			if km.Code == tea.KeyRight {
-				m.switchTab(debugTab((int(m.activeTab) + 1) % len(debugTabTitles)))
+			if km.Code == tea.KeyRight || key.Matches(km, m.keys.NextTab) {
+				m.switchTab(debugTab((int(m.activeTab) + 1) % m.tabCount()))
 				return m, preCmd
 			}
-			if km.Text >= "1" && km.Text <= "7" {
+			if km.Text >= "1" && km.Text <= "9" {
 				m.switchTab(debugTab(int(km.Text[0] - '1')))
 				return m, preCmd
 			}
@@ -715,15 +866,27 @@ func (m *InspectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, preCmd
 			case key.Matches(km, m.keys.NotifyInfo):
 				return m, tea.Batch(preCmd, func() tea.Msg {
-					return notifications.AddMsg{Content: "Test: Info notification from Inspector", Severity: notifications.SeverityInfo, TTL: notifications.SeverityInfo.DefaultTTL()}
+					return notifications.AddMsg{
+						Content:  "Test: Info notification from Inspector",
+						Severity: notifications.SeverityInfo,
+						TTL:      notifications.SeverityInfo.DefaultTTL(),
+					}
 				})
 			case key.Matches(km, m.keys.NotifyWarning):
 				return m, tea.Batch(preCmd, func() tea.Msg {
-					return notifications.AddMsg{Content: "Test: Warning notification from Inspector", Severity: notifications.SeverityWarning, TTL: notifications.SeverityWarning.DefaultTTL()}
+					return notifications.AddMsg{
+						Content:  "Test: Warning notification from Inspector",
+						Severity: notifications.SeverityWarning,
+						TTL:      notifications.SeverityWarning.DefaultTTL(),
+					}
 				})
 			case key.Matches(km, m.keys.NotifyError):
 				return m, tea.Batch(preCmd, func() tea.Msg {
-					return notifications.AddMsg{Content: "Test: Error notification from Inspector", Severity: notifications.SeverityError, TTL: notifications.SeverityError.DefaultTTL()}
+					return notifications.AddMsg{
+						Content:  "Test: Error notification from Inspector",
+						Severity: notifications.SeverityError,
+						TTL:      notifications.SeverityError.DefaultTTL(),
+					}
 				})
 			case key.Matches(km, m.keys.ExportLog):
 				return m, tea.Batch(preCmd, m.exportLogCmd())
@@ -743,6 +906,7 @@ func (m *InspectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.prevStats = m.stats
 		m.stats = msg.snapshot
 		m.dirty = true
+		m.tickProviderRefresh()
 		return m, tea.Batch(preCmd, m.scheduleStatsTick())
 	case tea.MouseWheelMsg:
 		if msg.Mouse().Button == tea.MouseWheelUp {
@@ -855,12 +1019,39 @@ func (m *InspectorModel) LogMessageForDebugging(msg tea.Msg) tea.Cmd {
 	})
 	m.dirty = true
 
-	// Keep only last 50 logs
-	if len(m.Logs) > 50 {
-		m.Logs = m.Logs[1:]
-	}
+	m.trimLogs()
 	m.scrollToBottom = true
 	return nil
+}
+
+// logCapacityDefault is the message-log ring size when SetLogCapacity was
+// never called.
+const logCapacityDefault = 50
+
+// SetLogCapacity sets how many deduplicated entries the inspector's message
+// log retains (I-7). Values below 10 are clamped to 10; 0 restores the
+// default.
+func (m *InspectorModel) SetLogCapacity(n int) {
+	switch {
+	case n == 0:
+		m.logCapacity = 0
+	case n < 10:
+		m.logCapacity = 10
+	default:
+		m.logCapacity = n
+	}
+	m.trimLogs()
+}
+
+// trimLogs drops the oldest entries beyond the configured capacity.
+func (m *InspectorModel) trimLogs() {
+	limit := m.logCapacity
+	if limit <= 0 {
+		limit = logCapacityDefault
+	}
+	if len(m.Logs) > limit {
+		m.Logs = m.Logs[len(m.Logs)-limit:]
+	}
 }
 
 // appendExternalLog merges one MsgLog (received from the pending queue) into
@@ -877,9 +1068,7 @@ func (m *InspectorModel) appendExternalLog(entry MsgLog) {
 	}
 	m.Logs = append(m.Logs, entry)
 	m.dirty = true
-	if len(m.Logs) > 50 {
-		m.Logs = m.Logs[1:]
-	}
+	m.trimLogs()
 	m.scrollToBottom = true
 }
 
@@ -1048,10 +1237,21 @@ func (m *InspectorModel) View() tea.View {
 	runtimeSection := m.renderRuntimeSection(c, tblStyles, runtimeRows, availW)
 	logContent := m.renderLogContent(c)
 	rawTabsLine := m.buildTabsLine(c)
-	sectionTitle, sectionContent := m.sectionForActiveTab(c, availW, tblStyles, runtimeSection, inputRows, logContent)
+	sectionTitle, sectionContent := m.sectionForActiveTab(
+		c,
+		availW,
+		tblStyles,
+		runtimeSection,
+		inputRows,
+		logContent,
+	)
 
 	titleText := sectionTitle + " (Inspector)"
-	titleLine := lipgloss.PlaceHorizontal(availW, lipgloss.Center, c.Styles.Title.Bold(true).Render(titleText))
+	titleLine := lipgloss.PlaceHorizontal(
+		availW,
+		lipgloss.Center,
+		c.Styles.Title.Bold(true).Render(titleText),
+	)
 	sep := c.Styles.Title.Render(strings.Repeat("─", availW))
 	tabsLine := ansi.Truncate(rawTabsLine, availW, "…")
 
@@ -1089,11 +1289,7 @@ func (m *InspectorModel) View() tea.View {
 	m.view.ForegroundColor = c.Styles.TextOnBg.GetForeground()
 	m.view.OnMouse = func(mm tea.MouseMsg) tea.Cmd {
 		if wheel, ok := mm.(tea.MouseWheelMsg); ok {
-			if wheel.Mouse().Button == tea.MouseWheelUp {
-				m.scrollActiveSection(-3)
-			} else {
-				m.scrollActiveSection(3)
-			}
+			m.handleWheel(wheel.Mouse())
 			return nil
 		}
 		if rel, ok := mm.(tea.MouseReleaseMsg); ok && rel.Mouse().Button == tea.MouseLeft {
@@ -1127,15 +1323,55 @@ func (m *InspectorModel) View() tea.View {
 	return m.view
 }
 
-// buildTermSection renders the terminal environment and active theme diagnostic rows.
-func (m *InspectorModel) buildTermSection(c *theme.AppStyle, width int) string {
-	kv := func(k, v string) string {
-		return c.Styles.Item.Render(k+": ") + c.Styles.TextOnBg.Render(v)
+// handleWheel routes a mouse-wheel event: horizontal wheel (tilt, or the
+// shift+wheel chord terminals emit for horizontal scrolling) switches tabs
+// like ←/→; a vertical wheel moves the table row cursor on table tabs and
+// scrolls the section viewport elsewhere.
+func (m *InspectorModel) handleWheel(me tea.Mouse) {
+	shifted := me.Mod&tea.ModShift != 0
+	switch {
+	case me.Button == tea.MouseWheelLeft || (shifted && me.Button == tea.MouseWheelUp):
+		m.switchTab(
+			debugTab((int(m.activeTab) - 1 + m.tabCount()) % m.tabCount()),
+		)
+		return
+	case me.Button == tea.MouseWheelRight || (shifted && me.Button == tea.MouseWheelDown):
+		m.switchTab(debugTab((int(m.activeTab) + 1) % m.tabCount()))
+		return
 	}
-	warn := func(k, v string) string {
-		return c.Styles.Dim.Render(k+": ") + c.Styles.Warning.Render(v)
+	if tbl := m.activeDataTable(); tbl != nil {
+		if me.Button == tea.MouseWheelUp {
+			tbl.MoveUp(1)
+		} else {
+			tbl.MoveDown(1)
+		}
+		m.dirty = true
+		return
 	}
+	if me.Button == tea.MouseWheelUp {
+		m.scrollActiveSection(-3)
+	} else {
+		m.scrollActiveSection(3)
+	}
+}
 
+// termRow is one aligned key/value line in the Terminal & Theme tab; warn rows
+// render the value in the theme's warning style.
+type termRow struct {
+	k, v string
+	warn bool
+}
+
+// termSection is a titled group of rows in the Terminal & Theme tab.
+type termSection struct {
+	title string
+	rows  []termRow
+}
+
+// buildTermSection renders the terminal environment and active theme
+// diagnostics as titled category sections with a single aligned key column —
+// the same header convention as the settings overview.
+func (m *InspectorModel) buildTermSection(c *theme.AppStyle, width int) string {
 	// Terminal env vars
 	termEnv := getEnvOr("TERM", "(not set)")
 	colorterm := getEnvOr("COLORTERM", "(not set)")
@@ -1198,7 +1434,7 @@ func (m *InspectorModel) buildTermSection(c *theme.AppStyle, width int) string {
 	if activeTint != nil {
 		tintID = activeTint.ID
 		if activeTint.Bg != nil {
-			col := lipgloss.Color(activeTint.Bg.Hex())
+			col := activeTint.Bg
 			bgHex = activeTint.Bg.Hex()
 			bgSw := lipgloss.NewStyle().Background(col).Foreground(col).Render("■")
 			bgHex = bgSw + " " + bgHex
@@ -1210,69 +1446,91 @@ func (m *InspectorModel) buildTermSection(c *theme.AppStyle, width int) string {
 			accentHex = activeTint.Purple.Hex()
 		}
 		if activeTint.SelectionBg != nil {
-			col := lipgloss.Color(activeTint.SelectionBg.Hex())
+			col := activeTint.SelectionBg
 			selBgHex = activeTint.SelectionBg.Hex()
 			sw := lipgloss.NewStyle().Background(col).Foreground(col).Render("■")
 			selBgHex = sw + " " + selBgHex
 		}
 	}
 
-	rows := []string{
-		lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			kv("TERM", termEnv), "   ",
-			kv("COLORTERM", colorterm), "   ",
-			kv("TERM_PROGRAM", termProg),
-		),
-		lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			kv("Color Profile", profStr), "   ",
-			kv("IsDark", isDarkStr),
-		),
+	colorRows := []termRow{
+		{k: "Color Profile", v: profStr},
+		{k: "Dark Background", v: isDarkStr},
+		{k: "OSC11 Bg", v: bgDetStr},
 	}
-	if isSSH {
-		rows = append(rows, warn("SSH", sshStr))
-	} else {
-		rows = append(rows, kv("SSH", sshStr))
-	}
-	rows = append(
-		rows,
-		kv("OSC11 Bg", bgDetStr),
-		lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			kv("Tint", tintID), "   ",
-			kv("Tint Bg", bgHex), "   ",
-			kv("Tint Fg", fgHex),
-		),
-		lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			kv("Tint Accent", accentHex), "   ",
-			kv("Tint SelBg", selBgHex),
-		),
-	)
-
 	// Remedy hint: colors look washed-out / wrong over SSH when the profile
 	// downsamples 24-bit theme colors. Surface the fix when we detect the
 	// classic signature (ANSI256 + SSH + no override + COLORTERM unset).
 	if prof == colorprofile.ANSI256 && isSSH && profileOverride == "" && colorterm == "(not set)" {
-		rows = append(
-			rows,
-			warn("Color hint", "24-bit colors quantized to ANSI256 (COLORTERM not forwarded over SSH)"),
-			warn("Fix", "set COLORTERM=truecolor on the remote, or run with "+envName+"=truecolor"),
+		colorRows = append(colorRows,
+			termRow{
+				k:    "Color hint",
+				v:    "24-bit colors quantized to ANSI256 (COLORTERM not forwarded over SSH)",
+				warn: true,
+			},
+			termRow{
+				k:    "Fix",
+				v:    "set COLORTERM=truecolor on the remote, or run with " + envName + "=truecolor",
+				warn: true,
+			},
 		)
 	}
 
-	// Config + launch info
 	st := m.stats
-	rows = append(
-		rows,
-		kv("Executable", st.Launch.Executable),
-		kv("Args", strings.Join(st.Launch.Args, " ")),
-		kv("WorkDir", st.Launch.WorkDir),
-		kv("User@Host", st.Launch.Username+"@"+st.Launch.Hostname),
-	)
+	sections := []termSection{
+		{title: "Terminal Environment", rows: []termRow{
+			{k: "TERM", v: termEnv},
+			{k: "COLORTERM", v: colorterm},
+			{k: "TERM_PROGRAM", v: termProg},
+			{k: "SSH", v: sshStr, warn: isSSH},
+		}},
+		{title: "Colors & Profile", rows: colorRows},
+		{title: "Active Theme", rows: []termRow{
+			{k: "Tint", v: tintID},
+			{k: "Background", v: bgHex},
+			{k: "Foreground", v: fgHex},
+			{k: "Accent", v: accentHex},
+			{k: "Selection Bg", v: selBgHex},
+		}},
+		{title: "Process & Launch", rows: []termRow{
+			{k: "Executable", v: st.Launch.Executable},
+			{k: "Args", v: strings.Join(st.Launch.Args, " ")},
+			{k: "Working Dir", v: st.Launch.WorkDir},
+			{k: "User@Host", v: st.Launch.Username + "@" + st.Launch.Hostname},
+		}},
+	}
 
-	joined := strings.Join(rows, "\n")
+	// One aligned key column across all sections keeps values in a straight
+	// vertical line down the whole tab.
+	keyW := 0
+	for _, sec := range sections {
+		for _, r := range sec.rows {
+			keyW = max(keyW, lipgloss.Width(r.k))
+		}
+	}
+
+	headerStyle := c.Styles.Subtitle.Bold(true)
+	keyStyle := c.Styles.Item.Width(keyW)
+	warnKeyStyle := c.Styles.Dim.Width(keyW)
+	valStyle := c.Styles.TextOnBg
+	warnValStyle := c.Styles.Warning
+
+	var out []string
+	for i, sec := range sections {
+		if i > 0 {
+			out = append(out, "")
+		}
+		out = append(out, headerStyle.Render(sec.title))
+		for _, r := range sec.rows {
+			if r.warn {
+				out = append(out, "  "+warnKeyStyle.Render(r.k)+"  "+warnValStyle.Render(r.v))
+				continue
+			}
+			out = append(out, "  "+keyStyle.Render(r.k)+"  "+valStyle.Render(r.v))
+		}
+	}
+
+	joined := strings.Join(out, "\n")
 	return c.Styles.TextOnBg.Width(width).Render(joined)
 }
 
@@ -1293,14 +1551,26 @@ func (m *InspectorModel) renderSettingsSection(c *theme.AppStyle) string {
 	normalValue := c.Styles.TextOnBg.Width(valueW)
 	// Use the theme's semantic selection colors (SelectionBg/Fg), matching the
 	// table, sidebar, and settings page, rather than the tab-hover affordance.
+	// Every segment of the selected row — indicator, field, separator, value —
+	// carries the selection background (the same technique as the main
+	// settings page's renderOverview) so the highlight is one continuous bar
+	// with no unstyled gaps between the columns.
 	selectedField := c.Styles.SelectedItem.Width(fieldW)
-	selectedValue := c.Styles.TextOnBg.Foreground(c.SelectionFg).Background(c.SelectionBg).Width(valueW)
+	selectedValue := c.Styles.TextOnBg.Foreground(c.SelectionFg).
+		Background(c.SelectionBg).
+		Width(valueW)
 	selectedRow := c.Styles.Row.Background(c.SelectionBg).Width(availW)
+	indicatorStyle := lipgloss.NewStyle().Foreground(c.SelectionFg).Background(c.SelectionBg)
+	spaceStyle := lipgloss.NewStyle().Background(c.SelectionBg)
+
+	// Category headers use the same style as the Terminal tab's sections (and
+	// the settings page's category headers).
+	sectionHeader := c.Styles.Subtitle.Bold(true)
 
 	var out []string
 	for i, row := range items {
 		if row.SectionOnly {
-			out = append(out, c.Styles.Subtitle.Render(row.Field))
+			out = append(out, sectionHeader.Render(row.Field))
 			continue
 		}
 		field := ansi.Truncate(row.Field, fieldW, "…")
@@ -1310,7 +1580,8 @@ func (m *InspectorModel) renderSettingsSection(c *theme.AppStyle) string {
 			if row.ActionOnly {
 				prefix = "↵ "
 			}
-			line := prefix + selectedField.Render(field) + "   " + selectedValue.Render(value)
+			line := indicatorStyle.Render(prefix) + selectedField.Render(field) +
+				spaceStyle.Render("   ") + selectedValue.Render(value)
 			out = append(out, selectedRow.Render(line))
 			if row.Help != "" {
 				out = append(out, c.Styles.Dim.Render("   "+row.Help))
@@ -1338,42 +1609,183 @@ func (m *InspectorModel) settingsRows() []debugSettingRow {
 	secs := strconv.Itoa(max(1, m.pprof.CPUCaptureSecs))
 	return []debugSettingRow{
 		// 0-6: general display settings
-		{Field: "Latest-value refresh", Value: fmt.Sprintf("%dms", m.latestValueInterval/time.Millisecond), Help: "Enter increases cadence by 100 ms (mouse/key telemetry redraw interval)"},
-		{Field: "Runtime tick refresh", Value: fmt.Sprintf("%dms", m.statsRefreshInterval/time.Millisecond), Help: "Enter increases cadence by 100 ms (runtime snapshot update interval)"},
-		{Field: "Status summary on close", Value: strconv.FormatBool(m.statusSummary.Enabled), Help: "Enter toggles compact runtime summary in status bar when inspector is closed"},
-		{Field: "Include terminal size", Value: strconv.FormatBool(m.statusSummary.ShowTerm), Help: "Enter toggles terminal dimensions in the status summary"},
-		{Field: "Include heap size", Value: strconv.FormatBool(m.statusSummary.ShowHeap), Help: "Enter toggles live heap allocation bytes in the status summary"},
-		{Field: "Include GC/sec", Value: strconv.FormatBool(m.statusSummary.ShowGC), Help: "Enter toggles GC cadence in the status summary"},
-		{Field: "Include goroutines", Value: strconv.FormatBool(m.statusSummary.ShowGorout), Help: "Enter toggles goroutine count in the status summary"},
+		{
+			Field: "Latest-value refresh",
+			Value: fmt.Sprintf("%dms", m.latestValueInterval/time.Millisecond),
+			Help:  "Enter increases cadence by 100 ms (mouse/key telemetry redraw interval)",
+		},
+		{
+			Field: "Runtime tick refresh",
+			Value: fmt.Sprintf("%dms", m.statsRefreshInterval/time.Millisecond),
+			Help:  "Enter increases cadence by 100 ms (runtime snapshot update interval)",
+		},
+		{
+			Field: "Status summary on close",
+			Value: strconv.FormatBool(m.statusSummary.Enabled),
+			Help:  "Enter toggles compact runtime summary in status bar when inspector is closed",
+		},
+		{
+			Field: "Include terminal size",
+			Value: strconv.FormatBool(m.statusSummary.ShowTerm),
+			Help:  "Enter toggles terminal dimensions in the status summary",
+		},
+		{
+			Field: "Include heap size",
+			Value: strconv.FormatBool(m.statusSummary.ShowHeap),
+			Help:  "Enter toggles live heap allocation bytes in the status summary",
+		},
+		{
+			Field: "Include GC/sec",
+			Value: strconv.FormatBool(m.statusSummary.ShowGC),
+			Help:  "Enter toggles GC cadence in the status summary",
+		},
+		{
+			Field: "Include goroutines",
+			Value: strconv.FormatBool(m.statusSummary.ShowGorout),
+			Help:  "Enter toggles goroutine count in the status summary",
+		},
 		// 7-12: pprof server config
-		{Field: "Enable profiler HTTP server", Value: pprofState, Help: "Enter toggles Go's built-in pprof server. Required for all browser viewer endpoints below. Profiles measure CPU, memory, goroutines, and GC."},
-		{Field: "Profiler listen addr", Value: m.pprof.Addr, Help: fmt.Sprintf("Enter cycles between %s and %s. Restart server to apply.", pprofDefaultAddr, pprofAltAddr)},
-		{Field: "go tool pprof UI addr", Value: m.pprof.ToolUIAddr, Help: fmt.Sprintf("Enter cycles between %s and %s (address used when launching go tool pprof -http).", pprofDefaultToolUI, pprofAltToolUI)},
-		{Field: "Pprof view mode", Value: m.pprof.ViewMode, Help: "Enter cycles: builtin (browser, no deps) → go-tool (go tool pprof -http, needs Go in PATH) → graphviz (graph view, also needs 'dot')"},
-		{Field: "CPU capture duration (secs)", Value: secs, Help: "Enter increments by 1 s. Used by 'Capture CPU profile' and the CPU stream browser endpoint."},
-		{Field: "Output dir", Value: m.pprof.OutputDir, Help: "Heap/CPU snapshot files are written here. Analyze with: go tool pprof <file>"},
+		{
+			Field: "Enable profiler HTTP server",
+			Value: pprofState,
+			Help:  "Enter toggles Go's built-in pprof server. Required for all browser viewer endpoints below. Profiles measure CPU, memory, goroutines, and GC.",
+		},
+		{
+			Field: "Profiler listen addr",
+			Value: m.pprof.Addr,
+			Help: fmt.Sprintf(
+				"Enter cycles between %s and %s. Restart server to apply.",
+				pprofDefaultAddr,
+				pprofAltAddr,
+			),
+		},
+		{
+			Field: "go tool pprof UI addr",
+			Value: m.pprof.ToolUIAddr,
+			Help: fmt.Sprintf(
+				"Enter cycles between %s and %s (address used when launching go tool pprof -http).",
+				pprofDefaultToolUI,
+				pprofAltToolUI,
+			),
+		},
+		{
+			Field: "Pprof view mode",
+			Value: m.pprof.ViewMode,
+			Help:  "Enter cycles: builtin (browser, no deps) → go-tool (go tool pprof -http, needs Go in PATH) → graphviz (graph view, also needs 'dot')",
+		},
+		{
+			Field: "CPU capture duration (secs)",
+			Value: secs,
+			Help:  "Enter increments by 1 s. Used by 'Capture CPU profile' and the CPU stream browser endpoint.",
+		},
+		{
+			Field: "Output dir",
+			Value: m.pprof.OutputDir,
+			Help:  "Heap/CPU snapshot files are written here. Analyze with: go tool pprof <file>",
+		},
 		// 13-14: capture actions (no server required)
-		{Field: "Write heap snapshot", Value: "Enter to run", ActionOnly: true, Help: "Saves a heap profile (.pprof) to Output dir right now. No server required. Useful for offline analysis."},
-		{Field: "Capture CPU profile", Value: fmt.Sprintf("Enter to run (%ss)", secs), ActionOnly: true, Help: "Records CPU samples for the configured duration. Blocks the UI during capture. Analyze with: go tool pprof <file>"},
+		{
+			Field:      "Write heap snapshot",
+			Value:      "Enter to run",
+			ActionOnly: true,
+			Help:       "Saves a heap profile (.pprof) to Output dir right now. No server required. Useful for offline analysis.",
+		},
+		{
+			Field:      "Capture CPU profile",
+			Value:      fmt.Sprintf("Enter to run (%ss)", secs),
+			ActionOnly: true,
+			Help:       "Records CPU samples for the configured duration. Blocks the UI during capture. Analyze with: go tool pprof <file>",
+		},
 		// 15: section header
 		{Field: "── Browser viewer (profiler HTTP must be enabled above) ──", SectionOnly: true},
 		// 16-25: built-in browser endpoints (no external dependencies)
-		{Field: "Profile index page", Value: settingsActionOpen, ActionOnly: true, Help: "All available profile types as a human-readable HTML index."},
-		{Field: "Heap — allocation counts (debug=1)", Value: settingsActionOpen, ActionOnly: true, Help: "Live heap: per-allocation stack traces. Best starting point for finding memory leaks."},
-		{Field: "Heap — all live objects (debug=2)", Value: settingsActionOpen, ActionOnly: true, Help: "Every live heap object with full stacks. Very verbose; use debug=1 first."},
-		{Field: "Goroutines — deduplicated (debug=1)", Value: settingsActionOpen, ActionOnly: true, Help: "One line per unique goroutine stack. Easy to scan; good for spotting goroutine leaks."},
-		{Field: "Goroutines — all stacks (debug=2)", Value: settingsActionOpen, ActionOnly: true, Help: "Every running goroutine with its full stack. Shows exact counts; confirms goroutine leaks."},
-		{Field: "Allocations profile (debug=1)", Value: settingsActionOpen, ActionOnly: true, Help: "Heap allocations since program start (includes freed objects). Great for allocation hot-path analysis."},
-		{Field: "Block profile (debug=1)", Value: settingsActionOpen, ActionOnly: true, Help: "Where goroutines block on synchronization (channels, mutexes). Needs runtime.SetBlockProfileRate."},
-		{Field: "Mutex profile (debug=1)", Value: settingsActionOpen, ActionOnly: true, Help: "Mutex contention report. Needs runtime.SetMutexProfileFraction."},
-		{Field: "CPU profile stream", Value: fmt.Sprintf("Open (%ss)", secs), ActionOnly: true, Help: "Browser downloads an N-second CPU profile. Analyze offline with: go tool pprof <file>"},
-		{Field: "Execution trace stream (5s)", Value: settingsActionOpen, ActionOnly: true, Help: "Browser downloads a 5-second execution trace. View with: go tool trace <file>"},
+		{
+			Field:      "Profile index page",
+			Value:      settingsActionOpen,
+			ActionOnly: true,
+			Help:       "All available profile types as a human-readable HTML index.",
+		},
+		{
+			Field:      "Heap — allocation counts (debug=1)",
+			Value:      settingsActionOpen,
+			ActionOnly: true,
+			Help:       "Live heap: per-allocation stack traces. Best starting point for finding memory leaks.",
+		},
+		{
+			Field:      "Heap — all live objects (debug=2)",
+			Value:      settingsActionOpen,
+			ActionOnly: true,
+			Help:       "Every live heap object with full stacks. Very verbose; use debug=1 first.",
+		},
+		{
+			Field:      "Goroutines — deduplicated (debug=1)",
+			Value:      settingsActionOpen,
+			ActionOnly: true,
+			Help:       "One line per unique goroutine stack. Easy to scan; good for spotting goroutine leaks.",
+		},
+		{
+			Field:      "Goroutines — all stacks (debug=2)",
+			Value:      settingsActionOpen,
+			ActionOnly: true,
+			Help:       "Every running goroutine with its full stack. Shows exact counts; confirms goroutine leaks.",
+		},
+		{
+			Field:      "Allocations profile (debug=1)",
+			Value:      settingsActionOpen,
+			ActionOnly: true,
+			Help:       "Heap allocations since program start (includes freed objects). Great for allocation hot-path analysis.",
+		},
+		{
+			Field:      "Block profile (debug=1)",
+			Value:      settingsActionOpen,
+			ActionOnly: true,
+			Help:       "Where goroutines block on synchronization (channels, mutexes). Needs runtime.SetBlockProfileRate.",
+		},
+		{
+			Field:      "Mutex profile (debug=1)",
+			Value:      settingsActionOpen,
+			ActionOnly: true,
+			Help:       "Mutex contention report. Needs runtime.SetMutexProfileFraction.",
+		},
+		{
+			Field:      "CPU profile stream",
+			Value:      fmt.Sprintf("Open (%ss)", secs),
+			ActionOnly: true,
+			Help:       "Browser downloads an N-second CPU profile. Analyze offline with: go tool pprof <file>",
+		},
+		{
+			Field:      "Execution trace stream (5s)",
+			Value:      settingsActionOpen,
+			ActionOnly: true,
+			Help:       "Browser downloads a 5-second execution trace. View with: go tool trace <file>",
+		},
 		// 26: section header
-		{Field: "── go tool pprof -http (Go in PATH required; graph view needs Graphviz 'dot') ──", SectionOnly: true},
+		{
+			Field:       "── go tool pprof -http (Go in PATH required; graph view needs Graphviz 'dot') ──",
+			SectionOnly: true,
+		},
 		// 27-29: go tool pprof -http (needs Go toolchain; graph view needs Graphviz)
-		{Field: "Open pprof UI — last saved file", Value: settingsActionRun, ActionOnly: true, Help: "Launches 'go tool pprof -http' for the most recently saved .pprof file. Flame/top/source views need no Graphviz; graph view does."},
-		{Field: "Open pprof UI — live heap", Value: settingsActionRun, ActionOnly: true, Help: "Launches 'go tool pprof -http' fetching live heap from the profiler server (must be enabled above)."},
-		{Field: "Open pprof UI — live CPU", Value: settingsActionRun, ActionOnly: true, Help: fmt.Sprintf("Launches 'go tool pprof -http' capturing %s seconds of live CPU (UI appears after capture finishes).", secs)},
+		{
+			Field:      "Open pprof UI — last saved file",
+			Value:      settingsActionRun,
+			ActionOnly: true,
+			Help:       "Launches 'go tool pprof -http' for the most recently saved .pprof file. Flame/top/source views need no Graphviz; graph view does.",
+		},
+		{
+			Field:      "Open pprof UI — live heap",
+			Value:      settingsActionRun,
+			ActionOnly: true,
+			Help:       "Launches 'go tool pprof -http' fetching live heap from the profiler server (must be enabled above).",
+		},
+		{
+			Field:      "Open pprof UI — live CPU",
+			Value:      settingsActionRun,
+			ActionOnly: true,
+			Help: fmt.Sprintf(
+				"Launches 'go tool pprof -http' capturing %s seconds of live CPU (UI appears after capture finishes).",
+				secs,
+			),
+		},
 		// 30: info
 		{Field: "Server", Value: serverState},
 	}
@@ -1420,9 +1832,13 @@ func (m *InspectorModel) handleSettingsKey(km tea.KeyPressMsg) tea.Cmd {
 	switch settingsRowIndex(m.settingsCursor) {
 	// --- display settings ---
 	case settingsRowLatestRefresh:
-		m.latestValueInterval = time.Duration(max(100, int((m.latestValueInterval+100*time.Millisecond)/time.Millisecond))) * time.Millisecond
+		m.latestValueInterval = time.Duration(
+			max(100, int((m.latestValueInterval+100*time.Millisecond)/time.Millisecond)),
+		) * time.Millisecond
 	case settingsRowStatsRefresh:
-		m.statsRefreshInterval = time.Duration(max(200, int((m.statsRefreshInterval+100*time.Millisecond)/time.Millisecond))) * time.Millisecond
+		m.statsRefreshInterval = time.Duration(
+			max(200, int((m.statsRefreshInterval+100*time.Millisecond)/time.Millisecond)),
+		) * time.Millisecond
 	case settingsRowStatusSummary:
 		m.statusSummary.Enabled = !m.statusSummary.Enabled
 	case settingsRowShowTerm:
@@ -1534,7 +1950,10 @@ func (m *InspectorModel) handleSettingsKey(km tea.KeyPressMsg) tea.Cmd {
 	case settingsRowGotoolLiveCPU:
 		m.dirty = true
 		return m.openGoToolPprofLiveCPUCmd()
-	case settingsRowOutputDir, settingsRowBuiltinHeader, settingsRowGotoolHeader, settingsRowServerState:
+	case settingsRowOutputDir,
+		settingsRowBuiltinHeader,
+		settingsRowGotoolHeader,
+		settingsRowServerState:
 		// read-only display rows and section headers — no interactive action
 	}
 	m.dirty = true
@@ -1557,7 +1976,10 @@ func (m *InspectorModel) startPprofServerCmd() tea.Cmd {
 		}
 		srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 		go func() { _ = srv.Serve(ln) }()
-		return pprofServerStartedMsg{Server: srv, URL: "http://" + ln.Addr().String() + "/debug/pprof/"}
+		return pprofServerStartedMsg{
+			Server: srv,
+			URL:    "http://" + ln.Addr().String() + "/debug/pprof/",
+		}
 	}
 }
 
@@ -1616,7 +2038,11 @@ func (m *InspectorModel) captureCPUProfileCmd() tea.Cmd {
 		time.Sleep(time.Duration(secs) * time.Second)
 		runtimepprof.StopCPUProfile()
 		_ = f.Close()
-		text := fmt.Sprintf("cpu profile (%ds) saved: %s | open via go tool pprof UI or CPU stream action in settings", secs, cpuPath)
+		text := fmt.Sprintf(
+			"cpu profile (%ds) saved: %s | open via go tool pprof UI or CPU stream action in settings",
+			secs,
+			cpuPath,
+		)
 		return pprofActionMsg{Kind: pprofKindCPUProfile, Path: cpuPath, Text: text}
 	}
 }
@@ -1628,14 +2054,23 @@ func (m *InspectorModel) openGoToolPprofLatestCmd() tea.Cmd {
 	uiAddr := m.pprof.ToolUIAddr
 	return func() tea.Msg {
 		if strings.TrimSpace(profilePath) == "" {
-			return pprofActionMsg{Kind: pprofKindGoTool, Err: errors.New("no saved profile yet — use 'write heap snapshot' first")}
+			return pprofActionMsg{
+				Kind: pprofKindGoTool,
+				Err:  errors.New("no saved profile yet — use 'write heap snapshot' first"),
+			}
 		}
 		cmd := exec.Command("go", "tool", "pprof", "-http="+uiAddr, profilePath)
 		if err := cmd.Start(); err != nil {
-			return pprofActionMsg{Kind: pprofKindGoTool, Err: fmt.Errorf("go tool pprof: %w (is Go toolchain in PATH?)", err)}
+			return pprofActionMsg{
+				Kind: pprofKindGoTool,
+				Err:  fmt.Errorf("go tool pprof: %w (is Go toolchain in PATH?)", err),
+			}
 		}
 		url := "http://" + uiAddr
-		return pprofActionMsg{Kind: pprofKindGoTool, Text: "go pprof UI started: " + url + " (flamegraph/top/source views need no Graphviz; graph view needs dot)"}
+		return pprofActionMsg{
+			Kind: pprofKindGoTool,
+			Text: "go pprof UI started: " + url + " (flamegraph/top/source views need no Graphviz; graph view needs dot)",
+		}
 	}
 }
 
@@ -1645,15 +2080,24 @@ func (m *InspectorModel) openGoToolPprofLiveHeapCmd() tea.Cmd {
 	uiAddr := m.pprof.ToolUIAddr
 	return func() tea.Msg {
 		if strings.TrimSpace(serverURL) == "" {
-			return pprofActionMsg{Kind: pprofKindGoTool, Err: errors.New("pprof HTTP server is not running — enable pprof HTTP first")}
+			return pprofActionMsg{
+				Kind: pprofKindGoTool,
+				Err:  errors.New("pprof HTTP server is not running — enable pprof HTTP first"),
+			}
 		}
 		heapURL := strings.TrimRight(serverURL, "/") + "/heap"
 		cmd := exec.Command("go", "tool", "pprof", "-http="+uiAddr, heapURL)
 		if err := cmd.Start(); err != nil {
-			return pprofActionMsg{Kind: pprofKindGoTool, Err: fmt.Errorf("go tool pprof: %w (is Go toolchain in PATH?)", err)}
+			return pprofActionMsg{
+				Kind: pprofKindGoTool,
+				Err:  fmt.Errorf("go tool pprof: %w (is Go toolchain in PATH?)", err),
+			}
 		}
 		url := "http://" + uiAddr
-		return pprofActionMsg{Kind: pprofKindGoTool, Text: "go pprof UI started: " + url + " (source: " + heapURL + ")"}
+		return pprofActionMsg{
+			Kind: pprofKindGoTool,
+			Text: "go pprof UI started: " + url + " (source: " + heapURL + ")",
+		}
 	}
 }
 
@@ -1686,7 +2130,14 @@ func (m *InspectorModel) exportLogCmd() tea.Cmd {
 		defer func() { _ = f.Close() }()
 
 		for _, l := range logs {
-			_, _ = fmt.Fprintf(f, "[%s] %s: %s (count: %d)\n", l.Timestamp.Format(time.RFC3339), l.Type, l.Content, l.Count)
+			_, _ = fmt.Fprintf(
+				f,
+				"[%s] %s: %s (count: %d)\n",
+				l.Timestamp.Format(time.RFC3339),
+				l.Type,
+				l.Content,
+				l.Count,
+			)
 		}
 
 		return notifications.AddMsg{
@@ -1705,15 +2156,28 @@ func (m *InspectorModel) openGoToolPprofLiveCPUCmd() tea.Cmd {
 	secs := strconv.Itoa(max(1, m.pprof.CPUCaptureSecs))
 	return func() tea.Msg {
 		if strings.TrimSpace(serverURL) == "" {
-			return pprofActionMsg{Kind: pprofKindGoTool, Err: errors.New("pprof HTTP server is not running — enable pprof HTTP first")}
+			return pprofActionMsg{
+				Kind: pprofKindGoTool,
+				Err:  errors.New("pprof HTTP server is not running — enable pprof HTTP first"),
+			}
 		}
 		profileURL := strings.TrimRight(serverURL, "/") + "/profile?seconds=" + secs
 		cmd := exec.Command("go", "tool", "pprof", "-http="+uiAddr, profileURL)
 		if err := cmd.Start(); err != nil {
-			return pprofActionMsg{Kind: pprofKindGoTool, Err: fmt.Errorf("go tool pprof: %w (is Go toolchain in PATH?)", err)}
+			return pprofActionMsg{
+				Kind: pprofKindGoTool,
+				Err:  fmt.Errorf("go tool pprof: %w (is Go toolchain in PATH?)", err),
+			}
 		}
 		url := "http://" + uiAddr
-		return pprofActionMsg{Kind: pprofKindGoTool, Text: fmt.Sprintf("go pprof UI started: %s (capturing %ss CPU profile — UI appears when done)", url, secs)}
+		return pprofActionMsg{
+			Kind: pprofKindGoTool,
+			Text: fmt.Sprintf(
+				"go pprof UI started: %s (capturing %ss CPU profile — UI appears when done)",
+				url,
+				secs,
+			),
+		}
 	}
 }
 

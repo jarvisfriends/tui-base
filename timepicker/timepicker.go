@@ -46,6 +46,7 @@ type TimePickerModel struct {
 
 	ActiveStyle   lipgloss.Style
 	InactiveStyle lipgloss.Style
+	HelpStyle     lipgloss.Style
 }
 
 func New(d time.Duration) *TimePickerModel {
@@ -62,6 +63,8 @@ func New(d time.Duration) *TimePickerModel {
 			Foreground(lipgloss.Color("240")).
 			Padding(0, 1).
 			Border(lipgloss.RoundedBorder()),
+		HelpStyle: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")),
 	}
 }
 
@@ -145,7 +148,13 @@ func (m *TimePickerModel) increment(dir int) {
 			}
 		}
 	}
-	m.Duration = time.Duration(hours)*time.Hour + time.Duration(minutes)*time.Minute + time.Duration(seconds)*time.Second
+	m.Duration = time.Duration(
+		hours,
+	)*time.Hour + time.Duration(
+		minutes,
+	)*time.Minute + time.Duration(
+		seconds,
+	)*time.Second
 }
 
 func (m *TimePickerModel) View() tea.View {
@@ -173,7 +182,9 @@ func (m *TimePickerModel) View() tea.View {
 		styleFor(FieldSeconds).Render(sStr),
 	)
 
-	help := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).MarginTop(1).Render("↑/↓: Adjust • ←/→: Select • Enter: Save")
+	help := m.HelpStyle.
+		MarginTop(1).
+		Render("↑/↓: Adjust • ←/→: Select • Enter: Save")
 
 	return tea.NewView(lipgloss.JoinVertical(lipgloss.Center, title, body, help))
 }

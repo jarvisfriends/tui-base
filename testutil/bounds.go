@@ -22,7 +22,12 @@ func AssertBounds(t *testing.T, m tea.Model, width, height int) {
 	// 3. Verify total height
 	actualHeight := lipgloss.Height(content)
 	if actualHeight > height {
-		t.Errorf("View height overflow: got %d, max allowed %d\nContent:\n%s", actualHeight, height, content)
+		t.Errorf(
+			"View height overflow: got %d, max allowed %d\nContent:\n%s",
+			actualHeight,
+			height,
+			content,
+		)
 	}
 
 	// 4. Verify width of every line
@@ -30,7 +35,13 @@ func AssertBounds(t *testing.T, m tea.Model, width, height int) {
 	for i, line := range lines {
 		actualWidth := lipgloss.Width(line)
 		if actualWidth > width {
-			t.Errorf("Line %d width overflow: got %d, max allowed %d\nLine content: %q", i, actualWidth, width, line)
+			t.Errorf(
+				"Line %d width overflow: got %d, max allowed %d\nLine content: %q",
+				i,
+				actualWidth,
+				width,
+				line,
+			)
 		}
 	}
 }

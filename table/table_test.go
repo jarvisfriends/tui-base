@@ -29,7 +29,12 @@ func sampleRows() []Row {
 func TestNumericSortDesc(t *testing.T) {
 	m := New(sampleCols(), WithSort(1, false))
 	m.SetRows(sampleRows())
-	if got := []string{m.rows[0].Key, m.rows[1].Key, m.rows[2].Key}; got[0] != "a" || got[1] != "c" || got[2] != "b" {
+	if got := []string{
+		m.rows[0].Key,
+		m.rows[1].Key,
+		m.rows[2].Key,
+	}; got[0] != "a" || got[1] != "c" ||
+		got[2] != "b" {
 		t.Fatalf("desc numeric sort wrong: %v", got)
 	}
 	if r, ok := m.SelectedRow(); !ok || r.Key != "a" {
@@ -100,11 +105,20 @@ func TestKeyboardSortKey(t *testing.T) {
 		t.Errorf("sort key should not return a command, got %T", cmd)
 	}
 	if !m.sortActive || m.sortCol != 0 || !m.sortAsc {
-		t.Fatalf("'s' should sort column 0 ascending; got active=%v col=%d asc=%v", m.sortActive, m.sortCol, m.sortAsc)
+		t.Fatalf(
+			"'s' should sort column 0 ascending; got active=%v col=%d asc=%v",
+			m.sortActive,
+			m.sortCol,
+			m.sortAsc,
+		)
 	}
 	m.Update(tea.KeyPressMsg{Text: "s"})
 	if !m.sortActive || m.sortAsc {
-		t.Fatalf("second 's' should flip to descending; got active=%v asc=%v", m.sortActive, m.sortAsc)
+		t.Fatalf(
+			"second 's' should flip to descending; got active=%v asc=%v",
+			m.sortActive,
+			m.sortAsc,
+		)
 	}
 }
 
@@ -115,7 +129,12 @@ func TestKeyboardSortReordersRows(t *testing.T) {
 	m.SetRows(sampleRows())
 	m.Update(tea.KeyPressMsg{Text: "s"}) // sort column 0 (Name) ascending
 	if m.rows[0].Key != "a" || m.rows[2].Key != "c" {
-		t.Fatalf("ascending name sort wrong order: %s,%s,%s", m.rows[0].Key, m.rows[1].Key, m.rows[2].Key)
+		t.Fatalf(
+			"ascending name sort wrong order: %s,%s,%s",
+			m.rows[0].Key,
+			m.rows[1].Key,
+			m.rows[2].Key,
+		)
 	}
 }
 
@@ -134,11 +153,20 @@ func TestMouseHeaderSort(t *testing.T) {
 
 	m.HandleClick(x, m.headerY)
 	if !m.sortActive || m.sortCol != 1 || !m.sortAsc {
-		t.Fatalf("header click should sort col 1 ascending; got active=%v col=%d asc=%v", m.sortActive, m.sortCol, m.sortAsc)
+		t.Fatalf(
+			"header click should sort col 1 ascending; got active=%v col=%d asc=%v",
+			m.sortActive,
+			m.sortCol,
+			m.sortAsc,
+		)
 	}
 	m.HandleClick(x, m.headerY)
 	if !m.sortActive || m.sortAsc {
-		t.Fatalf("second header click should be descending; got active=%v asc=%v", m.sortActive, m.sortAsc)
+		t.Fatalf(
+			"second header click should be descending; got active=%v asc=%v",
+			m.sortActive,
+			m.sortAsc,
+		)
 	}
 	m.HandleClick(x, m.headerY)
 	if m.sortActive {
@@ -208,11 +236,21 @@ func TestColumnBoundariesAreScreenColumns(t *testing.T) {
 	}
 	for _, x := range m.colBoundaries {
 		if x < 0 || x >= len(topRunes) {
-			t.Fatalf("boundary x=%d out of range for stripped top border (len %d): %q", x, len(topRunes), top)
+			t.Fatalf(
+				"boundary x=%d out of range for stripped top border (len %d): %q",
+				x,
+				len(topRunes),
+				top,
+			)
 		}
 		if topRunes[x] != junction {
-			t.Errorf("boundary x=%d lands on %q in the visual top border, want junction glyph %q: %q",
-				x, topRunes[x], junction, top)
+			t.Errorf(
+				"boundary x=%d lands on %q in the visual top border, want junction glyph %q: %q",
+				x,
+				topRunes[x],
+				junction,
+				top,
+			)
 		}
 	}
 }
@@ -247,15 +285,120 @@ func TestColumnBoundariesTrackBorderStyle(t *testing.T) {
 			_ = m.View(theme.Active(), 1)
 
 			if len(m.colBoundaries) != len(sampleCols())-1 {
-				t.Fatalf("border=%s: expected %d column boundaries, got %d (junction glyph %q not found in rendered top border)",
-					name, len(sampleCols())-1, len(m.colBoundaries), b.MiddleTop)
+				t.Fatalf(
+					"border=%s: expected %d column boundaries, got %d (junction glyph %q not found in rendered top border)",
+					name,
+					len(sampleCols())-1,
+					len(m.colBoundaries),
+					b.MiddleTop,
+				)
 			}
 
 			x := m.colBoundaries[0] + 1
 			m.HandleClick(x, m.headerY)
 			if !m.sortActive || m.sortCol != 1 || !m.sortAsc {
-				t.Fatalf("border=%s: header click should sort col 1 ascending; got active=%v col=%d asc=%v",
-					name, m.sortActive, m.sortCol, m.sortAsc)
+				t.Fatalf(
+					"border=%s: header click should sort col 1 ascending; got active=%v col=%d asc=%v",
+					name,
+					m.sortActive,
+					m.sortCol,
+					m.sortAsc,
+				)
+			}
+		})
+	}
+}
+
+// TestBorderTogglesCollapseGeometryCorrectly sweeps tableBorderTop/
+// tableBorderBottom/tableBorderHeader — the knobs a themed-border feature
+// would flip to remove the table's border entirely — and checks that
+// SetSize's pageSize budget, View's headerY/dataStartY, and column-click
+// hit-testing all shrink to match rather than assuming a border row is
+// always drawn. Before this test the row math (SetSize's tableChromeRows,
+// View's headerY/dataStartY, and the top-border-row scan in columnAtX) was
+// a fixed constant that silently mis-sized the table (or broke column-click
+// sort entirely) the moment a theme disabled the border.
+func TestBorderTogglesCollapseGeometryCorrectly(t *testing.T) {
+	originalTop, originalBottom, originalHeader := tableBorderTop, tableBorderBottom, tableBorderHeader
+	t.Cleanup(func() {
+		tableBorderTop, tableBorderBottom, tableBorderHeader = originalTop, originalBottom, originalHeader
+	})
+
+	cases := []struct {
+		name                string
+		top, bottom, header bool
+		wantColBoundaries   bool // whether a visible junction row exists to click
+	}{
+		{"all borders on (default)", true, true, true, true},
+		{"top border off, separator remains", false, true, true, true},
+		{"header separator off, top border remains", true, true, false, true},
+		{"top and header both off", false, true, false, false},
+		{"fully borderless", false, false, false, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tableBorderTop, tableBorderBottom, tableBorderHeader = tc.top, tc.bottom, tc.header
+
+			m := New(sampleCols())
+			m.SetRows(sampleRows())
+			m.SetSize(60, 20)
+
+			wantPageSize := max(20-tableChromeRows(), 3)
+			if m.pageSize != wantPageSize {
+				t.Errorf(
+					"pageSize = %d, want %d (tableChromeRows=%d)",
+					m.pageSize,
+					wantPageSize,
+					tableChromeRows(),
+				)
+			}
+
+			// originY=0 so headerY/dataStartY (page-relative, per HandleClick's
+			// contract) index directly into the rendered lines below.
+			out := m.View(theme.Active(), 0)
+			lines := strings.Split(out, "\n")
+
+			if m.headerY < 0 || m.headerY >= len(lines) {
+				t.Fatalf("headerY=%d out of range (%d lines)", m.headerY, len(lines))
+			}
+			headerLine := ansi.Strip(lines[m.headerY])
+			if !strings.Contains(headerLine, sampleCols()[0].Title) {
+				t.Errorf("headerY=%d does not land on the header row: %q", m.headerY, headerLine)
+			}
+
+			if m.dataStartY < 0 || m.dataStartY >= len(lines) {
+				t.Fatalf("dataStartY=%d out of range (%d lines)", m.dataStartY, len(lines))
+			}
+			dataLine := ansi.Strip(lines[m.dataStartY])
+			if !strings.Contains(dataLine, "Apple") && !strings.Contains(dataLine, "Banana") &&
+				!strings.Contains(dataLine, "Cherry") {
+				t.Errorf("dataStartY=%d does not land on a data row: %q", m.dataStartY, dataLine)
+			}
+
+			hasBoundaries := len(m.colBoundaries) > 0
+			if hasBoundaries != tc.wantColBoundaries {
+				t.Errorf(
+					"colBoundaries present = %v, want %v (got %v)",
+					hasBoundaries,
+					tc.wantColBoundaries,
+					m.colBoundaries,
+				)
+			}
+
+			// Header click either sorts (when a junction row exists to
+			// locate columns) or is a harmless no-op — never a panic or a
+			// wrong-column sort.
+			if hasBoundaries {
+				x := m.colBoundaries[0] + 1
+				m.HandleClick(x, m.headerY)
+				if !m.sortActive || m.sortCol != 1 {
+					t.Errorf(
+						"header click should sort col 1; got active=%v col=%d",
+						m.sortActive,
+						m.sortCol,
+					)
+				}
 			}
 		})
 	}

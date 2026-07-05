@@ -162,7 +162,13 @@ func TestComputeTabWindow(t *testing.T) {
 	// All tabs fit: full range, no arrows.
 	first, last, sl, sr := computeTabWindow(widths, 60, 2, 3, 3)
 	if first != 0 || last != 4 || sl || sr {
-		t.Errorf("fit-all: got first=%d last=%d showLeft=%v showRight=%v; want 0,4,false,false", first, last, sl, sr)
+		t.Errorf(
+			"fit-all: got first=%d last=%d showLeft=%v showRight=%v; want 0,4,false,false",
+			first,
+			last,
+			sl,
+			sr,
+		)
 	}
 
 	// Overflow with active at the far left: no left arrow, right arrow shown,
@@ -222,10 +228,19 @@ func TestTabsHorizontalScrollNoWrap(t *testing.T) {
 		tabs.ActiveIndex = active
 		v := tabs.View()
 		if got := lipgloss.Height(v.Content); got != singleTabHeight {
-			t.Errorf("active=%d: row height %d; want %d (the row wrapped instead of scrolling)", active, got, singleTabHeight)
+			t.Errorf(
+				"active=%d: row height %d; want %d (the row wrapped instead of scrolling)",
+				active,
+				got,
+				singleTabHeight,
+			)
 		}
 		if !strings.Contains(v.Content, tabs.Pages[active].Title) {
-			t.Errorf("active=%d: active tab %q not visible in scrolled row", active, tabs.Pages[active].Title)
+			t.Errorf(
+				"active=%d: active tab %q not visible in scrolled row",
+				active,
+				tabs.Pages[active].Title,
+			)
 		}
 	}
 }

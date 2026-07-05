@@ -42,6 +42,47 @@ const doubleClickWindow = 450 * time.Millisecond
 // glyphs differ from "┬") is sufficient; no other code needs updating.
 var tableBorder = lipgloss.RoundedBorder()
 
+// tableBorderTop, tableBorderBottom, and tableBorderHeader mirror
+// ltable.Table's own BorderTop/BorderBottom/BorderHeader toggles (default
+// on, matching today's behavior). A theme that removes the table's border
+// entirely sets tableBorderTop/tableBorderBottom to false; SetSize, View,
+// and columnAtX all derive their row math from these three vars instead of
+// a hardcoded row count, so the layout and hit-testing collapse to the
+// correct smaller geometry rather than leaving a phantom gap, losing a data
+// row, or (for columnAtX) silently breaking column-click sort because it
+// kept scanning a border row that no longer exists.
+var (
+	tableBorderTop    = true
+	tableBorderBottom = true
+	tableBorderHeader = true
+)
+
+// tableChromeRows returns the number of non-data rows View() draws around
+// the data rows for the current border toggles: the header text row and the
+// external footer line are always present; the top border and the
+// header/data separator each add one more row when enabled. (The bottom
+// border row is not counted here, matching the original fixed "4" this
+// replaces — SetSize's budget was never meant to include it.)
+func tableChromeRows() int {
+	n := 2 // header text row + external footer line
+	if tableBorderTop {
+		n++
+	}
+	if tableBorderHeader {
+		n++
+	}
+	return n
+}
+
+// tableHeaderRowOffset returns how many rows below originY the header text
+// row sits: one if a top border is drawn, zero otherwise.
+func tableHeaderRowOffset() int {
+	if tableBorderTop {
+		return 1
+	}
+	return 0
+}
+
 // Column describes one column header.
 type Column struct {
 	Title  string
@@ -196,7 +237,7 @@ func (m *TableModel) SetRows(rows []Row) {
 // derived from height unless WithPageSize fixed it.
 func (m *TableModel) SetSize(w, h int) {
 	m.width = w
-	m.pageSize = max(h-4, 3) // reserve header, rule, footer
+	m.pageSize = max(h-tableChromeRows(), 3)
 	m.clampCursor()
 }
 
@@ -494,6 +535,9 @@ func (m *TableModel) View(c *theme.AppStyle, originY int) string {
 
 	tbl := ltable.New().
 		Border(tableBorder).
+		BorderTop(tableBorderTop).
+		BorderBottom(tableBorderBottom).
+		BorderHeader(tableBorderHeader).
 		BorderStyle(lipgloss.NewStyle().Foreground(c.Border)).
 		Wrap(false).
 		Width(m.width).
@@ -517,28 +561,51 @@ func (m *TableModel) View(c *theme.AppStyle, originY int) string {
 
 	out := tbl.String()
 
-	// Record geometry: top border (originY), header (originY+1), header
-	// separator (originY+2), data rows from originY+3. The border's top/bottom
-	// edges are always exactly one row tall in lipgloss regardless of border
-	// style, so these row offsets hold for any tableBorder; only the column
-	// junction glyph below varies with the border style.
-	m.headerY = originY + 1
-	m.dataStartY = originY + 3
+	// Record geometry. The header text row sits tableHeaderRowOffset() rows
+	// below originY (1 if a top border is drawn, 0 otherwise); data rows
+	// start one row after that (the header row itself), plus one more if a
+	// header/data separator row is drawn.
+	headerOffset := tableHeaderRowOffset()
+	m.headerY = originY + headerOffset
+	m.dataStartY = m.headerY + 1
+	if tableBorderHeader {
+		m.dataStartY++
+	}
+
+	// Column boundaries are read from whichever rendered row actually
+	// carries the column-junction glyphs: the top border row if one is
+	// drawn, else the header/data separator row if one is drawn, else there
+	// is no visual row to read and column-click sort is unavailable in this
+	// configuration (colBoundaries stays empty).
+	junctionRow := -1
+	var junction []rune
+	switch {
+	case tableBorderTop:
+		junctionRow = 0
+		junction = []rune(tableBorder.MiddleTop)
+	case tableBorderHeader:
+		junctionRow = headerOffset + 1
+		junction = []rune(tableBorder.Middle)
+	}
 	m.colBoundaries = m.colBoundaries[:0]
-	junction := []rune(tableBorder.MiddleTop)
-	if lines := strings.Split(out, "\n"); len(lines) > 0 && len(junction) > 0 {
-		// BorderStyle colors the top border, so the raw line carries ANSI SGR
-		// sequences interleaved with the border runes. Strip them first —
-		// otherwise the rune index recorded here (and later compared against
-		// real screen-column mouse coordinates in HandleClick/columnAtX) is
-		// offset by however many escape-sequence runes preceded it, silently
-		// misaligning every column boundary whenever color output is active.
-		top := []rune(ansi.Strip(lines[0]))
+	if lines := strings.Split(
+		out,
+		"\n",
+	); junctionRow >= 0 && junctionRow < len(lines) &&
+		len(junction) > 0 {
+		// BorderStyle colors the border/separator rows, so the raw line
+		// carries ANSI SGR sequences interleaved with the border runes.
+		// Strip them first — otherwise the rune index recorded here (and
+		// later compared against real screen-column mouse coordinates in
+		// HandleClick/columnAtX) is offset by however many escape-sequence
+		// runes preceded it, silently misaligning every column boundary
+		// whenever color output is active.
+		junctionLine := []rune(ansi.Strip(lines[junctionRow]))
 		// Skip the first and last rune: some border presets (ASCII, Markdown)
 		// reuse the same glyph for corners and column junctions, and the
 		// corners must never be mistaken for a column boundary.
-		for x := 1; x < len(top)-1; x++ {
-			if top[x] == junction[0] {
+		for x := 1; x < len(junctionLine)-1; x++ {
+			if junctionLine[x] == junction[0] {
 				m.colBoundaries = append(m.colBoundaries, x)
 			}
 		}

@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jarvisfriends/tui-base/common"
+
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -133,11 +135,44 @@ type Manager struct {
 	enabled     bool
 	nextID      int64
 	persistPath string // empty means no file persistence
+
+	actions map[string]ActionHandler
 }
 
 // NewManager creates a Manager with notifications enabled.
 func NewManager() *Manager {
 	return &Manager{enabled: true}
+}
+
+// ActionHandler responds to an action key pressed while a notification is
+// selected in the history panel. It runs on the UI goroutine; do any real
+// work in the returned tea.Cmd (which may be nil).
+type ActionHandler func(n Notification) tea.Cmd
+
+// OnAction registers an application-level action handler for key (as reported
+// by tea.KeyPressMsg.String(), e.g. "o" or "ctrl+r"). While the notification
+// history panel is open, pressing the key invokes the handler with the
+// currently selected notification (E-4). Passing nil removes the handler.
+// Built-in panel keys (navigate, select, dismiss, close) take precedence.
+func (m *Manager) OnAction(key string, fn ActionHandler) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if fn == nil {
+		delete(m.actions, key)
+		return
+	}
+	if m.actions == nil {
+		m.actions = make(map[string]ActionHandler)
+	}
+	m.actions[key] = fn
+}
+
+// Action returns the handler registered for key, if any.
+func (m *Manager) Action(key string) (ActionHandler, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	fn, ok := m.actions[key]
+	return fn, ok
 }
 
 // Enabled reports whether new notifications are accepted.
@@ -172,7 +207,12 @@ func (m *Manager) Add(content string, sev Severity, ttl time.Duration) (Notifica
 // AddWithOptions inserts a notification and returns a Cmd that expires its toast after ttl.
 // When opts.Key is set, any earlier notifications with the same key are replaced so only the
 // latest state remains visible in toast/history.
-func (m *Manager) AddWithOptions(content string, sev Severity, ttl time.Duration, opts AddOptions) (Notification, tea.Cmd) {
+func (m *Manager) AddWithOptions(
+	content string,
+	sev Severity,
+	ttl time.Duration,
+	opts AddOptions,
+) (Notification, tea.Cmd) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.enabled {
@@ -399,13 +439,21 @@ func (m *Manager) Load(dir string) error {
 	return nil
 }
 
-// sortUnsafe sorts items: undismissed first, then newest first. Caller holds mu.
+// sortUnsafe sorts items: undismissed first, then newest first, with the
+// monotonic ID as the tie-break. The tie-break matters: two notifications
+// created in the same clock tick (common on Windows, whose wall clock is
+// coarser than Linux's) would otherwise keep insertion order while platforms
+// with finer clocks sort them newest-first — the ordering must be identical
+// everywhere. Caller holds mu.
 func (m *Manager) sortUnsafe() {
 	sort.SliceStable(m.items, func(i, j int) bool {
 		if m.items[i].Dismissed != m.items[j].Dismissed {
 			return !m.items[i].Dismissed
 		}
-		return m.items[i].CreatedAt.After(m.items[j].CreatedAt)
+		if !m.items[i].CreatedAt.Equal(m.items[j].CreatedAt) {
+			return m.items[i].CreatedAt.After(m.items[j].CreatedAt)
+		}
+		return m.items[i].ID > m.items[j].ID
 	})
 }
 
@@ -436,11 +484,12 @@ func (m *Manager) persistUnsafe() {
 	_ = m.writeFileLocked(m.persistPath)
 }
 
-// writeFileLocked writes items as JSON to path. Caller holds mu.
+// writeFileLocked writes items as JSON to path. Caller holds mu. The write is
+// atomic (temp file + rename) so a crash mid-write cannot truncate history.
 func (m *Manager) writeFileLocked(path string) error {
 	data, err := json.Marshal(m.items)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Clean(path), data, 0o600)
+	return common.WriteFileAtomic(path, data, 0o600)
 }

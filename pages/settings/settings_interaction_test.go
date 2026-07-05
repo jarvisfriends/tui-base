@@ -47,7 +47,10 @@ func TestOverviewMouseWheelMovesCursorAndScrollWindow(t *testing.T) {
 		t.Fatalf("cursor at bottom = %d; want %d", m.cursor, len(m.items)-1)
 	}
 	if m.scrollTop <= 0 {
-		t.Fatalf("expected scrollTop to advance once cursor reaches lower rows; got %d", m.scrollTop)
+		t.Fatalf(
+			"expected scrollTop to advance once cursor reaches lower rows; got %d",
+			m.scrollTop,
+		)
 	}
 
 	before := m.cursor
@@ -112,7 +115,12 @@ func TestScrollKeepsCursorVisible(t *testing.T) {
 		t.Fatalf("cursor entry %d before scroll top %d", layout.cursorEntry, m.scrollTop)
 	}
 	if layout.cursorEntry >= m.scrollTop+layout.visibleCount {
-		t.Fatalf("cursor entry %d after visible window [%d,%d)", layout.cursorEntry, m.scrollTop, m.scrollTop+layout.visibleCount)
+		t.Fatalf(
+			"cursor entry %d after visible window [%d,%d)",
+			layout.cursorEntry,
+			m.scrollTop,
+			m.scrollTop+layout.visibleCount,
+		)
 	}
 }
 
@@ -183,7 +191,7 @@ func TestKeyRecorderValidation(t *testing.T) {
 		t.Fatalf("expected error message to contain 'duplicate key', got %q", kr.Error)
 	}
 
-	_, _ = kr.Update(tea.KeyPressMsg{Text: keyCtrlS})
+	_, _ = kr.Update(tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
 	if kr.Done {
 		t.Fatal("expected Done to be false when there is a validation error")
 	}
@@ -205,7 +213,7 @@ func TestKeyRecorderValidation(t *testing.T) {
 		t.Fatalf("expected error message to contain 'already assigned to', got %q", krNP.Error)
 	}
 
-	_, _ = krNP.Update(tea.KeyPressMsg{Text: keyCtrlS})
+	_, _ = krNP.Update(tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
 	if krNP.Done {
 		t.Fatal("expected Done to be false when there is a conflict")
 	}
@@ -226,7 +234,7 @@ func TestKeyRecorderValidation(t *testing.T) {
 		t.Fatalf("expected no error for non-conflicting key, got %q", krNP.Error)
 	}
 
-	_, _ = krNP.Update(tea.KeyPressMsg{Text: keyCtrlS})
+	_, _ = krNP.Update(tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
 	if !krNP.Done {
 		t.Fatal("expected Done to be true when saving non-conflicting key")
 	}

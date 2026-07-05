@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type UserNotificationOverlay struct {
@@ -45,9 +46,11 @@ func NewUserNotificationOverlay() *UserNotificationOverlay {
 
 func (m *UserNotificationOverlay) SetWidth(w int)                            { m.width = w }
 func (m *UserNotificationOverlay) SetNotifManager(nm *notifications.Manager) { m.notifMgr = nm }
-func (m *UserNotificationOverlay) ShouldShow() bool                          { return m.visible || m.animating }
-func (m *UserNotificationOverlay) Visible() bool                             { return m.visible }
-func (m *UserNotificationOverlay) ShowHistory() bool                         { return m.showHistory }
+
+func (m *UserNotificationOverlay) ShouldShow() bool { return m.visible || m.animating }
+func (m *UserNotificationOverlay) Visible() bool    { return m.visible }
+
+func (m *UserNotificationOverlay) ShowHistory() bool { return m.showHistory }
 
 func (m *UserNotificationOverlay) ForceToggleVisibility() {
 	m.visible = !m.visible
@@ -159,21 +162,20 @@ func (m *UserNotificationOverlay) RenderHistoryOverlay(maxW, maxH int) string {
 		m.historyCursor = activeCount - 1
 	}
 
-	panelW := min(84, maxW-2)
-	if panelW < 20 {
-		panelW = maxW
-	}
-	innerW := panelW - 2
+	// The whole panel sits on the main app background (it reads as part of the
+	// page, not the status bar). Backgrounds do not cascade through nested
+	// lipgloss renders, so every segment style must carry it — onBg states it
+	// once and every style below derives from it.
+	onBg := func(s lipgloss.Style) lipgloss.Style { return s.Background(c.Bg) }
 
-	headerStyle := c.Styles.FilterDim.Bold(true).Foreground(c.Styles.Title.GetForeground()).Background(c.StatusBg)
-	headerText := fmt.Sprintf(" Notifications (%d active", activeCount)
+	titleText := fmt.Sprintf("🔔 Notifications (%d active", activeCount)
 	if pendingCount > 0 {
-		headerText += fmt.Sprintf(", %d pending", pendingCount)
+		titleText += fmt.Sprintf(", %d pending", pendingCount)
 	}
-	headerText += " ) "
-	header := headerStyle.Width(innerW).Render(headerText)
+	titleText += ")"
+	footerText := "↑/↓ navigate • Enter open/dismiss • d dismiss all • Esc close"
 
-	maxRows := max(maxH-5, 1)
+	maxRows := max(maxH-c.Styles.OverlayBorder.GetVerticalFrameSize()-historyOverlayChromeRows, 1)
 	start := 0
 	if activeCount > maxRows {
 		start = max(m.historyCursor-maxRows+1, 0)
@@ -183,54 +185,89 @@ func (m *UserNotificationOverlay) RenderHistoryOverlay(maxW, maxH int) string {
 		}
 	}
 	end := min(start+maxRows, activeCount)
-	var rows []string
+
+	// First pass: plain row parts, so the panel can size itself to fit
+	// everything it needs before any truncation kicks in.
+	type rowParts struct {
+		badge, content, age string
+		severity            notifications.Severity
+	}
+	parts := make([]rowParts, 0, end-start)
+	needW := max(lipgloss.Width(titleText), lipgloss.Width(footerText))
 	for i := start; i < end; i++ {
 		n := active[i]
-		ageStr := formatAge(time.Since(n.CreatedAt))
-		sevStyle := c.Styles.FilterDim.Foreground(lipgloss.Color(m.colorForSeverity(n.Severity))).Bold(true)
-		sevStyle = sevStyle.Background(c.StatusBg)
-		badge := sevStyle.Render("[" + n.Severity.Badge() + "]")
-
-		pendingLabel := ""
+		content := n.Content
 		if n.Pending {
-			pendingLabel = " [pending]"
+			content += " [pending]"
 		}
-		content := n.Content + pendingLabel
-		contentMaxW := innerW - lipgloss.Width(badge) - lipgloss.Width(ageStr) - 2
+		p := rowParts{
+			badge:    "[" + n.Severity.Badge() + "]",
+			content:  content,
+			age:      formatAge(time.Since(n.CreatedAt)),
+			severity: n.Severity,
+		}
+		parts = append(parts, p)
+		rowNeed := lipgloss.Width(p.badge) + lipgloss.Width(p.content) + lipgloss.Width(p.age) +
+			historyRowLeadingSpaces + historyRowMinGap
+		needW = max(needW, rowNeed)
+	}
+
+	// Fit-to-content width, capped by the available screen space.
+	frameW := c.Styles.OverlayBorder.GetHorizontalFrameSize()
+	innerW := min(needW, max(maxW-historyOverlayMinMarginX*2-frameW, 20))
+	panelW := innerW + frameW
+
+	// Info-modal chrome: centered title, full-width rules, centered footer.
+	title := onBg(c.Styles.Title.Bold(true)).Width(innerW).Align(lipgloss.Center).Render(titleText)
+	sep := onBg(c.Styles.Title).Render(strings.Repeat("─", innerW))
+	footer := onBg(c.Styles.Subtitle).Width(innerW).Align(lipgloss.Center).Render(footerText)
+
+	var rows []string
+	for idx, p := range parts {
+		// The cursor row is one continuous selection-background bar, matching
+		// the sidebar, tables, and settings lists.
+		rowBase := onBg(c.Styles.Row)
+		contentFg := c.Styles.StatusBase.GetForeground()
+		ageFg := c.Styles.Subtitle.GetForeground()
+		if start+idx == m.historyCursor {
+			rowBase = lipgloss.NewStyle().Background(c.SelectionBg)
+			contentFg = c.SelectionFg
+			ageFg = c.SelectionFg
+		}
+		badgeStyle := rowBase.
+			Foreground(lipgloss.Color(m.colorForSeverity(p.severity))).
+			Bold(true)
+
+		content := p.content
+		contentMaxW := innerW - lipgloss.Width(p.badge) - lipgloss.Width(p.age) -
+			historyRowLeadingSpaces
 		if contentMaxW > 1 && lipgloss.Width(content) > contentMaxW {
 			runes := []rune(content)
-			content = string(runes[:contentMaxW-1]) + "..."
+			content = string(runes[:contentMaxW-historyEllipsisReserve]) + "..."
 		}
 
-		rowFg := c.Styles.StatusBase.GetForeground()
-		if i == m.historyCursor {
-			rowFg = c.Styles.SelectedItem.GetForeground()
-		}
-
-		rowStyle := c.Styles.Row.Background(c.StatusBg)
-		contentStyle := c.Styles.Row.Background(c.StatusBg).Foreground(rowFg)
-		ageStyle := c.Styles.Row.Background(c.StatusBg).Foreground(c.Styles.Subtitle.GetForeground())
-
-		contentPart := contentStyle.Render(" " + content)
-		agePart := ageStyle.Render(" " + ageStr)
-		gapW := max(innerW-lipgloss.Width(badge)-lipgloss.Width(contentPart)-lipgloss.Width(agePart), 0)
-		gap := rowStyle.Render(strings.Repeat(" ", gapW))
-		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Left, badge, contentPart, gap, agePart))
+		leadIn := badgeStyle.Render(p.badge) + rowBase.Foreground(contentFg).Render(" "+content)
+		rows = append(rows, leadIn+lipgloss.PlaceHorizontal(
+			innerW-lipgloss.Width(leadIn),
+			lipgloss.Right,
+			rowBase.Foreground(ageFg).Render(" "+p.age),
+			lipgloss.WithWhitespaceStyle(rowBase),
+		))
 	}
 
 	if len(rows) == 0 {
-		emptyStyle := c.Styles.FilterDim.Width(innerW)
+		emptyStyle := onBg(c.Styles.FilterDim).Width(innerW)
 		rows = append(rows, emptyStyle.Render("  No notifications"))
 	}
 
-	footerStyle := c.Styles.FilterDim.Background(c.StatusBg)
-	footer := footerStyle.Width(innerW).Render(" up/down navigate  Enter open/dismiss  d dismiss all  Esc close")
-
-	inner := lipgloss.JoinVertical(lipgloss.Left, header, strings.Join(rows, "\n"), footer)
-	borderStyle := c.Styles.OverlayBorder.
-		Border(lipgloss.RoundedBorder()).
-		BorderBackground(c.StatusBg).
-		Background(c.StatusBg)
+	inner := lipgloss.JoinVertical(lipgloss.Left, title, sep, strings.Join(rows, "\n"), sep, footer)
+	// c.Styles.OverlayBorder already carries the border config that innerW
+	// and maxRows above measured via GetHorizontalFrameSize()/
+	// GetVerticalFrameSize() — reused here so the two stay in sync. The accent
+	// border matches the info modal's frame.
+	borderStyle := onBg(c.Styles.OverlayBorder).
+		BorderBackground(c.Bg).
+		BorderForeground(c.Accent)
 	return borderStyle.Width(panelW).Render(inner)
 }
 
@@ -257,6 +294,30 @@ func formatAge(d time.Duration) string {
 	}
 }
 
+const (
+	// historyOverlayMinMarginX keeps breathing room between the history
+	// overlay panel and the screen edge on each side.
+	historyOverlayMinMarginX = 1
+
+	// historyOverlayChromeRows accounts for the chrome lines drawn inside the
+	// border: centered title, two separator rules, and the centered footer
+	// (the info-modal layout). The border's own top/bottom rows are accounted
+	// for separately via c.Styles.OverlayBorder.GetVerticalFrameSize().
+	historyOverlayChromeRows = 4
+
+	// historyRowMinGap is the minimum styled gap kept between a row's content
+	// and its right-aligned age when the panel sizes itself to fit.
+	historyRowMinGap = 2
+
+	// historyRowLeadingSpaces is the one leading space rendered before both
+	// the content and age segments of each notification row.
+	historyRowLeadingSpaces = 2
+
+	// historyEllipsisReserve leaves room to swap the row's last rune for the
+	// truncation ellipsis when content overflows contentMaxW.
+	historyEllipsisReserve = 1
+)
+
 type ClickRegion struct {
 	Start int
 	End   int
@@ -272,7 +333,13 @@ const (
 // RenderStyled composes a full-width status bar and returns its interactive click regions.
 // Every segment is individually styled with Background(StatusBg) so the bar has a consistent
 // background across its full width.
-func RenderStyled(width int, left, right string, colorIndex int, notifEnabled bool, pendingCount int) (string, []ClickRegion) {
+func RenderStyled(
+	width int,
+	left, right string,
+	colorIndex int,
+	notifEnabled bool,
+	pendingCount int,
+) (string, []ClickRegion) {
 	c := theme.Active()
 	fg := c.Styles.StatusBase.GetForeground()
 	if colorIndex >= 0 {
@@ -306,16 +373,23 @@ func RenderStyled(width int, left, right string, colorIndex int, notifEnabled bo
 	lastLineRendered := baseStyle.Render(lastLeftLine)
 	llw := lipgloss.Width(lastLineRendered)
 
-	gap := max(width-llw-rw-spw-npw-ipw, 1)
+	// Truncate the variable-length left text so the right segment and icons
+	// always fit; otherwise the row exceeds the terminal width and the last
+	// icon wraps onto its own line, corrupting the frame.
+	if avail := width - rw - spw - npw - ipw - 1; llw > avail && avail > 0 {
+		lastLineRendered = ansi.Truncate(lastLineRendered, avail, "…")
+		llw = lipgloss.Width(lastLineRendered)
+	}
 
-	lastRow := lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		lastLineRendered,
-		baseStyle.Render(strings.Repeat(" ", gap)),
-		rightRendered,
-		settingsPill,
-		notifPill,
-		infoPill,
+	// Left-aligned help text, right-aligned summary + icon cluster. The gap is
+	// produced by PlaceHorizontal with baseStyle whitespace so the status
+	// background runs unbroken across the full row — no manual gap math.
+	rightCluster := rightRendered + settingsPill + notifPill + infoPill
+	lastRow := lastLineRendered + lipgloss.PlaceHorizontal(
+		width-llw,
+		lipgloss.Right,
+		rightCluster,
+		lipgloss.WithWhitespaceStyle(baseStyle),
 	)
 
 	var rendered string
@@ -324,22 +398,16 @@ func RenderStyled(width int, left, right string, colorIndex int, notifEnabled bo
 	} else {
 		rows := make([]string, 0, len(leftLines))
 		for _, line := range leftLines[:len(leftLines)-1] {
-			lineRendered := baseStyle.Render(line)
-			lw := lipgloss.Width(lineRendered)
-			if pad := max(width-lw, 0); pad > 0 {
-				rows = append(rows, lipgloss.JoinHorizontal(
-					lipgloss.Left,
-					lineRendered,
-					baseStyle.Render(strings.Repeat(" ", pad)),
-				))
-			} else {
-				rows = append(rows, lineRendered)
-			}
+			// Width() pads the row to the full bar width and the padding
+			// inherits the style's background.
+			line = ansi.Truncate(line, width, "…")
+			rows = append(rows, baseStyle.Width(width).Render(line))
 		}
 		rows = append(rows, lastRow)
 		rendered = strings.Join(rows, "\n")
 	}
 
+	gap := max(width-llw-rw-spw-npw-ipw, 0)
 	settingsStart := llw + gap + rw
 	settingsEnd := settingsStart + spw - 1
 	notifStart := settingsEnd + 1

@@ -1,0 +1,25 @@
+name: Feature request
+description: Propose new framework capability or an extension point
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to build?
+      description: >-
+        Describe the app-level goal — extension points get designed from
+        consumer needs (see the Extensibility section of the ROADMAP).
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed shape (optional)
+      description: API sketch, similar prior art, or a Charm library that covers it.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I looked at .github/ROADMAP.md and this is not already tracked
+          required: true

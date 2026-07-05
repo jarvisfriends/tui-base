@@ -6,7 +6,7 @@ package inspector
 //
 // Key bindings (when the Accessibility tab is active):
 //   left/right  switch inspector tab (handled by the parent, not the panel)
-//   up/down     navigate theme list
+//   ↑/↓         navigate theme list
 //   1/2/3       toggle Protanopia / Deuteranopia / Tritanopia filter
 //   d / l       toggle Dark / Light theme inclusion
 //   enter       apply highlighted theme to all pages (settings.ThemeMsg)
@@ -102,14 +102,62 @@ type acPair struct {
 }
 
 var acPairs = []acPair{
-	{"Fg/Bg", func(c *theme.AppStyle) color.Color { return c.Styles.TextOnBg.GetForeground() }, func(c *theme.AppStyle) color.Color { return c.Styles.TextOnBg.GetBackground() }, 4.5, 3.0},
-	{"Muted/Bg", func(c *theme.AppStyle) color.Color { return c.Styles.Subtitle.GetForeground() }, func(c *theme.AppStyle) color.Color { return c.Styles.TextOnBg.GetBackground() }, 3.0, 2.5},
-	{"Accent/Bg", func(c *theme.AppStyle) color.Color { return c.Styles.Title.GetForeground() }, func(c *theme.AppStyle) color.Color { return c.Styles.TextOnBg.GetBackground() }, 3.0, 2.5},
-	{"Sel/SelBg", func(c *theme.AppStyle) color.Color { return c.Styles.SelectedItem.GetForeground() }, func(c *theme.AppStyle) color.Color { return c.Styles.SelectedItem.GetBackground() }, 4.5, 3.0},
-	{"Status", func(c *theme.AppStyle) color.Color { return c.Styles.StatusBase.GetForeground() }, func(c *theme.AppStyle) color.Color { return c.Styles.StatusBase.GetBackground() }, 4.5, 3.0},
-	{"Success/Bg", func(c *theme.AppStyle) color.Color { return c.Styles.Success.GetForeground() }, func(c *theme.AppStyle) color.Color { return c.Styles.TextOnBg.GetBackground() }, 3.0, 2.5},
-	{"Error/Bg", func(c *theme.AppStyle) color.Color { return c.Styles.Error.GetForeground() }, func(c *theme.AppStyle) color.Color { return c.Styles.TextOnBg.GetBackground() }, 3.0, 2.5},
-	{"Warning/Bg", func(c *theme.AppStyle) color.Color { return c.Styles.Warning.GetForeground() }, func(c *theme.AppStyle) color.Color { return c.Styles.TextOnBg.GetBackground() }, 3.0, 2.5},
+	{
+		"Fg/Bg",
+		func(c *theme.AppStyle) color.Color { return c.Styles.TextOnBg.GetForeground() },
+		func(c *theme.AppStyle) color.Color { return c.Styles.TextOnBg.GetBackground() },
+		4.5,
+		3.0,
+	},
+	{
+		"Muted/Bg",
+		func(c *theme.AppStyle) color.Color { return c.Styles.Subtitle.GetForeground() },
+		func(c *theme.AppStyle) color.Color { return c.Styles.TextOnBg.GetBackground() },
+		3.0,
+		2.5,
+	},
+	{
+		"Accent/Bg",
+		func(c *theme.AppStyle) color.Color { return c.Styles.Title.GetForeground() },
+		func(c *theme.AppStyle) color.Color { return c.Styles.TextOnBg.GetBackground() },
+		3.0,
+		2.5,
+	},
+	{
+		"Sel/SelBg",
+		func(c *theme.AppStyle) color.Color { return c.Styles.SelectedItem.GetForeground() },
+		func(c *theme.AppStyle) color.Color { return c.Styles.SelectedItem.GetBackground() },
+		4.5,
+		3.0,
+	},
+	{
+		"Status",
+		func(c *theme.AppStyle) color.Color { return c.Styles.StatusBase.GetForeground() },
+		func(c *theme.AppStyle) color.Color { return c.Styles.StatusBase.GetBackground() },
+		4.5,
+		3.0,
+	},
+	{
+		"Success/Bg",
+		func(c *theme.AppStyle) color.Color { return c.Styles.Success.GetForeground() },
+		func(c *theme.AppStyle) color.Color { return c.Styles.TextOnBg.GetBackground() },
+		3.0,
+		2.5,
+	},
+	{
+		"Error/Bg",
+		func(c *theme.AppStyle) color.Color { return c.Styles.Error.GetForeground() },
+		func(c *theme.AppStyle) color.Color { return c.Styles.TextOnBg.GetBackground() },
+		3.0,
+		2.5,
+	},
+	{
+		"Warning/Bg",
+		func(c *theme.AppStyle) color.Color { return c.Styles.Warning.GetForeground() },
+		func(c *theme.AppStyle) color.Color { return c.Styles.TextOnBg.GetBackground() },
+		3.0,
+		2.5,
+	},
 }
 
 // ── Entry / issue types ──────────────────────────────────────────────────────
@@ -358,7 +406,12 @@ func (p *AccessibilityPanel) View() tea.View {
 	return tea.NewView(b.String())
 }
 
-func (p *AccessibilityPanel) writeSelectedRow(b *strings.Builder, c *theme.AppStyle, e acEntry, row string) {
+func (p *AccessibilityPanel) writeSelectedRow(
+	b *strings.Builder,
+	c *theme.AppStyle,
+	e acEntry,
+	row string,
+) {
 	muted := c.Styles.Subtitle
 	bad := c.Styles.Error
 	good := c.Styles.Success
@@ -373,7 +426,14 @@ func (p *AccessibilityPanel) writeSelectedRow(b *strings.Builder, c *theme.AppSt
 		if issue.suggestedFg != nil {
 			oldStyle := c.Styles.SwatchDot.Background(issue.Bg).Foreground(issue.oldFg)
 			sugStyle := c.Styles.SwatchDot.Background(issue.Bg).Foreground(issue.suggestedFg)
-			fmt.Fprint(b, "  → ", " ", good.Render(issue.suggestedFgHex), oldStyle.Render(" (original)"), sugStyle.Render(" (suggested)"))
+			fmt.Fprint(
+				b,
+				"  → ",
+				" ",
+				good.Render(issue.suggestedFgHex),
+				oldStyle.Render(" (original)"),
+				sugStyle.Render(" (suggested)"),
+			)
 		}
 		b.WriteString("\n")
 	}

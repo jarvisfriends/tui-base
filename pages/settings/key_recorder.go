@@ -5,6 +5,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/jarvisfriends/tui-base/theme"
 )
 
 const keyCtrlS = "ctrl+s"
@@ -104,7 +106,8 @@ func (m *KeyRecorder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.validate()
 			}
 		default:
-			if msg.String() == keyCtrlS {
+			// Ctrl+S saves; compared by Code+Mod, not fragile string forms.
+			if msg.Code == 's' && msg.Mod&tea.ModCtrl != 0 {
 				m.validate()
 				if m.Error == "" {
 					m.Done = true
@@ -119,11 +122,12 @@ func (m *KeyRecorder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *KeyRecorder) View() tea.View {
 	title := lipgloss.NewStyle().Bold(true).Padding(0, 1).Render("Keybinding Recorder")
 
+	c := theme.Active()
 	rows := make([]string, 0, len(m.keys)+1)
-	selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
-	normStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
-	delStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true).MarginTop(1)
+	selStyle := c.Styles.SelectedItem.Bold(true)
+	normStyle := c.Styles.TextOnBg
+	delStyle := c.Styles.Dim
+	errStyle := c.Styles.Error.Bold(true).MarginTop(1)
 
 	for i, k := range m.keys {
 		prefix := "  "
@@ -159,7 +163,8 @@ func (m *KeyRecorder) View() tea.View {
 		errView = errStyle.Render("Error: " + m.Error)
 	}
 
-	help := delStyle.MarginTop(1).Render("↑/↓: Navigate • Enter: Record Key • Del: Remove • Ctrl+S: Save • Esc: Cancel")
+	help := delStyle.MarginTop(1).
+		Render("↑/↓: Navigate • Enter: Record Key • Del: Remove • Ctrl+S: Save • Esc: Cancel")
 
 	body := lipgloss.JoinVertical(lipgloss.Left, rows...)
 

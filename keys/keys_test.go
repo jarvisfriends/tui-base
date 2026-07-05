@@ -25,8 +25,8 @@ func TestDefaultKeyMapProvidesExpectedBindings(t *testing.T) {
 	if km.OpenSettings.Help().Desc != "settings" {
 		t.Fatalf("OpenSettings help desc = %q; want %q", km.OpenSettings.Help().Desc, "settings")
 	}
-	if keys := km.OpenSettings.Help().Key; keys != "ctrl+," {
-		t.Fatalf("OpenSettings help key = %q; want %q", keys, "ctrl+,")
+	if keys := km.OpenSettings.Help().Key; keys != "ctrl+g" {
+		t.Fatalf("OpenSettings help key = %q; want %q", keys, "ctrl+g")
 	}
 }
 

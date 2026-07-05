@@ -42,6 +42,24 @@ func TestFormWidth(t *testing.T) {
 	}
 }
 
+func TestFormHeight(t *testing.T) {
+	tests := []struct {
+		termH int
+		want  int
+	}{
+		{0, 5},   // floor
+		{10, 5},  // 10 - 6 = 4 < 5 -> 5
+		{24, 18}, // 24 - 6 = 18
+		{50, 44}, // no upper cap: fill most of the area
+	}
+
+	for _, tc := range tests {
+		if got := FormHeight(tc.termH); got != tc.want {
+			t.Errorf("FormHeight(%d) = %d; want %d", tc.termH, got, tc.want)
+		}
+	}
+}
+
 func TestFormOverlayHost(t *testing.T) {
 	h := &FormOverlayHost{}
 	if h.IsOpen() {

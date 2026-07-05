@@ -14,6 +14,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/jarvisfriends/tui-base/common"
 	"github.com/jarvisfriends/tui-base/config"
 	"github.com/jarvisfriends/tui-base/datepicker"
 	"github.com/jarvisfriends/tui-base/envpath"
@@ -42,6 +43,13 @@ const (
 
 	defTerminalLetWindows = "let_windows"
 	blankGUID             = "{00000000-0000-0000-0000-000000000000}"
+
+	itemTitleLogPath = "Log Path"
+
+	// Log destination values persisted in LogOutput.
+	logOutputTemp = "temp"
+	logOutputDir  = "dir"
+	logOutputFile = "file"
 )
 
 // initRegistryOnce ensures tint.NewDefaultRegistry is called exactly once
@@ -293,7 +301,7 @@ func NewWithOptions(opts Options) *SettingsModel {
 		ThemeMode:            theme.ThemeModeDark,
 		StylePreset:          string(theme.DefaultStylePreset),
 		AccessibilityColors:  false,
-		LogOutput:            "temp",
+		LogOutput:            logOutputTemp,
 		LogPath:              "",
 		LogLevel:             "ERROR",
 		NotificationsEnabled: true,
@@ -362,7 +370,10 @@ func (m *SettingsModel) buildItems() {
 				return
 			}
 		}
-		m.categories = append(m.categories, settingsCategory{title: category, itemIdxSet: []int{idx}})
+		m.categories = append(
+			m.categories,
+			settingsCategory{title: category, itemIdxSet: []int{idx}},
+		)
 	}
 
 	// sync intermediate strings from persisted bools
@@ -416,9 +427,9 @@ func (m *SettingsModel) buildItems() {
 		huh.NewOption(settingValOn, boolStrTrue),
 	}
 	logOpts := []huh.Option[string]{
-		huh.NewOption("Temporary directory (default)", "temp"),
-		huh.NewOption("Fixed directory", "dir"),
-		huh.NewOption("Fixed file", "file"),
+		huh.NewOption("Temporary directory (default)", logOutputTemp),
+		huh.NewOption("Fixed directory", logOutputDir),
+		huh.NewOption("Fixed file", logOutputFile),
 	}
 	levelOpts := []huh.Option[string]{
 		huh.NewOption("Debug (verbose)", "DEBUG"),
@@ -513,7 +524,7 @@ func (m *SettingsModel) buildItems() {
 		},
 	)
 	addItem("Logging", settingItem{
-		title:     "Log Path",
+		title:     itemTitleLogPath,
 		leftTrunc: true,
 		value: func() string {
 			if m.LogPath == "" {
@@ -521,15 +532,34 @@ func (m *SettingsModel) buildItems() {
 			}
 			return m.LogPath
 		},
+		setValue: func(val string) { m.LogPath = val },
+		// Fixed-directory destination: browse directories only (files hidden).
+		buildModel: func() tea.Model {
+			if m.LogOutput != logOutputDir {
+				return nil
+			}
+			dp := NewDirPicker(m.LogPath)
+			dp.Width, dp.Height = m.Width(), m.Height()
+			return dp
+		},
 		buildForm: func() *huh.Form {
+			// Temporary destination ignores the path — nothing to edit, so
+			// don't open a picker at all.
+			if m.LogOutput != logOutputFile {
+				return nil
+			}
 			return huh.NewForm(huh.NewGroup(
 				huh.NewFilePicker().
-					Title("Log Path").
-					Description("Directory or file, ignored when destination is Temporary").
-					DirAllowed(true).
+					Title(itemTitleLogPath).
+					Description("Log file to write to").
+					DirAllowed(false).
 					FileAllowed(true).
+					// Open directly in browse mode and fill most of the page:
+					// the embedded picker otherwise defaults to a one-row list.
+					Picking(true).
+					Height(overlay.FormHeight(m.Height())).
 					Value(&m.LogPath),
-			).WithTheme(theme.HuhThemeFunc()))
+			).WithTheme(theme.HuhThemeFunc())).WithKeyMap(filePickerKeyMap())
 		},
 	})
 	addItem(
@@ -570,7 +600,7 @@ func (m *SettingsModel) buildItems() {
 				return huh.NewForm(huh.NewGroup(
 					huh.NewSelect[string]().
 						Title("Color Theme").
-						Description("Up/Down to browse - applied immediately as you scroll").
+						Description("↑/↓ to browse - applied immediately as you scroll").
 						Options(buildThemeOptions(m.ThemeMode)...).
 						Height(14).
 						Value(&m.ColorThemeID),
@@ -726,7 +756,11 @@ func (m *SettingsModel) buildItems() {
 								continue
 							}
 							if slices.Contains(otherKeys, kNorm) {
-								return fmt.Errorf("key %q is already assigned to %q", k, other.Title)
+								return fmt.Errorf(
+									"key %q is already assigned to %q",
+									k,
+									other.Title,
+								)
 							}
 						}
 					}
@@ -759,9 +793,15 @@ func (m *SettingsModel) buildItems() {
 				case defTerminalLetWindows:
 					return applyTerminalSetting(blankGUID, blankGUID)
 				case "classic":
-					return applyTerminalSetting("{B23D10C0-E52E-411E-9D5B-C09FDF709C7D}", "{B23D10C0-E52E-411E-9D5B-C09FDF709C7D}")
+					return applyTerminalSetting(
+						"{B23D10C0-E52E-411E-9D5B-C09FDF709C7D}",
+						"{B23D10C0-E52E-411E-9D5B-C09FDF709C7D}",
+					)
 				case "modern":
-					return applyTerminalSetting("{2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69}", "{E12CFF52-A866-4C77-9A90-F570A7AA2C6B}")
+					return applyTerminalSetting(
+						"{2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69}",
+						"{E12CFF52-A866-4C77-9A90-F570A7AA2C6B}",
+					)
 				default:
 					return nil
 				}
@@ -827,7 +867,8 @@ func (m *SettingsModel) itemFromDef(def config.FieldDef[string]) settingItem {
 				}
 				return ""
 			}
-			if def.Kind == config.FieldFilePicker || def.Kind == config.FieldMultiFilePicker || strings.Contains(strings.ToLower(def.Title), "path") {
+			if def.Kind == config.FieldFilePicker || def.Kind == config.FieldMultiFilePicker ||
+				strings.Contains(strings.ToLower(def.Title), "path") {
 				return envpath.Collapse(val)
 			}
 			if def.Kind == config.FieldCustom && def.CustomFieldText != "" {
@@ -841,33 +882,57 @@ func (m *SettingsModel) itemFromDef(def config.FieldDef[string]) settingItem {
 			}
 		},
 		buildForm: func() *huh.Form {
-			if def.Kind == config.FieldMultiFilePicker || def.Kind == config.FieldDuration || def.Kind == config.FieldDate || def.Kind == config.FieldCustom {
+			if def.Kind == config.FieldMultiFilePicker || def.Kind == config.FieldDuration ||
+				def.Kind == config.FieldDate ||
+				def.Kind == config.FieldCustom {
 				return nil
 			}
 			f := m.huhFieldFromDef(def)
 			if f == nil {
 				return nil
 			}
-			return huh.NewForm(huh.NewGroup(f).WithTheme(theme.HuhThemeFunc()))
+			form := huh.NewForm(huh.NewGroup(f).WithTheme(theme.HuhThemeFunc()))
+			if def.Kind == config.FieldFilePicker {
+				form = form.WithKeyMap(filePickerKeyMap())
+			}
+			return form
 		},
 		buildModel: func() tea.Model {
 			switch def.Kind {
+			case config.FieldFilePicker:
+				// Directory-only pickers browse with files hidden entirely;
+				// mixed or file pickers stay on the huh form (buildForm).
+				if !def.DirAllowed || def.FileAllowed {
+					return nil
+				}
+				dp := NewDirPicker(*def.Value)
+				dp.Width, dp.Height = m.Width(), m.Height()
+				return dp
 			case config.FieldMultiFilePicker:
-				return NewMultiFileEditor(*def.Value)
+				e := NewMultiFileEditor(*def.Value)
+				// Seed the current page size: ModelOverlayHost only sends
+				// WindowSizeMsg on later resizes, and the editor needs the
+				// height up front to size its file-picker form.
+				e.Width, e.Height = m.Width(), m.Height()
+				return e
 			case config.FieldDuration:
 				d, _ := time.ParseDuration(*def.Value)
-				return timepicker.New(d)
+				tp := timepicker.New(d)
+				applyTimePickerTheme(tp, m.Colors())
+				return tp
 			case config.FieldDate:
 				t, _ := time.Parse("2006-01-02", *def.Value)
 				if t.IsZero() {
 					t = time.Now()
 				}
-				return datepicker.New(t)
+				dp := datepicker.New(t)
+				dp.Styles = themedDatePickerStyles(m.Colors())
+				return dp
 			case config.FieldCustom:
 				if def.CustomModelBuilder != nil {
 					return def.CustomModelBuilder()
 				}
-			case config.FieldSelect, config.FieldText, config.FieldFilePicker:
+			case config.FieldSelect, config.FieldText:
 				// handled via huh form, not a model overlay
 			}
 			return nil
@@ -915,6 +980,10 @@ func (m *SettingsModel) huhFieldFromDef(def config.FieldDef[string]) huh.Field {
 			Description(def.Description).
 			DirAllowed(def.DirAllowed).
 			FileAllowed(def.FileAllowed).
+			// Open directly in browse mode and fill most of the page: the
+			// embedded picker otherwise defaults to a one-row list.
+			Picking(true).
+			Height(overlay.FormHeight(m.Height())).
 			Value(def.Value)
 	case config.FieldMultiFilePicker, config.FieldDate, config.FieldDuration, config.FieldCustom:
 		// handled via model overlay, not a huh field
@@ -924,7 +993,9 @@ func (m *SettingsModel) huhFieldFromDef(def config.FieldDef[string]) huh.Field {
 
 func isSecret(title string) bool {
 	t := strings.ToLower(title)
-	return strings.Contains(t, "password") || strings.Contains(t, "pass") || strings.Contains(t, "token") || strings.Contains(t, "secret")
+	return strings.Contains(t, "password") || strings.Contains(t, "pass") ||
+		strings.Contains(t, "token") ||
+		strings.Contains(t, "secret")
 }
 
 // CapturesKeys returns true while an edit overlay is open so the router hands
@@ -1035,7 +1106,13 @@ func (m *SettingsModel) abortEdit() tea.Cmd {
 	style := m.StylePreset
 	accessibility := m.AccessibilityColors
 	return func() tea.Msg {
-		return ThemeMsg{ID: id, Mode: mode, Style: style, Accessibility: accessibility, ApplyPreferences: true}
+		return ThemeMsg{
+			ID:               id,
+			Mode:             mode,
+			Style:            style,
+			Accessibility:    accessibility,
+			ApplyPreferences: true,
+		}
 	}
 }
 
@@ -1056,6 +1133,15 @@ func (m *SettingsModel) updateActiveOverlay(msg tea.Msg) (huh.FormState, tea.Cmd
 			return huh.StateAborted, cmd
 		}
 	case *KeyRecorder:
+		if v.Done {
+			if m.editIndex >= 0 && m.items[m.editIndex].setValue != nil {
+				m.items[m.editIndex].setValue(v.Value())
+			}
+			return huh.StateCompleted, cmd
+		} else if v.Aborted {
+			return huh.StateAborted, cmd
+		}
+	case *DirPicker:
 		if v.Done {
 			if m.editIndex >= 0 && m.items[m.editIndex].setValue != nil {
 				m.items[m.editIndex].setValue(v.Value())
@@ -1136,13 +1222,20 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.ColorThemeID = theme.ResolveTintIDForMode(m.ColorThemeID, m.ThemeMode)
 
 	// Live theme preview: fires while editing theme-related options.
-	if m.ColorThemeID != prevTheme || m.ThemeMode != prevThemeMode || m.StylePreset != prevStyle || m.AccessibilityColors != prevAccessibility {
+	if m.ColorThemeID != prevTheme || m.ThemeMode != prevThemeMode || m.StylePreset != prevStyle ||
+		m.AccessibilityColors != prevAccessibility {
 		id := m.ColorThemeID
 		mode := m.ThemeMode
 		style := m.StylePreset
 		accessibility := m.AccessibilityColors
 		cmds = append(cmds, func() tea.Msg {
-			return ThemeMsg{ID: id, Mode: mode, Style: style, Accessibility: accessibility, ApplyPreferences: true}
+			return ThemeMsg{
+				ID:               id,
+				Mode:             mode,
+				Style:            style,
+				Accessibility:    accessibility,
+				ApplyPreferences: true,
+			}
 		})
 	}
 	if m.LogLevel != prevLevel {
@@ -1168,7 +1261,11 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.editIndex >= 0 && m.editIndex < len(m.items) {
 			if apply := m.items[m.editIndex].apply; apply != nil {
 				if err := apply(); err != nil {
-					logging.Errorf("Settings: failed applying field %q: %v", m.items[m.editIndex].title, err)
+					logging.Errorf(
+						"Settings: failed applying field %q: %v",
+						m.items[m.editIndex].title,
+						err,
+					)
 				}
 			}
 		}
@@ -1311,7 +1408,11 @@ func (m *SettingsModel) renderOverview() string {
 	titleStyle := c.Styles.Title
 
 	lines := make([]string, 0, 4)
-	lines = append(lines, titleStyle.Render("Settings"), "") // blank separator — part of headerLines
+	lines = append(
+		lines,
+		titleStyle.Render("Settings"),
+		"",
+	) // blank separator — part of headerLines
 
 	m.ensureCursorVisible()
 	layout = m.overviewLayout()
@@ -1341,7 +1442,15 @@ func (m *SettingsModel) renderOverview() string {
 			if entry.itemIndex == m.cursor {
 				indicatorStyle := lipgloss.NewStyle().Foreground(selFg).Background(selBg)
 				spaceStyle := lipgloss.NewStyle().Background(selBg)
-				rowText := indicatorStyle.Render("▶ ") + cursorLabel.Render(lbl) + spaceStyle.Render(" ") + cursorValue.Render(val)
+				rowText := indicatorStyle.Render(
+					"▶ ",
+				) + cursorLabel.Render(
+					lbl,
+				) + spaceStyle.Render(
+					" ",
+				) + cursorValue.Render(
+					val,
+				)
 				colLines = append(colLines, cursorBg.Render(rowText))
 				continue
 			}
@@ -1470,7 +1579,7 @@ func (m *SettingsModel) preferredColumnWidth() int {
 	maxValue := 0
 	for _, item := range m.items {
 		maxLabel = max(maxLabel, lipgloss.Width(item.title))
-		if item.title == "Log Path" {
+		if item.title == itemTitleLogPath {
 			continue
 		}
 		maxValue = max(maxValue, lipgloss.Width(item.value()))
@@ -1503,28 +1612,26 @@ func (m *SettingsModel) saveCmd() tea.Cmd {
 				return SettingsSavedMsg{Path: path, Err: mkErr}
 			}
 		}
-		writeErr := os.WriteFile(filepath.Clean(path), append(data, '\n'), 0o600)
+		writeErr := common.WriteFileAtomic(path, append(data, '\n'), 0o600)
 		return SettingsSavedMsg{Path: path, Err: writeErr}
 	}
 }
 
-// SaveToFile writes settings to the given filename as JSON, synchronously.
-// Prefer the async path (saveCmd) inside Update; this remains for callers that
-// need a blocking save (tests, explicit export).
+// SaveToFile writes settings to the given filename as JSON, synchronously and
+// atomically (temp file + rename). Prefer the async path (saveCmd) inside
+// Update; this remains for callers that need a blocking save (tests, explicit
+// export).
 func (m *SettingsModel) SaveToFile(filename string) error {
 	if dir := filepath.Dir(filename); dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0o750); err != nil {
 			return err
 		}
 	}
-	f, err := os.OpenFile(filepath.Clean(filename), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err
 	}
-	defer func() { _ = f.Close() }()
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ")
-	return enc.Encode(m)
+	return common.WriteFileAtomic(filename, append(data, '\n'), 0o600)
 }
 
 // LoadFromFile loads settings from the given filename if it exists.

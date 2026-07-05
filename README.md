@@ -6,6 +6,8 @@ This project is designed for engineers who want more than a demo app: predictabl
 consistent theme behavior, keyboard and mouse interaction patterns, and debug tooling that helps
 you understand message flow while you build.
 
+[![Coverage Status](https://coveralls.io/repos/github/jarvisfriends/tui-base/badge.svg?branch=main)](https://coveralls.io/github/jarvisfriends/tui-base?branch=main)
+
 ## Why This Exists
 
 Building a large TUI gets hard when app state, routing, styling, and diagnostics are scattered.
@@ -37,7 +39,8 @@ The following milestone capabilities are already implemented:
 
 ## Project Layout
 
-- `main.go`: entrypoint and app bootstrap.
+- `tuibase.go`: root consumer package — `tuibase.Run(tuibase.Options{...})` bootstraps a full app.
+- `cmd/tui-base/`: runnable reference application.
 - `router/`: root model and message routing.
 - `navigation/`: Sidebar and Tabs components.
 - `pages/`: page models (`home`, `settings`, `inspector`).
@@ -67,7 +70,7 @@ The roadmap now tracks only open work. See [.github/ROADMAP.md](.github/ROADMAP.
 Install these once to match the full CI gate locally:
 
 ```bash
-# Go (1.26+) - https://go.dev/dl/
+# Go (1.26.4+; 1.26.3 has a known CVE) - https://go.dev/dl/
 
 # golangci-lint
 curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
@@ -88,7 +91,7 @@ go install golang.org/x/vuln/cmd/govulncheck@latest
 ```
 
 - Build baseline:
-  - `go build -o tui_base_test_build . && rm -f tui_base_test_build tui_base_test_build.exe`
+  - `go build ./...`
 - Run tests:
   - `go test ./... -v`
 - Run race tests:

@@ -1,3 +1,5 @@
+// Command tui-base runs the reference application showcasing the framework:
+// multi-page routing, theming, notifications, and the Ctrl+D inspector.
 package main
 
 import (

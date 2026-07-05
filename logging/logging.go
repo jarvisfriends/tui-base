@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -69,9 +70,15 @@ func RegisterSubscriber(s Subscriber) {
 }
 
 func notify(level string, ts time.Time, msg string) {
+	// Snapshot the subscriber slice under the lock, then invoke outside it.
+	// Calling subscribers while holding subsMu.RLock() can deadlock: a
+	// subscriber that logs (directly or indirectly) re-enters notify while a
+	// writer in RegisterSubscriber is blocked, and RWMutex writers block new
+	// readers (B-3).
 	subsMu.RLock()
-	defer subsMu.RUnlock()
-	for _, s := range subs {
+	snapshot := slices.Clone(subs)
+	subsMu.RUnlock()
+	for _, s := range snapshot {
 		// best-effort, run synchronously to keep ordering simple
 		s(level, ts, msg)
 	}
@@ -96,7 +103,10 @@ func InitFromSettings(logOutputMode, logPath string) (string, error) {
 		if err := os.MkdirAll(logPath, 0o750); err != nil {
 			return "", err
 		}
-		target = filepath.Join(logPath, fmt.Sprintf("%s-%s.log", currentAppName, time.Now().Format("20060102-150405")))
+		target = filepath.Join(
+			logPath,
+			fmt.Sprintf("%s-%s.log", currentAppName, time.Now().Format("20060102-150405")),
+		)
 	case "file":
 		if logPath == "" {
 			return "", errors.New("log file path not provided")
@@ -112,7 +122,10 @@ func InitFromSettings(logOutputMode, logPath string) (string, error) {
 		if err := os.MkdirAll(dir, 0o750); err != nil {
 			return "", err
 		}
-		target = filepath.Join(dir, fmt.Sprintf("%s-%s.log", currentAppName, time.Now().Format("20060102-150405")))
+		target = filepath.Join(
+			dir,
+			fmt.Sprintf("%s-%s.log", currentAppName, time.Now().Format("20060102-150405")),
+		)
 	}
 
 	f, err := os.OpenFile(filepath.Clean(target), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
@@ -134,7 +147,12 @@ func InitFromSettings(logOutputMode, logPath string) (string, error) {
 	outFile = f
 	logTarget = target
 	curLogBytes = initBytes
-	n, _ := fmt.Fprintf(outFile, "%s [INFO] Logging initialized; file=%s\n", time.Now().Format(time.RFC3339), target)
+	n, _ := fmt.Fprintf(
+		outFile,
+		"%s [INFO] Logging initialized; file=%s\n",
+		time.Now().Format(time.RFC3339),
+		target,
+	)
 	curLogBytes += int64(n)
 	writeMu.Unlock()
 	notify(logLevelInfo, time.Now(), "Logging initialized; file="+target)

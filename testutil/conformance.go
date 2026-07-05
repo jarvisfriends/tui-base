@@ -7,8 +7,8 @@ package testutil
 //
 //	func TestMyAppConforms(t *testing.T) {
 //	    m := router.NewWithRegisteredPages(myPages())
-//	    testutil.CheckFitsViewport(t, m)
-//	    testutil.CheckStatusBarVisible(t, m, testutil.PageAndOverlayStates(m))
+//	    testutil.CheckFitsViewport(t, m, pageAndOverlayStates...)
+//	    testutil.CheckStatusBarVisible(t, m, pageAndOverlayStates)
 //	    testutil.CheckThemeResponsive(t, m,
 //	        settings.ThemeMsg{ID: "dracula", Mode: "dark", ApplyPreferences: true},
 //	        settings.ThemeMsg{ID: "dracula", Mode: "light", ApplyPreferences: true})
@@ -29,28 +29,47 @@ import (
 // every line's display width is <= width. This catches the single most common
 // TUI bug — content larger than the available space that is neither scrolled nor
 // clipped, which corrupts the terminal.
-func CheckFitsViewport(t *testing.T, m tea.Model) {
+//
+// Optional states are replayed after each resize and the frame is re-checked
+// after every one. Pass page switches and overlay/editor toggles here so
+// overlay content (which bypasses the page layout math) is covered too — a
+// too-wide overlay help line is invisible to the initial-frame check.
+func CheckFitsViewport(t *testing.T, m tea.Model, states ...tea.Msg) {
 	t.Helper()
-	for i, w := range StandardWidths {
-		h := 24
-		if i < len(StandardHeights) {
-			h = StandardHeights[i]
-		}
-		m, _ = m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+	assertFits := func(w, h int, label string) {
+		t.Helper()
 		lines := strings.Split(m.View().Content, "\n")
 		n := len(lines)
 		for n > 0 && strings.TrimSpace(StripANSI(lines[n-1])) == "" {
 			n-- // ignore trailing blank lines
 		}
 		if n > h {
-			t.Errorf("width=%d height=%d: rendered %d content lines, exceeds height %d (content not clipped/scrolled)",
-				w, h, n, h)
+			t.Errorf(
+				"width=%d height=%d %s: rendered %d content lines, exceeds height %d (content not clipped/scrolled)",
+				w,
+				h,
+				label,
+				n,
+				h,
+			)
 		}
 		for li, line := range lines {
 			if gw := lipgloss.Width(line); gw > w {
-				t.Errorf("width=%d height=%d line %d width %d exceeds %d: %q",
-					w, h, li, gw, w, StripANSI(line))
+				t.Errorf("width=%d height=%d %s: line %d width %d exceeds %d: %q",
+					w, h, label, li, gw, w, StripANSI(line))
 			}
+		}
+	}
+	for i, w := range StandardWidths {
+		h := 24
+		if i < len(StandardHeights) {
+			h = StandardHeights[i]
+		}
+		m, _ = m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+		assertFits(w, h, "initial")
+		for si, st := range states {
+			m, _ = m.Update(st)
+			assertFits(w, h, fmt.Sprintf("state[%d] %T", si, st))
 		}
 	}
 }
@@ -118,7 +137,10 @@ func CheckThemeResponsive(t *testing.T, m tea.Model, themeA, themeB tea.Msg) {
 		t.Skip("no ANSI colors — running in no-color mode")
 	}
 	if sameSet(a, b) {
-		t.Errorf("theme change did not alter any rendered colors (%d codes both ways) — model may use hard-coded colors instead of the base theme", len(a))
+		t.Errorf(
+			"theme change did not alter any rendered colors (%d codes both ways) — model may use hard-coded colors instead of the base theme",
+			len(a),
+		)
 	}
 }
 

@@ -1,8 +1,11 @@
 package testutil
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
+	"go/types"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -36,6 +39,9 @@ func CheckCodeStandards(t *testing.T, patterns ...string) {
 		}
 
 		uiPkg := isUIPackage(pkg)
+		if uiPkg {
+			checkFrameSizeGuesses(t, pkg)
+		}
 
 		for _, file := range pkg.Syntax {
 			filename := pkg.Fset.Position(file.Pos()).Filename
@@ -67,7 +73,8 @@ func CheckCodeStandards(t *testing.T, patterns ...string) {
 // layout-width checks.
 func isUIPackage(pkg *packages.Package) bool {
 	for path := range pkg.Imports {
-		if strings.Contains(path, "charm.land/lipgloss") || strings.Contains(path, "charm.land/bubbletea") {
+		if strings.Contains(path, "charm.land/lipgloss") ||
+			strings.Contains(path, "charm.land/bubbletea") {
 			return true
 		}
 	}
@@ -96,7 +103,12 @@ func checkKeyMappings(t *testing.T, fset *token.FileSet, path string, n ast.Node
 	}
 }
 
-func checkFuncBodyForInlineBindings(t *testing.T, fset *token.FileSet, path, funcName string, body *ast.BlockStmt) {
+func checkFuncBodyForInlineBindings(
+	t *testing.T,
+	fset *token.FileSet,
+	path, funcName string,
+	body *ast.BlockStmt,
+) {
 	t.Helper()
 	ast.Inspect(body, func(bodyNode ast.Node) bool {
 		call, ok := bodyNode.(*ast.CallExpr)
@@ -149,12 +161,22 @@ func checkWithKeysVimFallback(t *testing.T, fset *token.FileSet, path string, x 
 		}
 	}
 	if hasDirection && hasVim != "" {
-		t.Errorf("%s:%d: key.WithKeys contains prohibited vim fallback '%s' alongside directional key",
-			path, fset.Position(x.Pos()).Line, hasVim)
+		t.Errorf(
+			"%s:%d: key.WithKeys contains prohibited vim fallback '%s' alongside directional key",
+			path,
+			fset.Position(x.Pos()).Line,
+			hasVim,
+		)
 	}
 }
 
-func checkLayoutCalculations(t *testing.T, pkg *packages.Package, path string, ancestors []ast.Node, n ast.Node) {
+func checkLayoutCalculations(
+	t *testing.T,
+	pkg *packages.Package,
+	path string,
+	ancestors []ast.Node,
+	n ast.Node,
+) {
 	t.Helper()
 	call, ok := n.(*ast.CallExpr)
 	if !ok {
@@ -164,7 +186,188 @@ func checkLayoutCalculations(t *testing.T, pkg *packages.Package, path string, a
 	checkLenOnString(t, pkg, path, ancestors, call)
 }
 
-func checkStringsCountNewline(t *testing.T, pkg *packages.Package, path string, call *ast.CallExpr) {
+// checkFrameSizeGuesses flags hardcoded integer arithmetic against a
+// width/height-shaped expression (m.width-2, boxW-4, innerW+1, …) in any
+// method of a type that elsewhere draws a lipgloss border (an X.Border(...)
+// call somewhere in the type's method set, possibly in a different method
+// than the arithmetic). That combination is exactly the bug class found in
+// tui-base's own table/status/navigation packages: a component computes its
+// content size by subtracting a hand-counted border+padding literal instead
+// of calling the border style's own GetHorizontalFrameSize() /
+// GetVerticalFrameSize(), which silently mis-sizes content (or breaks hit
+// tests) the moment the actual border/padding configuration changes.
+//
+// The check is intentionally scoped to types that already draw a border:
+// unrelated line/row-budget arithmetic (reserving N lines for a title or
+// footer with no border involved) is a different, unrelated pattern and is
+// not flagged here.
+func checkFrameSizeGuesses(t *testing.T, pkg *packages.Package) {
+	t.Helper()
+	for _, msg := range findFrameSizeGuesses(pkg) {
+		t.Error(msg)
+	}
+}
+
+// findFrameSizeGuesses is the pure decision logic behind checkFrameSizeGuesses,
+// separated out so it can be unit tested directly (assert on the returned
+// messages) without needing a *testing.T whose failures would otherwise
+// propagate into the calling test.
+func findFrameSizeGuesses(pkg *packages.Package) []string {
+	borderTypes := borderReceiverTypes(pkg)
+	if len(borderTypes) == 0 {
+		return nil
+	}
+	var msgs []string
+	for _, file := range pkg.Syntax {
+		filename := pkg.Fset.Position(file.Pos()).Filename
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil || fn.Recv == nil || len(fn.Recv.List) == 0 {
+				continue
+			}
+			if !borderTypes[receiverTypeName(fn.Recv.List[0].Type)] {
+				continue
+			}
+			msgs = append(msgs, findSizeGuessesInBody(pkg, filename, fn.Body)...)
+		}
+	}
+	return msgs
+}
+
+// borderReceiverTypes returns the set of method receiver type names in pkg
+// that have at least one method calling a lipgloss-style Border(...) method
+// (any X.Border(...) call — the receiver of Border itself doesn't matter,
+// only that the enclosing method draws one).
+func borderReceiverTypes(pkg *packages.Package) map[string]bool {
+	found := map[string]bool{}
+	for _, file := range pkg.Syntax {
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil || fn.Recv == nil || len(fn.Recv.List) == 0 {
+				continue
+			}
+			if containsBorderCall(fn.Body) {
+				if rt := receiverTypeName(fn.Recv.List[0].Type); rt != "" {
+					found[rt] = true
+				}
+			}
+		}
+	}
+	return found
+}
+
+// receiverTypeName extracts the bare type name from a method receiver's type
+// expression (T or *T), or "" if it isn't a simple named type.
+func receiverTypeName(expr ast.Expr) string {
+	switch t := expr.(type) {
+	case *ast.StarExpr:
+		return receiverTypeName(t.X)
+	case *ast.Ident:
+		return t.Name
+	default:
+		return ""
+	}
+}
+
+// containsBorderCall reports whether body calls any method literally named
+// Border (X.Border(...)), regardless of X's type.
+func containsBorderCall(body *ast.BlockStmt) bool {
+	found := false
+	ast.Inspect(body, func(n ast.Node) bool {
+		if found {
+			return false
+		}
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Border" {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+// sizeGuessRE matches identifier names that read as a width/height value:
+// an exact "w"/"h", a name ending in Width/Height, or a lowercase-to-W/H
+// camelCase boundary (boxW, innerW, vpH, colW, …). The case-insensitive
+// flag is scoped to the first two alternatives only — the camelCase
+// alternative must stay case-sensitive (only a literal uppercase W/H),
+// otherwise it also matches ordinary words ending in a lowercase w
+// ("now", "raw", "new", …) once (?i) is left unscoped.
+var sizeGuessRE = regexp.MustCompile(`(?i:^[wh]$)|(?i:(width|height)$)|[a-z][WH]$`)
+
+// looksLikeSizeExpr reports whether expr is a bare identifier or selector
+// whose name matches sizeGuessRE. Call expressions (including
+// GetHorizontalFrameSize()/GetVerticalFrameSize()) never match, so code that
+// already derives its frame size from the style is naturally exempt.
+func looksLikeSizeExpr(expr ast.Expr) bool {
+	var name string
+	switch e := expr.(type) {
+	case *ast.Ident:
+		name = e.Name
+	case *ast.SelectorExpr:
+		name = e.Sel.Name
+	default:
+		return false
+	}
+	return sizeGuessRE.MatchString(name)
+}
+
+func findSizeGuessesInBody(pkg *packages.Package, filename string, body *ast.BlockStmt) []string {
+	var msgs []string
+	var ancestors []ast.Node
+	ast.Inspect(body, func(n ast.Node) bool {
+		if n == nil {
+			ancestors = ancestors[:len(ancestors)-1]
+			return true
+		}
+		bin, ok := n.(*ast.BinaryExpr)
+		if !ok || (bin.Op != token.SUB && bin.Op != token.ADD) {
+			ancestors = append(ancestors, n)
+			return true
+		}
+		other, hasLit := nonLiteralOperand(bin)
+		if hasLit && looksLikeSizeExpr(other) && !inForCond(ancestors, bin) {
+			pos := pkg.Fset.Position(bin.Pos())
+			msgs = append(
+				msgs,
+				fmt.Sprintf(
+					"%s:%d: %s looks like a hardcoded border/frame-size guess in a type that draws a border — "+
+						"call style.GetHorizontalFrameSize()/GetVerticalFrameSize() instead of subtracting a literal",
+					filename,
+					pos.Line,
+					types.ExprString(bin),
+				),
+			)
+		}
+		ancestors = append(ancestors, n)
+		return true
+	})
+	return msgs
+}
+
+// nonLiteralOperand reports the non-literal side of a binary expression with
+// exactly one integer-literal operand, e.g. "boxW - 4" -> (boxW, true).
+func nonLiteralOperand(bin *ast.BinaryExpr) (other ast.Expr, ok bool) {
+	switch {
+	case isIntLiteral(bin.Y) && !isIntLiteral(bin.X):
+		return bin.X, true
+	case isIntLiteral(bin.X) && !isIntLiteral(bin.Y):
+		return bin.Y, true
+	default:
+		return nil, false
+	}
+}
+
+func checkStringsCountNewline(
+	t *testing.T,
+	pkg *packages.Package,
+	path string,
+	call *ast.CallExpr,
+) {
 	t.Helper()
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok {
@@ -177,15 +380,29 @@ func checkStringsCountNewline(t *testing.T, pkg *packages.Package, path string, 
 	if len(call.Args) == 2 {
 		if lit, ok := call.Args[1].(*ast.BasicLit); ok && lit.Value == `"\n"` {
 			pos := pkg.Fset.Position(call.Pos())
-			t.Errorf("%s:%d: Use lipgloss.Height() instead of strings.Count(x, \"\\n\") for visual height", path, pos.Line)
+			t.Errorf(
+				"%s:%d: Use lipgloss.Height() instead of strings.Count(x, \"\\n\") for visual height",
+				path,
+				pos.Line,
+			)
 		}
 	}
 }
 
-func checkLenOnString(t *testing.T, pkg *packages.Package, path string, ancestors []ast.Node, call *ast.CallExpr) {
+// builtinLen is the identifier name of Go's builtin len(), used to spot
+// len() calls by AST inspection rather than by type-checked identity.
+const builtinLen = "len"
+
+func checkLenOnString(
+	t *testing.T,
+	pkg *packages.Package,
+	path string,
+	ancestors []ast.Node,
+	call *ast.CallExpr,
+) {
 	t.Helper()
 	id, ok := call.Fun.(*ast.Ident)
-	if !ok || id.Name != "len" || len(call.Args) != 1 {
+	if !ok || id.Name != builtinLen || len(call.Args) != 1 {
 		return
 	}
 	typeInfo := pkg.TypesInfo.Types[call.Args[0]]
@@ -206,7 +423,11 @@ func checkLenOnString(t *testing.T, pkg *packages.Package, path string, ancestor
 		return
 	}
 	pos := pkg.Fset.Position(call.Pos())
-	t.Errorf("%s:%d: Use lipgloss.Width() or ansi.StringWidth() instead of len() for string visual width", path, pos.Line)
+	t.Errorf(
+		"%s:%d: Use lipgloss.Width() or ansi.StringWidth() instead of len() for string visual width",
+		path,
+		pos.Line,
+	)
 }
 
 // lenUsedForByteSemantics reports whether the result of a len() call is consumed
@@ -238,6 +459,13 @@ func lenUsedForByteSemantics(ancestors []ast.Node, call *ast.CallExpr) bool {
 				if isIntLiteral(other) {
 					return true
 				}
+				// len(a) <op> len(b): comparing two strings' byte lengths
+				// against each other (e.g. a prefix/subset relationship
+				// checked before a same-length byte slice) — not a display
+				// dimension, since neither side is a fixed layout width.
+				if isLenCall(other) {
+					return true
+				}
 				// for i := 0; i < len(s); i++ { … s[i] … } — iterating bytes.
 				return inForCond(ancestors, call)
 			}
@@ -250,6 +478,11 @@ func lenUsedForByteSemantics(ancestors []ast.Node, call *ast.CallExpr) bool {
 			return sameNode(cur, p.Low) || sameNode(cur, p.High) || sameNode(cur, p.Max)
 		case *ast.CallExpr:
 			if fn, ok := p.Fun.(*ast.Ident); ok && (fn.Name == "make" || fn.Name == "cap") {
+				return true
+			}
+			// x.Grow(len(s)) pre-allocates a strings.Builder/bytes.Buffer by
+			// byte count — an allocation hint, not a display dimension.
+			if sel, ok := p.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Grow" {
 				return true
 			}
 			return false
@@ -278,6 +511,25 @@ func isIntLiteral(expr ast.Expr) bool {
 	case *ast.UnaryExpr:
 		// -1, +1
 		return (e.Op == token.SUB || e.Op == token.ADD) && isIntLiteral(e.X)
+	default:
+		return false
+	}
+}
+
+// isLenCall reports whether expr is (a possibly parenthesized or arithmetic
+// combination of) a call to the builtin len(). Used to recognize
+// "len(a) <op> len(b)" comparisons as byte-length comparisons — e.g. a
+// prefix/subset length check before slicing — rather than a display-width
+// check against a fixed layout dimension.
+func isLenCall(expr ast.Expr) bool {
+	switch e := expr.(type) {
+	case *ast.CallExpr:
+		id, ok := e.Fun.(*ast.Ident)
+		return ok && id.Name == builtinLen && len(e.Args) == 1
+	case *ast.ParenExpr:
+		return isLenCall(e.X)
+	case *ast.BinaryExpr:
+		return isLenCall(e.X) || isLenCall(e.Y)
 	default:
 		return false
 	}
@@ -345,8 +597,12 @@ func CheckDescriptiveStructNames(t *testing.T, patterns ...string) {
 				if x, ok := n.(*ast.TypeSpec); ok {
 					if x.Name.Name == "Model" || x.Name.Name == "model" {
 						if _, isStruct := x.Type.(*ast.StructType); isStruct {
-							t.Errorf("%s:%d: Struct must be given a more descriptive name than '%s'",
-								filename, pkg.Fset.Position(x.Pos()).Line, x.Name.Name)
+							t.Errorf(
+								"%s:%d: Struct must be given a more descriptive name than '%s'",
+								filename,
+								pkg.Fset.Position(x.Pos()).Line,
+								x.Name.Name,
+							)
 						}
 					}
 				}

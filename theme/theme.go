@@ -117,17 +117,17 @@ type AppStyle struct {
 // col returns a color.Color from a *tint.Color, using fallback ANSI/hex string when nil.
 func col(c *tint.Color, fallback string) color.Color {
 	if c != nil {
-		return lipgloss.Color(c.Hex())
+		return c
 	}
 	return lipgloss.Color(fallback)
 }
 
 // borderColor resolves the divider/border color for a tint. It prefers the
-// theme's "black" slot and otherwise derives a visible border from the
+// theme's "bright purple" slot and otherwise derives a visible border from the
 // background (lighter on dark themes, darker on light themes) using lipgloss.
 func borderColor(t *tint.Tint) color.Color {
-	if t.Black != nil {
-		return lipgloss.Color(t.Black.Hex())
+	if t.BrightPurple != nil {
+		return t.BrightPurple
 	}
 	bg := col(t.Bg, "235")
 	if t.Dark {
@@ -300,9 +300,9 @@ func fromTint(t *tint.Tint, accessibility bool, preset StylePreset) *AppStyle {
 	var sel color.Color
 	switch {
 	case t.SelectionBg != nil:
-		sel = lipgloss.Color(t.SelectionBg.Hex())
+		sel = t.SelectionBg
 	case t.Blue != nil:
-		sel = lipgloss.Color(t.Blue.Hex())
+		sel = t.Blue
 	default:
 		sel = lipgloss.Color("62")
 	}

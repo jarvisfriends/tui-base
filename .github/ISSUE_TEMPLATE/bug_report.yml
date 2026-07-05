@@ -1,0 +1,41 @@
+name: Bug report
+description: Something renders wrong, routes wrong, or crashes
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you see, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: Steps, or a minimal page model if the bug needs one.
+      placeholder: |
+        1. Run ...
+        2. Press ...
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal + size
+      description: e.g. Windows Terminal 90x76, iTerm2 120x40, over SSH?
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: tui-base version / commit and Go version
+    validations:
+      required: true
+  - type: textarea
+    id: inspector
+    attributes:
+      label: Inspector diagnostics (optional)
+      description: >-
+        Ctrl+D → Terminal tab shows color profile, TERM, SSH, and theme
+        details that make rendering bugs much easier to pin down.

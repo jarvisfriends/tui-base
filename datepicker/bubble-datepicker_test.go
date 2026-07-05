@@ -154,7 +154,10 @@ func TestLastMonth(t *testing.T) {
 		input time.Time
 		want  time.Time
 	}{
-		{input: halloween, want: time.Date(2023, time.September, 31, 0, 0, 0, 0, time.UTC)}, // normalizes
+		{
+			input: halloween,
+			want:  time.Date(2023, time.September, 31, 0, 0, 0, 0, time.UTC),
+		}, // normalizes
 		{input: thanksgiving, want: time.Date(2023, time.October, 23, 0, 0, 0, 0, time.UTC)},
 		{input: xmas, want: time.Date(2023, time.November, 25, 0, 0, 0, 0, time.UTC)},
 	}
@@ -172,7 +175,10 @@ func TestNextMonth(t *testing.T) {
 		input time.Time
 		want  time.Time
 	}{
-		{input: halloween, want: time.Date(2023, time.November, 31, 0, 0, 0, 0, time.UTC)}, // normalizes
+		{
+			input: halloween,
+			want:  time.Date(2023, time.November, 31, 0, 0, 0, 0, time.UTC),
+		}, // normalizes
 		{input: thanksgiving, want: time.Date(2023, time.December, 23, 0, 0, 0, 0, time.UTC)},
 		{input: xmas, want: time.Date(2024, time.January, 25, 0, 0, 0, 0, time.UTC)},
 	}

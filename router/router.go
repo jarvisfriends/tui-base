@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/charmbracelet/colorprofile"
@@ -54,36 +53,15 @@ type RegisteredPage struct {
 	Model tea.Model
 }
 
-var (
-	globalRegistry   []RegisteredPage
-	globalRegistryMu sync.Mutex
-)
-
-// RegisterPage adds a page to the global registry. This is typically called
-// from a page package's init() function so pages can self-register.
-func RegisterPage(title string, model tea.Model) {
-	globalRegistryMu.Lock()
-	defer globalRegistryMu.Unlock()
-	globalRegistry = append(globalRegistry, RegisteredPage{
-		Title: title,
-		Model: model,
-	})
-}
-
-// RegisteredPages returns a copy of all dynamically registered pages.
-func RegisteredPages() []RegisteredPage {
-	globalRegistryMu.Lock()
-	defer globalRegistryMu.Unlock()
-	out := make([]RegisteredPage, len(globalRegistry))
-	copy(out, globalRegistry)
-	return out
-}
-
-// ClearRegisteredPages clears the global page registry (primarily useful for tests).
-func ClearRegisteredPages() {
-	globalRegistryMu.Lock()
-	defer globalRegistryMu.Unlock()
-	globalRegistry = nil
+// TargetedMsg is an opt-in fast path for background messages that belong to a
+// single page. Non-key/mouse messages normally broadcast to every page so
+// inactive pages still receive their command results; a high-frequency
+// message (ticker, progress stream) that implements TargetedMsg is delivered
+// only to the page whose navigation ID or title matches TargetPage, so the
+// rest of the app is not woken on every update (A-1).
+type TargetedMsg interface {
+	// TargetPage returns the navigation ID or the title of the destination page.
+	TargetPage() string
 }
 
 // ReplaceAppPagesMsg replaces the app-provided pages at runtime.
@@ -186,6 +164,10 @@ type RouterModel struct {
 	// Stored ascending by Z; iterate in reverse for top-down input priority.
 	overlays []Overlay
 
+	// middleware runs in order at the top of Update; a middleware may observe,
+	// replace, or (by returning nil) swallow a message before routing (E-7).
+	middleware []func(tea.Msg) tea.Msg
+
 	// colors is a shared AppColors pointer. All child components hold this
 	// pointer so updating *colors here propagates immediately on the next render.
 	colors *theme.AppStyle
@@ -264,7 +246,10 @@ func NewWithOptions(opts Options) *RouterModel {
 	appConfigDir := opts.ConfigDir
 	if appConfigDir == "" {
 		if flag.Lookup("test.v") != nil {
-			appConfigDir = filepath.Join(os.TempDir(), fmt.Sprintf("tui-base-tests-%s-%d", configDirName, time.Now().UnixNano()))
+			appConfigDir = filepath.Join(
+				os.TempDir(),
+				fmt.Sprintf("tui-base-tests-%s-%d", configDirName, time.Now().UnixNano()),
+			)
 		} else if base, err := os.UserConfigDir(); err == nil {
 			appConfigDir = filepath.Join(base, configDirName)
 		} else {
@@ -286,8 +271,15 @@ func NewWithOptions(opts Options) *RouterModel {
 			log.Warnf("could not write initial settings file: %v", err)
 		}
 	}
-	theme.SetThemePreferences(settingsModel.ThemeMode, settingsModel.AccessibilityColors, theme.StylePreset(settingsModel.StylePreset))
-	settingsModel.ColorThemeID = theme.ResolveTintIDForMode(settingsModel.ColorThemeID, settingsModel.ThemeMode)
+	theme.SetThemePreferences(
+		settingsModel.ThemeMode,
+		settingsModel.AccessibilityColors,
+		theme.StylePreset(settingsModel.StylePreset),
+	)
+	settingsModel.ColorThemeID = theme.ResolveTintIDForMode(
+		settingsModel.ColorThemeID,
+		settingsModel.ThemeMode,
+	)
 	if settingsModel.ColorThemeID != "" {
 		_ = theme.SetCurrentTint(settingsModel.ColorThemeID)
 	}
@@ -358,6 +350,8 @@ func NewWithOptions(opts Options) *RouterModel {
 	// create a single inspector instance and keep a pointer to it so we can
 	// forward messages to it even when it's not the active page.
 	m.inspector = inspector.New()
+	// Inspector tabs cycle with the same next/previous keys as page navigation.
+	m.inspector.SetNavKeys(m.keys.NextPage, m.keys.PreviousPage)
 
 	// Derive env-var names from the app name so consumers get branded vars
 	// (e.g. "My App", MY_APP_COLOR_PROFILE, MY_APP_DEBUG) instead of the
@@ -371,9 +365,14 @@ func NewWithOptions(opts Options) *RouterModel {
 	// NewProgram(m) picks up the correct override if a consumer sets it.
 	// The router exposes ColorProfileEnvVar() for callers who need the name.
 
-	// subscribe inspector to log events so runtime logs appear in the UI
+	// Subscribe the inspector to log events so runtime logs appear in the UI.
+	// Capture the pointer instead of reading m.inspector inside the closure:
+	// subscribers run on whatever goroutine logs, while the Update loop may
+	// write the m.inspector field (updateInspector), so reading the field here
+	// would be an unsynchronized cross-goroutine access.
+	insp := m.inspector
 	log.RegisterSubscriber(func(level string, ts time.Time, msg string) {
-		m.inspector.AddLog(level, ts, msg)
+		insp.AddLog(level, ts, msg)
 	})
 	// Collect valid extra pages. When the caller supplies extra pages they come
 	// first in the nav list (Home is omitted — the app provides its own landing
@@ -382,7 +381,6 @@ func NewWithOptions(opts Options) *RouterModel {
 	// When no extra pages are supplied the default is Home + Settings.
 	m.status.SetKeys(m.keys)
 	allPages := append([]RegisteredPage{}, opts.ExtraPages...)
-	allPages = append(allPages, RegisteredPages()...)
 	m.replaceAppPages(allPages, opts.DefaultPage, -1)
 	// create notification manager and load persisted entries (best-effort)
 	m.notifMgr = notifications.NewManager()
@@ -502,7 +500,11 @@ func (m *RouterModel) activatePageByID(id string) bool {
 
 // replaceAppPages rebuilds the router page list from app-provided pages while
 // preserving router-owned pages (Settings).
-func (m *RouterModel) replaceAppPages(extraPages []RegisteredPage, activeTitle string, activeIndex int) {
+func (m *RouterModel) replaceAppPages(
+	extraPages []RegisteredPage,
+	activeTitle string,
+	activeIndex int,
+) {
 	m.appPages = extraPages
 	var navPages []navigation.Page
 	var pageModels []tea.Model
@@ -516,7 +518,10 @@ func (m *RouterModel) replaceAppPages(extraPages []RegisteredPage, activeTitle s
 	}
 
 	if len(pageModels) == 0 {
-		navPages = append(navPages, navigation.Page{ID: navigation.PageIDHome, Title: pageTitleHome})
+		navPages = append(
+			navPages,
+			navigation.Page{ID: navigation.PageIDHome, Title: pageTitleHome},
+		)
 		pageModels = append(pageModels, m.homePage)
 	}
 
@@ -582,7 +587,101 @@ func (m *RouterModel) Init() tea.Cmd {
 	)
 }
 
+// RegisterInspectorTab adds a custom tab to the Ctrl+D inspector (E-5). The
+// provider is started when the inspector opens and stopped when it closes;
+// see [inspector.MetricsProvider] for the contract and
+// docs/inspector-extensions.md for a worked example. This is a developer
+// diagnostics surface — build user-facing screens as pages instead.
+func (m *RouterModel) RegisterInspectorTab(p inspector.MetricsProvider) {
+	m.inspector.RegisterTab(p)
+}
+
+// RemoveInspectorTab stops and removes a custom inspector tab by name.
+func (m *RouterModel) RemoveInspectorTab(name string) {
+	m.inspector.RemoveTab(name)
+}
+
+// Use appends a message middleware that runs — in registration order — at the
+// very top of Update, before any routing (E-7). A middleware may observe the
+// message (analytics/logging), replace it (translation), or return nil to
+// swallow it entirely (gating). Swallowing infrastructure messages like
+// tea.WindowSizeMsg will break layout; gate only your own message types.
+func (m *RouterModel) Use(mw func(tea.Msg) tea.Msg) {
+	if mw != nil {
+		m.middleware = append(m.middleware, mw)
+	}
+}
+
+// SetStatusSegment registers (or removes, with a nil fn) a named right-aligned
+// status bar segment supplied by the embedding application — a live widget
+// like a git branch or connection state, re-evaluated every render (E-1).
+// See [status.BarModel.SetSegment] for ordering and skip semantics.
+func (m *RouterModel) SetStatusSegment(name string, fn func() string) {
+	m.status.SetSegment(name, fn)
+}
+
+// pageMatchesTarget reports whether the page at index i matches a
+// TargetedMsg destination (its navigation ID or title). Unknown targets match
+// nothing; a router without navigation falls back to broadcasting.
+func (m *RouterModel) pageMatchesTarget(i int, target string) bool {
+	if m.nav == nil {
+		return true // no nav to resolve against — deliver rather than drop
+	}
+	pages := m.nav.GetPages()
+	if i < 0 || i >= len(pages) {
+		return false
+	}
+	return pages[i].ID == target || pages[i].Title == target
+}
+
+// updatePage forwards msg to the page at index i and keeps any replacement
+// model returned by Update. Discarding the returned model would break the
+// Charm v2 model-swap pattern for consumer pages (B-1).
+func (m *RouterModel) updatePage(i int, msg tea.Msg) tea.Cmd {
+	model, cmd := m.pages[i].Update(msg)
+	if model != nil {
+		m.pages[i] = model
+	}
+	return cmd
+}
+
+// updateNav forwards msg to the navigator and keeps the returned model when it
+// still satisfies navigation.Navigator (supports future pluggable navigators).
+func (m *RouterModel) updateNav(msg tea.Msg) tea.Cmd {
+	model, cmd := m.nav.Update(msg)
+	if nav, ok := model.(navigation.Navigator); ok {
+		m.nav = nav
+	}
+	return cmd
+}
+
+// updateInspector forwards msg to the inspector, keeping a returned replacement.
+func (m *RouterModel) updateInspector(msg tea.Msg) tea.Cmd {
+	model, cmd := m.inspector.Update(msg)
+	if ins, ok := model.(*inspector.InspectorModel); ok {
+		m.inspector = ins
+	}
+	return cmd
+}
+
+// updateStatus forwards msg to the status bar, keeping a returned replacement.
+func (m *RouterModel) updateStatus(msg tea.Msg) tea.Cmd {
+	model, cmd := m.status.Update(msg)
+	if sb, ok := model.(*status.BarModel); ok {
+		m.status = sb
+	}
+	return cmd
+}
+
 func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Message middleware runs before any routing; nil swallows the message.
+	for _, mw := range m.middleware {
+		msg = mw(msg)
+		if msg == nil {
+			return m, nil
+		}
+	}
+
 	// Forward to active components
 	var cmds []tea.Cmd
 	// The inspector receives non-key messages for its message log and runtime
@@ -593,8 +692,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// double-dispatch while open and fire inspector shortcuts while closed.
 	_, isKeyMsg := msg.(tea.KeyMsg)
 	if m.inspector != nil && !isKeyMsg {
-		_, cmd := m.inspector.Update(msg)
-		if cmd != nil {
+		if cmd := m.updateInspector(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	}
@@ -678,7 +776,11 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.navNumberSelect = msg.Enabled
 		return m, nil
 
-	case notifications.AddMsg, notifications.DismissMsg, notifications.DismissKeyMsg, notifications.DismissAllMsg, notifications.ExpireMsg:
+	case notifications.AddMsg,
+		notifications.DismissMsg,
+		notifications.DismissKeyMsg,
+		notifications.DismissAllMsg,
+		notifications.ExpireMsg:
 		if cmd := m.notifMgr.Handle(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -699,6 +801,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.keys.ApplyCustomizations(msg.CustomKeys)
 		m.status.SetKeys(m.keys)
 		m.infoModal.SetKeys(m.keys)
+		m.inspector.SetNavKeys(m.keys.NextPage, m.keys.PreviousPage)
 		m.updatePageKeys()
 		return m, m.handleResizeCmd()
 
@@ -720,7 +823,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				BgIsDark:   msg.IsDark(),
 				Profile:    prof,
 			}
-			_, _ = m.inspector.Update(diagMsg)
+			_ = m.updateInspector(diagMsg)
 		}
 
 		m.startupBgSeen = true
@@ -748,7 +851,12 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// All child components hold *m.colors so they see the new palette on the
 		// next render without any additional wiring.
 		if m.debugEnabled() {
-			log.Debugf("Router.Update: received ThemeMsg id=%s router size=%dx%d", msg.ID, m.width, m.height)
+			log.Debugf(
+				"Router.Update: received ThemeMsg id=%s router size=%dx%d",
+				msg.ID,
+				m.width,
+				m.height,
+			)
 		}
 		if msg.ApplyPreferences {
 			theme.SetThemePreferences(msg.Mode, msg.Accessibility, theme.StylePreset(msg.Style))
@@ -878,15 +986,13 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case navigation.NavFocusMsg:
 		m.sidebarFocused = msg.Focused
 		if m.nav != nil {
-			_, cmd := m.nav.Update(msg)
-			cmds = append(cmds, cmd)
+			cmds = append(cmds, m.updateNav(msg))
 		}
 		return m, tea.Batch(append(cmds, m.handleResizeCmd())...)
 
 	case navigation.CollapseToggleMsg:
 		if m.nav != nil {
-			_, cmd := m.nav.Update(msg)
-			cmds = append(cmds, cmd)
+			cmds = append(cmds, m.updateNav(msg))
 		}
 		return m, tea.Batch(append(cmds, m.handleResizeCmd())...)
 
@@ -933,43 +1039,55 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Mouse modality mirrors key modality: Bubble Tea delivers mouse events to
+	// both View.OnMouse and Update, and the OnMouse path already routes them to
+	// the overlay. Without this gate the same wheel event would also scroll the
+	// nav or the page *behind* the overlay through the Update path.
+	mouseModal := isMouse && m.mouseModalOverlayVisible()
+
 	// Nav: always receives non-key messages (WindowSizeMsg, etc.);
 	// receives key messages only when the sidebar is focused AND the active
 	// page is not claiming exclusive keyboard focus AND no modal overlay is visible.
 	if m.inspector.IsVisible() {
 		ow, oh := m.inspectorOverlayInnerSize()
-		_, inspectorCmd := m.inspector.Update(tea.WindowSizeMsg{Width: ow, Height: oh})
-		cmds = append(cmds, inspectorCmd)
+		cmds = append(cmds, m.updateInspector(tea.WindowSizeMsg{Width: ow, Height: oh}))
 	}
 	if m.navigationVisible && m.nav != nil {
-		if !isKey || (!modalVisible && m.sidebarFocused && !activeCapturesKeys) {
-			_, cmd := m.nav.Update(msg)
-			cmds = append(cmds, cmd)
+		navGetsKeys := isKey && !modalVisible && m.sidebarFocused && !activeCapturesKeys
+		if (!isKey && !mouseModal) || navGetsKeys {
+			cmds = append(cmds, m.updateNav(msg))
 		}
 	}
 	// For non-interactive messages (background cmd results, data msgs, etc.)
 	// forward to every page so that pages that are not currently active can
 	// still receive the results of their Init/Cmd-produced messages (e.g. a
 	// scan that finishes while the user is viewing a different page).
+	// TargetedMsg is the fast path: high-frequency messages that name their
+	// page skip the broadcast and wake only that page (A-1).
+	targeted, isTargeted := msg.(TargetedMsg)
 	if !isKey && !isMouse {
-		for i, p := range m.pages {
+		for i := range m.pages {
 			if i == idx {
 				continue // handled separately below
 			}
-			_, cmd := p.Update(msg)
-			cmds = append(cmds, cmd)
+			if isTargeted && !m.pageMatchesTarget(i, targeted.TargetPage()) {
+				continue
+			}
+			cmds = append(cmds, m.updatePage(i, msg))
 		}
 	}
 
 	// Active page: receives all messages EXCEPT key events that were claimed
 	// by the sidebar (i.e. sidebar focused and page not capturing keys) or
-	// intercepted by a modal overlay.
-	if !isKey || (!modalVisible && (!m.sidebarFocused || activeCapturesKeys)) {
-		_, cmd := m.pages[idx].Update(msg)
-		cmds = append(cmds, cmd)
+	// intercepted by a modal overlay, mouse events while a mouse-modal overlay
+	// is open (those belong to the overlay via the OnMouse path), and targeted
+	// messages addressed to a different page.
+	pageGetsKeys := isKey && !modalVisible && (!m.sidebarFocused || activeCapturesKeys)
+	activeGetsTargeted := !isTargeted || m.pageMatchesTarget(idx, targeted.TargetPage())
+	if (!isKey && !mouseModal && activeGetsTargeted) || pageGetsKeys {
+		cmds = append(cmds, m.updatePage(idx, msg))
 	}
-	_, cmd := m.status.Update(msg)
-	cmds = append(cmds, cmd)
+	cmds = append(cmds, m.updateStatus(msg))
 
 	// Refresh status bar key hints in case the active page's mode changed
 	// (e.g. a page entering or leaving a text-input/search mode).
@@ -1061,7 +1179,18 @@ func (m *RouterModel) StatusBarContent() (string, bool) {
 // konamiSequence is the classic cheat code. Completing it triggers the hidden
 // "secret menu" — for now just a fun notification; games or other surprises may
 // live here later.
-var konamiSequence = []string{konamiKeyUp, konamiKeyUp, konamiKeyDown, konamiKeyDown, konamiKeyLeft, konamiKeyRight, konamiKeyLeft, konamiKeyRight, "b", "a"}
+var konamiSequence = []string{
+	konamiKeyUp,
+	konamiKeyUp,
+	konamiKeyDown,
+	konamiKeyDown,
+	konamiKeyLeft,
+	konamiKeyRight,
+	konamiKeyLeft,
+	konamiKeyRight,
+	"b",
+	"a",
+}
 
 var konamiMessages = []string{
 	"🕹️  Konami code accepted! 30 extra lives… just kidding. (Secret menu coming soon.)",
@@ -1107,7 +1236,9 @@ func (m *RouterModel) debugEnabled() bool {
 	return os.Getenv(m.debugEnvVar) == "1"
 }
 
-func (m *RouterModel) GetActivePage() tea.Model {
+// activePageIndex returns the navigator's active index clamped to the pages
+// slice (0 when the navigator is nil or out of range).
+func (m *RouterModel) activePageIndex() int {
 	idx := 0
 	if m.nav != nil {
 		idx = m.nav.GetActiveIndex()
@@ -1115,22 +1246,34 @@ func (m *RouterModel) GetActivePage() tea.Model {
 	if idx < 0 || idx >= len(m.pages) {
 		idx = 0
 	}
-	return m.pages[idx]
+	return idx
+}
+
+func (m *RouterModel) GetActivePage() tea.Model {
+	return m.pages[m.activePageIndex()]
 }
 
 func (m *RouterModel) handleResizeCmd() tea.Cmd {
 	var cmds []tea.Cmd
-	_, cmd := m.status.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
-	cmds = append(cmds, cmd)
+	cmds = append(cmds, m.updateStatus(tea.WindowSizeMsg{Width: m.width, Height: m.height}))
 	removeHeight := m.status.Height() // status bar knows if its active and what its height is
 	removeWidth := 0
 	if m.debugEnabled() {
-		log.Debugf("handleResizeCmd: router size=%dx%d statusHeight=%d", m.width, m.height, removeHeight)
+		log.Debugf(
+			"handleResizeCmd: router size=%dx%d statusHeight=%d",
+			m.width,
+			m.height,
+			removeHeight,
+		)
 	}
 	if m.navigationVisible && m.nav != nil {
 		// Let the active nav compute its preferred size based on the full terminal width and available height.
-		_, navCmd := m.nav.Update(tea.WindowSizeMsg{Width: m.width - removeWidth, Height: m.height - removeHeight})
-		cmds = append(cmds, navCmd)
+		cmds = append(
+			cmds,
+			m.updateNav(
+				tea.WindowSizeMsg{Width: m.width - removeWidth, Height: m.height - removeHeight},
+			),
+		)
 		// A left-docked nav (sidebar) reserves width; a top-docked nav (tabs)
 		// reserves height. Driven by Dock() so a new nav style needs no router change.
 		if m.nav.Dock() == navigation.DockLeft {
@@ -1139,14 +1282,28 @@ func (m *RouterModel) handleResizeCmd() tea.Cmd {
 			removeHeight += m.nav.Height()
 		}
 		if m.debugEnabled() {
-			log.Debugf("handleResizeCmd: after nav type=%T removeWidth=%d removeHeight=%d", m.nav, removeWidth, removeHeight)
+			log.Debugf(
+				"handleResizeCmd: after nav type=%T removeWidth=%d removeHeight=%d",
+				m.nav,
+				removeWidth,
+				removeHeight,
+			)
 		}
 	}
 	if m.debugEnabled() {
-		log.Debugf("handleResizeCmd: active page will get size=%dx%d", m.width-removeWidth, m.height-removeHeight)
+		log.Debugf(
+			"handleResizeCmd: active page will get size=%dx%d",
+			m.width-removeWidth,
+			m.height-removeHeight,
+		)
 	}
-	_, cmd = m.GetActivePage().Update(tea.WindowSizeMsg{Width: m.width - removeWidth, Height: m.height - removeHeight})
-	cmds = append(cmds, cmd)
+	cmds = append(
+		cmds,
+		m.updatePage(
+			m.activePageIndex(),
+			tea.WindowSizeMsg{Width: m.width - removeWidth, Height: m.height - removeHeight},
+		),
+	)
 	// Return a single internal resize message so Update can forward child
 	// sizes without overwriting the router's terminal width/height.
 	return tea.Batch(cmds...)
@@ -1258,7 +1415,12 @@ func (m *RouterModel) View() tea.View {
 			switch ev := mm.(type) {
 			case tea.MouseClickMsg, tea.MouseReleaseMsg, tea.MouseMotionMsg, tea.MouseWheelMsg:
 				mEvent := ev.Mouse()
-				nm := tea.Mouse{X: mEvent.X - offX, Y: mEvent.Y - offY, Button: mEvent.Button, Mod: mEvent.Mod}
+				nm := tea.Mouse{
+					X:      mEvent.X - offX,
+					Y:      mEvent.Y - offY,
+					Button: mEvent.Button,
+					Mod:    mEvent.Mod,
+				}
 				var childCmd tea.Cmd
 				if child.OnMouse != nil {
 					switch ev.(type) {
@@ -1273,7 +1435,13 @@ func (m *RouterModel) View() tea.View {
 					}
 				}
 				return tea.Batch(childCmd, func() tea.Msg {
-					return inspector.MouseHighlightMsg{GlobalX: mEvent.X, GlobalY: mEvent.Y, Child: childName, OffX: offX, OffY: offY}
+					return inspector.MouseHighlightMsg{
+						GlobalX: mEvent.X,
+						GlobalY: mEvent.Y,
+						Child:   childName,
+						OffX:    offX,
+						OffY:    offY,
+					}
 				})
 			default:
 				return nil
@@ -1304,7 +1472,12 @@ func (m *RouterModel) View() tea.View {
 
 type routeFn func(child tea.View, offX, offY int, childName string) tea.Cmd
 
-func (m *RouterModel) routeMouseToNav(mm tea.MouseMsg, mainHeight int, navView, activePageView tea.View, route routeFn) tea.Cmd {
+func (m *RouterModel) routeMouseToNav(
+	mm tea.MouseMsg,
+	mainHeight int,
+	navView, activePageView tea.View,
+	route routeFn,
+) tea.Cmd {
 	if m.navigationVisible && m.nav != nil {
 		return m.routeMouseWithNavVisible(mm, mainHeight, navView, activePageView, route)
 	}
@@ -1316,7 +1489,12 @@ func (m *RouterModel) routeMouseToNav(mm tea.MouseMsg, mainHeight int, navView, 
 	return nil
 }
 
-func (m *RouterModel) routeMouseWithNavVisible(mm tea.MouseMsg, mainHeight int, navView, activePageView tea.View, route routeFn) tea.Cmd {
+func (m *RouterModel) routeMouseWithNavVisible(
+	mm tea.MouseMsg,
+	mainHeight int,
+	navView, activePageView tea.View,
+	route routeFn,
+) tea.Cmd {
 	mmPos := mm.Mouse()
 	if m.nav.Dock() == navigation.DockLeft {
 		navW := m.nav.Width()
@@ -1380,15 +1558,16 @@ func (m *RouterModel) handleSidebarNavKey(keyMsg tea.KeyPressMsg) (tea.Cmd, bool
 	// rather than cycling pages (page selection is Up/Down in the
 	// sidebar). Pages that need Left/Esc must implement
 	// KeyCapturer so those keys reach them instead.
-	switch {
-	case keyMsg.Code == tea.KeyRight || keyMsg.Code == tea.KeyEnter || keyMsg.Code == tea.KeyTab || keyMsg.String() == "shift+tab":
+	switch keyMsg.Code {
+	// KeyTab matches both tab and shift+tab (the modifier is in Mod).
+	case tea.KeyRight, tea.KeyEnter, tea.KeyTab:
 		if m.sidebarFocused {
 			m.sidebarFocused = false
 			m.setNavFocused(false)
 			m.updatePageKeys()
 			return m.handleResizeCmd(), true
 		}
-	case keyMsg.Code == tea.KeyLeft || keyMsg.Code == tea.KeyEscape:
+	case tea.KeyLeft, tea.KeyEscape:
 		if !m.sidebarFocused {
 			m.sidebarFocused = true
 			m.setNavFocused(true)

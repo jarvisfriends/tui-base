@@ -46,7 +46,7 @@ coverage.html
 dist/
 
 # Compiled binary (no extension on Linux/macOS)
-tui-base
+./tui-base
 
 # User-specific persisted runtime settings (not source code)
 tui_settings.json

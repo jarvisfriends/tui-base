@@ -4,6 +4,10 @@ Summary
 - The top-level `tea.View` receives all mouse messages in Bubble Tea.
   Nested `tea.View.OnMouse` handlers are not called automatically by the runtime.
   Dispatch mouse events from the top-level view into each child's `OnMouse` manually.
+- Bubble Tea delivers every mouse event **twice**: once to the top-level view's
+  `OnMouse` callback and once to the model's `Update` as a `tea.MouseMsg`. Any
+  routing or modality rule must be enforced on **both** paths, or events leak
+  through the one you forgot (see "Overlay modality" below).
 
 Key points
 - Always compute child-relative coordinates by subtracting the child's origin
@@ -22,6 +26,25 @@ Key points
 - When top-level `OnMouse` returns a `tea.Cmd` created via `tea.Batch`, tests and
   callers need to execute every sub-cmd inside `tea.BatchMsg` to see produced
   `tea.Msg` values. The runtime does this automatically; tests must call each sub-cmd.
+
+Overlay modality (router `overlayHandleMouse` + `mouseModalOverlayVisible`)
+- While a modal overlay (notification history, inspector, info modal — any
+  visible `MouseConsumer`/`OutsideCloser`) is open, it owns the mouse, exactly
+  as the topmost `KeyConsumer` owns the keyboard:
+  - **Positional events** (click, motion): inside the overlay's `Bounds()` they
+    go to `OverlayMouse`; a release outside closes `OutsideCloser` overlays;
+    everything else is consumed.
+  - **Wheel events** are positionless scrolling intent: they always route to
+    the overlay regardless of where the pointer sits, matching keyboard
+    scrolling. Overlays therefore must handle `tea.MouseWheelMsg` in
+    `OverlayMouse` without hit-testing the coordinates.
+  - The **Update path** is gated too: `RouterModel.Update` drops mouse messages
+    to the nav and pages while a mouse-modal overlay is visible
+    (`mouseModalOverlayVisible`). Without this, the same wheel event that
+    scrolled the overlay via `OnMouse` would also scroll the page behind it via
+    `Update` — the double-delivery pitfall above.
+- Passive overlays (the toast) implement neither interface and are fully
+  transparent to the mouse.
 
 Design choices we used in this repo
 - Router-level dispatch: the router computes main layout sizes and either calls

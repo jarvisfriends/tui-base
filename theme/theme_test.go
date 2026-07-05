@@ -68,11 +68,15 @@ var colorVisionFilters = []colorVisionFilter{
 func evaluatePair(pair semanticPair) pairMetrics {
 	fg, ok := colorful.MakeColor(pair.fg)
 	if !ok {
-		return pairMetrics{failures: []string{"foreground color has zero alpha and cannot be analyzed"}}
+		return pairMetrics{
+			failures: []string{"foreground color has zero alpha and cannot be analyzed"},
+		}
 	}
 	bg, ok := colorful.MakeColor(pair.bg)
 	if !ok {
-		return pairMetrics{failures: []string{"background color has zero alpha and cannot be analyzed"}}
+		return pairMetrics{
+			failures: []string{"background color has zero alpha and cannot be analyzed"},
+		}
 	}
 
 	metrics := pairMetrics{
@@ -258,7 +262,16 @@ func TestDefaultStyleComboAccessibilityReport(t *testing.T) {
 		limit := min(8, len(scores))
 		for i := range limit {
 			s := scores[i]
-			t.Logf("mode=%s rank=%d theme=%s (%s) score=%d/%d ratio=%.2f", s.mode, i+1, s.display, s.id, s.passCount, s.totalCount, s.passRatio)
+			t.Logf(
+				"mode=%s rank=%d theme=%s (%s) score=%d/%d ratio=%.2f",
+				s.mode,
+				i+1,
+				s.display,
+				s.id,
+				s.passCount,
+				s.totalCount,
+				s.passRatio,
+			)
 		}
 	}
 
@@ -321,7 +334,12 @@ func TestAccessibilityOptionImprovesOrMatchesStyleCombos(t *testing.T) {
 		}
 
 		if adjustedPasses < basePasses {
-			t.Fatalf("theme %q regressed with accessibility mode: base=%d adjusted=%d", tm.ID, basePasses, adjustedPasses)
+			t.Fatalf(
+				"theme %q regressed with accessibility mode: base=%d adjusted=%d",
+				tm.ID,
+				basePasses,
+				adjustedPasses,
+			)
 		}
 	}
 }
@@ -387,7 +405,11 @@ func TestStyleComboShortlistJSON(t *testing.T) {
 	}
 
 	if len(got.Dark) == 0 || len(got.Light) == 0 {
-		t.Fatalf("shortlist json must include dark and light entries; got dark=%d light=%d", len(got.Dark), len(got.Light))
+		t.Fatalf(
+			"shortlist json must include dark and light entries; got dark=%d light=%d",
+			len(got.Dark),
+			len(got.Light),
+		)
 	}
 
 	want, err := json.Marshal(generated)
@@ -399,7 +421,10 @@ func TestStyleComboShortlistJSON(t *testing.T) {
 		t.Fatalf("marshal actual shortlist: %v", err)
 	}
 	if !bytes.Equal(gotJSON, want) {
-		t.Fatalf("style combo shortlist out of date; run with UPDATE_STYLE_SHORTLIST=1 to refresh %s", shortlistPath)
+		t.Fatalf(
+			"style combo shortlist out of date; run with UPDATE_STYLE_SHORTLIST=1 to refresh %s",
+			shortlistPath,
+		)
 	}
 }
 
@@ -652,7 +677,13 @@ func TestThemeContrastSafeguards(t *testing.T) {
 		// We expect the adjustment code in theme.go to shift selection bg away by at least 15% (scaled out of 255)
 		// which means a difference of at least ~15 units.
 		if diff < 10.0 {
-			t.Errorf("theme %s: selection bg %v and background %v are too close (luminance diff %.2f)", tm.ID, app.SelectionBg, app.Bg, diff)
+			t.Errorf(
+				"theme %s: selection bg %v and background %v are too close (luminance diff %.2f)",
+				tm.ID,
+				app.SelectionBg,
+				app.Bg,
+				diff,
+			)
 		}
 
 		// 4. Accessibility mode adjustments verification

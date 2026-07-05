@@ -98,8 +98,8 @@ func DefaultKeyMap() *AppKeyMap {
 			key.WithHelp("shift+tab", "prev page"),
 		),
 		OpenSettings: key.NewBinding(
-			key.WithKeys("ctrl+,"),
-			key.WithHelp("ctrl+,", "settings"),
+			key.WithKeys("ctrl+g"),
+			key.WithHelp("ctrl+g", "settings"),
 		),
 		Top: key.NewBinding(
 			key.WithKeys("home"),

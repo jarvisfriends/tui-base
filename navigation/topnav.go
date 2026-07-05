@@ -127,6 +127,15 @@ func (m *MinimalTopNav) View() tea.View {
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
 	v.OnMouse = func(mm tea.MouseMsg) tea.Cmd {
+		// Horizontal wheel scrolls through the pages, matching the tab bar.
+		if d := horizontalWheelDelta(mm); d != 0 && len(m.Pages) > 0 {
+			me := mm.Mouse()
+			if me.Y < 0 || me.Y >= lipgloss.Height(v.Content) {
+				return nil
+			}
+			m.ActiveIndex = (m.ActiveIndex + d + len(m.Pages)) % len(m.Pages)
+			return m.selectCmd()
+		}
 		switch ev := mm.(type) {
 		case tea.MouseClickMsg, tea.MouseReleaseMsg:
 			me := ev.Mouse()
