@@ -301,6 +301,7 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          slug: jarvisfriends/tui-base
           files: ./coverage.out
       - name: Check coverage threshold
         run: |
