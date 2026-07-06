@@ -298,7 +298,7 @@ jobs:
       - name: Upload coverage reports to Codecov
         # Requires the CODECOV_TOKEN secret; without it the action attempts a
         # tokenless upload on public repos and does not fail the build.
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: jarvisfriends/tui-base
