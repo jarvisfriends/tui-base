@@ -56,6 +56,7 @@ func Run(opts Options) error {
 // services and wrappers embedding a tui-base app.
 func RunContext(ctx context.Context, opts Options) error {
 	m := router.NewWithOptions(opts)
+	defer m.Close()
 	p := router.NewProgramWithContext(ctx, m, m.ColorProfileEnvVar())
 	_, err := p.Run()
 	return err

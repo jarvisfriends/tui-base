@@ -11,6 +11,7 @@ import (
 
 	"github.com/charmbracelet/colorprofile"
 	cfg "github.com/jarvisfriends/tui-base/config"
+	"github.com/jarvisfriends/tui-base/filewatch"
 	"github.com/jarvisfriends/tui-base/gate"
 	"github.com/jarvisfriends/tui-base/keys"
 	log "github.com/jarvisfriends/tui-base/logging"
@@ -98,6 +99,12 @@ type Options struct {
 	SettingsSections []cfg.Section[string]
 	KeyMap           *keys.AppKeyMap
 	Gates            *gate.GateRegistry
+	// WatchSettingsFile enables live reload of tui_settings.json: external
+	// edits are re-applied at runtime and surfaced as a notification (FW-1).
+	// The app's own saves are detected and stay silent. Call
+	// (*RouterModel).Close after Program.Run to release the OS watch
+	// (tuibase.Run/RunContext do this automatically).
+	WatchSettingsFile bool
 }
 
 // pageIDFromTitle derives a stable navigation ID from a human-readable title
@@ -174,6 +181,15 @@ type RouterModel struct {
 
 	notifMgr         *notifications.Manager
 	notifPersistPath string // default persist path; empty when config dir unavailable
+
+	// settingsWatcher live-reloads tui_settings.json when it changes on disk
+	// (Options.WatchSettingsFile, FW-1). Nil when watching is disabled.
+	settingsWatcher *filewatch.Watcher
+
+	// linkMeter backs the built-in "Link" inspector tab: estimated remote
+	// data rates (Tx = input wire bytes, Rx = frame-diff bytes). Collection
+	// runs only while that tab's provider is started.
+	linkMeter *linkRateMeter
 
 	navigationVisible bool
 
@@ -350,6 +366,10 @@ func NewWithOptions(opts Options) *RouterModel {
 	// create a single inspector instance and keep a pointer to it so we can
 	// forward messages to it even when it's not the active page.
 	m.inspector = inspector.New()
+	// Built-in "Link" tab: estimated remote-link data rates (Tx/Rx). The
+	// meter collects only while the inspector is open (provider lifecycle).
+	m.linkMeter = newLinkRateMeter()
+	m.inspector.RegisterTab(&linkRateProvider{meter: m.linkMeter})
 	// Inspector tabs cycle with the same next/previous keys as page navigation.
 	m.inspector.SetNavKeys(m.keys.NextPage, m.keys.PreviousPage)
 
@@ -397,6 +417,9 @@ func NewWithOptions(opts Options) *RouterModel {
 		}
 	}
 	m.status.SetNotifManager(m.notifMgr)
+	if opts.WatchSettingsFile {
+		m.startSettingsWatch()
+	}
 	m.infoModal = status.NewInfoModal()
 	m.infoModal.SetKeys(m.keys)
 	m.infoModal.SetAppName(m.appName)
@@ -576,6 +599,7 @@ func (m *RouterModel) Init() tea.Cmd {
 		m.nav.Init(),
 		m.status.Init(),
 		inspectorInit,
+		m.settingsWatchInit(),
 		tea.Batch(pgInits...),
 		// Request an explicit initial size so the first full-frame render is
 		// deterministic across terminals/SSH transports.
@@ -682,6 +706,12 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Price input for the link-rate estimate (no-op unless the inspector's
+	// Link tab has started collection).
+	if m.linkMeter != nil {
+		m.linkMeter.ObserveMsg(msg)
+	}
+
 	// Forward to active components
 	var cmds []tea.Cmd
 	// The inspector receives non-key messages for its message log and runtime
@@ -786,6 +816,15 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmds = append(cmds, m.handleResizeCmd())
 		return m, tea.Batch(cmds...)
+
+	case filewatch.Event:
+		// tui_settings.json changed on disk (FW-1): reload, notify when it was
+		// an external edit, and re-arm the watcher.
+		return m, m.handleSettingsFileEvent()
+
+	case filewatch.ErrorMsg:
+		m.handleSettingsFileError(msg)
+		return m, nil
 
 	case settings.NotificationsSettingsMsg:
 		// Apply notification enabled/persist settings to the shared manager.
@@ -1379,6 +1418,12 @@ func (m *RouterModel) View() tea.View {
 	// overlays directly onto the source so the nav sidebar and status bar behind
 	// the overlay are never blanked.
 	contentStr = m.renderOverlays(contentStr, statusHeight)
+
+	// Price the finished frame for the link-rate estimate (no-op unless the
+	// inspector's Link tab has started collection).
+	if m.linkMeter != nil {
+		m.linkMeter.ObserveFrame(contentStr)
+	}
 
 	// Bubble Tea emits BackgroundColor/ForegroundColor as OSC sequences that the
 	// color-profile writer passes through UNCHANGED (it only downsamples SGR).

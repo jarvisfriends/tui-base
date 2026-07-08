@@ -17,24 +17,22 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 
 | # | Question | Options / Recommendation | Unblocks |
 |---|---|---|---|
-| Q-10 | **Component extraction shape: one shared "extended bubbles" repo, or one repo per capability?** (Your open debate from the extraction section below.) | Repo-per-capability gives independent update cycles; a single repo is less overhead. Either way each component gets a VHS `.tape` demo. | X-1…X-4 |
-- HUMAN: one jarvis-bubbles repo with all the unique components, Create folders to organize each category over time. For instance, the navigation component folder should have 3 additional folders, one for each type that we could swap between (Tabs, Sidebar, Minimal Top).
-| Q-11 | **One-time manual pass: does the VS Code workspace setup behave as intended?** (format-on-save via gofumpt, 2-space JSON/YAML, "go: full verify" task, Error Lens inline lint, Delve race debug config, "go: api compat check" task.) | Run through once and confirm; this is the remainder of the old `.agent/TODO.md`. | — |
-- HUMAN: Yes, I believe it does
 | Q-12 | **A-4 scroll refactor — keep or replace the settings overview scroller?** The inspector already scrolls via `bubbles/viewport` (`tabScrollY` is only per-tab scroll *memory*), so the settings overview is the last hand-rolled scroller — but it is a multi-**column**, category-grouped, entry-windowed layout. `bubbles/list` is single-column with its own chrome; a raw viewport trades entry-snapping for line scrolling. | Recommend closing A-4 as "won't do for settings; inspector already compliant". | A-4 |
 | Q-13 | **CF-2 conformance tab: confirm the snapshot design.** The inspector renders *inside* `router.View`, so a tab checking the live frame would recurse. Sketch: the router records frame metrics (size fit, status-bar presence, border counts) at the end of `View`; a built-in `MetricsProvider` tab reports pass/fail from that snapshot. | Confirm that design — or drop CF-2 now that the unit-level conformance checks cover the same invariants. | CF-2 |
-| Q-14 | **FW-1 filewatch: OK to add the `fsnotify` dependency?** The archived charming reference isn't in this repo, so it's a fresh ~80-line `fsnotify → tea.Cmd` helper plus one new direct dep. | Yes/no on the dep; implementation is straightforward once approved. | FW-1 |
-- HUMAN: Yes on the dependency and the settings change notifications
 | Q-15 | **T-4 YAML themes: pick the YAML dep and schema.** Needs `goccy/go-yaml` vs `gopkg.in/yaml.v3`, and a schema decision: full 16-slot terminal tint vs the smaller semantic `AppStyle` slots. | Recommend goccy/go-yaml + full tint schema (drops straight into bubbletint's registry). | T-4 |
+| Q-20 | **jarvis-bubbles dependency direction: once a component is extracted, does tui-base import it back?** tui-base is public, so importing jarvis-bubbles requires that repo to be public on GitHub too (Gitea-only won't resolve for outside consumers). Alternative: extract as a copy and let the two drift apart deliberately. | Recommend: make jarvis-bubbles public and have tui-base import it — one source of truth, and the components get real consumers immediately. | X-1…X-4 (beyond the scaffold) |
 | Q-16 | **Priority order for the remaining feature ideas?** Effort estimates: I-1 lifecycle hooks (S), I-3 confirm-modal service (M), I-4 persistent layout state (M), I-5 capability detection (M), I-2 command palette (L), I-6 panic overlay (M — riskiest: `recover()` inside the tea loop). | Pick the order (or "none for now") and I'll work down the list. | I-1…I-6 |
 | Q-17 | **I-8 release hardening: cosign keyless (OIDC) or a managed signing key?** Keyless is zero-secret and recommended; either way goreleaser + workflow permissions need a decision. | Confirm keyless and I'll wire SBOM + signing into the release workflow. | I-8 |
 | Q-18 | **I-9 i18n: recommend rejecting.** Message catalogs bloat every consumer, and a framework's user-facing strings are mostly consumer-owned anyway. | Confirm to close as rejected. | I-9 |
 | Q-19 | **A-8 cyclomatic-complexity linter: enable now or after the big files shrink?** Enabling `cyclop`/`gocyclo` today flags `router.go` and inspector `debug.go`; a high threshold (~25) would pass but adds little until those files are split. | Recommend enabling at threshold 25 now and ratcheting down later. | A-8 |
 
-### ✅ Answered (2026-07-01)
+### ✅ Answered (2026-07-01, updated 2026-07-07)
 
 | # | Question | Decision |
 |---|---|---|
+| Q-10 | Component extraction shape? | **One `jarvis-bubbles` repo** holding all the unique components, organized into category folders that grow over time — e.g. `navigation/` with one folder per swappable style (`tabs/`, `sidebar/`, `minimal-top/`). Each component gets a VHS `.tape` demo. Scaffolded 2026-07-07; dependency direction is the remaining decision (Q-20). |
+| Q-11 | VS Code workspace manual pass? | **Confirmed working** (2026-07-07). Closed. |
+| Q-14 | FW-1 `fsnotify` dep? | **Yes** — dep accepted, and include settings-change notifications: external edits to `tui_settings.json` reload live and surface a notification. Shipped 2026-07-07 (see FW-1). |
 | Q-1 | Public release goal? | Already public at **v0.2.1**. v1.0 = "no more changes wanted"; until then breaking improvements are fine. Library-readiness items stay a priority band. |
 | Q-2 | Module import path? | `github.com/jarvisfriends/tui-base` is final. Consider a top-level wrapper around `router`, or moving router to the root under a new name (see LR-1). |
 | Q-3 | `testutil` export? | **Keep exported** — consumers run `CheckCodeStandards`; the `golang.org/x/tools` dep is accepted. LR-2 resolved. |
@@ -99,6 +97,7 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 | ❓ | A-8 | Add `gocyclo`/`cyclop` linter; periodically review new golangci-lint linters (`default: none` hides new ones) | Threshold decision via Q-19 (recommend enable at 25, ratchet down). |
 | 💡 Idea | A-9 | `context.Context` in notification TTL, config I/O, logging fan-out | Partially covered 2026-07-03: `RunContext`/`NewProgramWithContext` bound the program lifetime (A-2). Remaining idea is plumbing ctx into TTL timers and config I/O — still gated on Bubble Tea's loop not passing contexts. |
 | 📋 Noted | A-10 | Tier 5 (consumer repo): decompose dash `dashboard.go` god-object (927 lines) into mode handlers + overlay manager mirroring the router `Overlay` pattern | Lives in the dash repo, tracked here so the tier list stays complete. |
+| ⬜ Planned | A-11 | **Restyle the inspector's settings surface to match the main Settings page** | Human feedback (2026-07-07): "The main Settings page is great, the Inspector settings page should look like the main one." Reuse the settings page's section/field rendering (or its styles) inside the inspector so the two read as one design. |
 
 ## Testing
 
@@ -134,10 +133,11 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 
 | Status | # | Candidate | Notes |
 |---|---|---|---|
-| ❓ | X-1 | `navigation` — Tabs, Sidebar, Slim/topnav | Started from other examples and expanded. Sidebar is close to `bubbles/list` with a custom delegate — consider migrating before extraction to thin the key/mouse logic. |
-| ❓ | X-2 | `pages/inspector` → `bubbleinspector` | Prime candidate; deps are only `bubbletea/v2` + `lipgloss/v2`. |
-| ❓ | X-3 | `logging` → `bubblelog` | Could grow a ring buffer, level histogram, export interface. |
-| ❓ | X-4 | `status` bar | Remove the hard-coded notification seed before extracting. |
+| 🔄 In Progress | X-0 | `jarvis-bubbles` repo scaffold (per Q-10) | Scaffolded 2026-07-07: category folders (`navigation/{tabs,sidebar,minimal-top}`, `inspector/`, `logging/`, `status/`), README with the extraction contract, go.mod. Actual moves are X-1…X-4, gated on Q-20 (dependency direction). |
+| ⬜ Planned | X-1 | `navigation` — Tabs, Sidebar, Slim/topnav → `jarvis-bubbles/navigation/{tabs,sidebar,minimal-top}` | Unblocked by Q-10. Sidebar is close to `bubbles/list` with a custom delegate — consider migrating before extraction to thin the key/mouse logic. |
+| ⬜ Planned | X-2 | `pages/inspector` → `jarvis-bubbles/inspector` | Unblocked by Q-10. Prime candidate; deps are only `bubbletea/v2` + `lipgloss/v2`. |
+| ⬜ Planned | X-3 | `logging` → `jarvis-bubbles/logging` | Unblocked by Q-10. Could grow a ring buffer, level histogram, export interface. |
+| ⬜ Planned | X-4 | `status` bar → `jarvis-bubbles/status` | Unblocked by Q-10. Remove the hard-coded notification seed before extracting. |
 | 🔄 In Progress | X-5 | VHS gif creator with `.tape` config for the main tui-base app | Tape written 2026-07-03 (`tools/demo.tape`: pages, settings, inspector tour). **🔔 Human action:** install `vhs` and run `vhs tools/demo.tape` once to render/verify the gif (not installed in the dev environment). |
 
 ## Ideas (unranked)
@@ -146,7 +146,7 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 |---|---|---|---|
 | ❓ | T-4 | Custom theme authoring (user-defined YAML tints) | Load from `~/.config/tui-base/themes/`. Blocked on Q-15 (YAML dep + schema). |
 | ✅ Done | L-6 | Evaluate migration to Uber `zap` logging lib | Evaluated 2026-07-03 — **recommend rejecting**: zap optimizes high-throughput structured logging; this logger is low-volume and UI-bound, already rotates files, and its framework value is the subscriber fan-out. If structured logging becomes a consumer ask, stdlib `log/slog` (zero dep, expose a `slog.Handler`) is the path. Veto welcome. |
-| ❓ | FW-1 | **Filewatch helper** (`fsnotify` → `tea.Cmd`) for live-reloading views | The archived charming reference isn't in this repo — it's a fresh helper plus a new dep. Blocked on Q-14. |
+| ✅ Done | FW-1 | **Filewatch helper** (`fsnotify` → `tea.Cmd`) for live-reloading views | Done 2026-07-07 per Q-14: new `filewatch` package (parent-dir watch so atomic renames are seen, debounced bursts, `Next()`/`Stop()` lifecycle) + `Options.WatchSettingsFile` — external edits to `tui_settings.json` reload live, re-apply the theme, and raise a notification; the app's own saves stay silent (JSON no-op detection). `RouterModel.Close` releases the OS watch; `tuibase.Run/RunContext` call it automatically. Tests: `filewatch/filewatch_test.go`, `router/settings_watch_test.go`. |
 | ❓ | I-1 | Page lifecycle hooks (`OnEnter`, `OnLeave`, `OnResize`, `OnThemeChange`) | Prioritize via Q-16 (effort: S). |
 | ❓ | I-2 | Command palette (Ctrl+P) | Prioritize via Q-16 (effort: L). |
 | ❓ | I-3 | Modal confirmation service (router-owned, `ConfirmMsg`) | Prioritize via Q-16 (effort: M). |
@@ -156,5 +156,5 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 | ✅ Done | I-7 | Configurable ring-buffer size for inspector message dedup | Done 2026-07-03: `inspector.SetLogCapacity(n)` (floor 10, 0 restores the 50 default); both dedup paths trim through one helper. |
 | ❓ | I-8 | Supply-chain hardening at release: SBOM, cosign, provenance attestations | Blocked on Q-17 (keyless vs managed key). |
 | ❓ | I-9 | i18n keys in user-facing strings | Recommend rejecting — confirm via Q-18. |
-
-The main Settings page is great, the Inspector settings page should look like the main one
+| ✅ Done | I-10 | **Inspector "Link" tab: estimated remote data rate** (Tx = input as ANSI wire bytes — key/mouse/drag/paste; Rx = frames as a line-diff renderer would transmit) | Done 2026-07-07 (human request): built-in `MetricsProvider` tab via the E-5 API. Shows last-second / 5 s / 60 s averages, peaks, session totals, and the required link rate in B/s + bit/s for a remote (SSH/serial/embedded) deployment. Collection only runs while the inspector is open — zero cost otherwise. `router/linkrate.go` + tests. |
+| ⬜ Planned | I-11 | **Data-rate limiter modes** — degrade visuals to fit a constrained link, guided by the I-10 meter | Human intent (2026-07-07): options like capping the update/refresh rate, disabling or reducing transitions/animations, and similar "looks less good, costs fewer bytes" behaviors, so the app can run within a target link budget on an embedded device. Design sketch: a `LinkBudget` setting (target bit/s) that gates spinner/progress tick rates, coalesces re-renders (min frame interval), and prefers full-cell updates over per-frame gradients. Build on the I-10 meter for feedback. |

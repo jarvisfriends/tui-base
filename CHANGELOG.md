@@ -8,6 +8,22 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
 
 ### Added
 
+- `filewatch` package (FW-1): fsnotify -> `tea.Cmd` bridge with rename-safe
+  parent-directory watching (atomic writes are seen), debounced event bursts,
+  and a `Next()`/`Stop()` lifecycle.
+- `Options.WatchSettingsFile`: live reload of `tui_settings.json` — external
+  edits re-apply at runtime (including the theme) and raise a notification;
+  the app's own saves stay silent. `RouterModel.Close` releases the watch;
+  `tuibase.Run`/`RunContext` call it automatically.
+- Inspector "Link" tab (I-10): estimated remote-link data rates — Tx prices
+  key/mouse/paste input as ANSI wire bytes (mouse drags as SGR reports), Rx
+  prices rendered frames as a line-diff renderer would transmit them. Shows
+  1 s / 5 s / 60 s averages, peaks, totals, and the required link rate for a
+  remote (SSH/serial/embedded) deployment. Collects only while the inspector
+  is open.
+
+### Added
+
 - Root `tuibase` package: `Run`/`RunContext`, `New`, `NewWithOptions` — one
   import bootstraps a full app; entry point moved to `cmd/tui-base`.
 - `router.TargetedMsg` fast path so high-frequency background messages wake
