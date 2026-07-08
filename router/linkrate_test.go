@@ -21,7 +21,7 @@ func TestLinkMeterDisabledCostsNothing(t *testing.T) {
 
 func TestLinkMeterFirstFrameCountsInFull(t *testing.T) {
 	l := newLinkRateMeter()
-	l.start()
+	l.setDemand(demandInspectorTab, true)
 	frame := "line one\nline two"
 	l.ObserveFrame(frame)
 	s := l.snapshot()
@@ -33,7 +33,7 @@ func TestLinkMeterFirstFrameCountsInFull(t *testing.T) {
 
 func TestLinkMeterDiffOnlyChargesChangedLines(t *testing.T) {
 	l := newLinkRateMeter()
-	l.start()
+	l.setDemand(demandInspectorTab, true)
 	l.ObserveFrame("aaaa\nbbbb\ncccc")
 	base := l.snapshot().rxTotal
 
@@ -54,7 +54,7 @@ func TestLinkMeterDiffOnlyChargesChangedLines(t *testing.T) {
 
 func TestLinkMeterTxPricesInput(t *testing.T) {
 	l := newLinkRateMeter()
-	l.start()
+	l.setDemand(demandInspectorTab, true)
 
 	l.ObserveMsg(tea.KeyPressMsg{Text: "a"}) // 1 byte
 	if got := l.snapshot().txTotal; got != 1 {

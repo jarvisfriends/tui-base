@@ -208,30 +208,31 @@ const (
 	settingsRowShowHeap                                // 4
 	settingsRowShowGC                                  // 5
 	settingsRowShowGoroutines                          // 6
-	settingsRowPprofEnabled                            // 7
-	settingsRowPprofAddr                               // 8
-	settingsRowPprofToolAddr                           // 9
-	settingsRowPprofViewMode                           // 10
-	settingsRowCPUSecs                                 // 11
-	settingsRowOutputDir                               // 12 — read-only display
-	settingsRowWriteHeap                               // 13
-	settingsRowCaptureCPU                              // 14
-	settingsRowBuiltinHeader                           // 15 — SectionOnly
-	settingsRowPprofIndex                              // 16
-	settingsRowHeapDebug1                              // 17
-	settingsRowHeapDebug2                              // 18
-	settingsRowGoroutineDebug1                         // 19
-	settingsRowGoroutineDebug2                         // 20
-	settingsRowAllocsDebug1                            // 21
-	settingsRowBlockDebug1                             // 22
-	settingsRowMutexDebug1                             // 23
-	settingsRowCPUStream                               // 24
-	settingsRowTraceStream                             // 25
-	settingsRowGotoolHeader                            // 26 — SectionOnly
-	settingsRowGotoolLatest                            // 27
-	settingsRowGotoolLiveHeap                          // 28
-	settingsRowGotoolLiveCPU                           // 29
-	settingsRowServerState                             // 30 — read-only display
+	settingsRowShowLink                                // 7
+	settingsRowPprofEnabled                            // 8
+	settingsRowPprofAddr                               // 9
+	settingsRowPprofToolAddr                           // 10
+	settingsRowPprofViewMode                           // 11
+	settingsRowCPUSecs                                 // 12
+	settingsRowOutputDir                               // 13 — read-only display
+	settingsRowWriteHeap                               // 14
+	settingsRowCaptureCPU                              // 15
+	settingsRowBuiltinHeader                           // 16 — SectionOnly
+	settingsRowPprofIndex                              // 17
+	settingsRowHeapDebug1                              // 18
+	settingsRowHeapDebug2                              // 19
+	settingsRowGoroutineDebug1                         // 20
+	settingsRowGoroutineDebug2                         // 21
+	settingsRowAllocsDebug1                            // 22
+	settingsRowBlockDebug1                             // 23
+	settingsRowMutexDebug1                             // 24
+	settingsRowCPUStream                               // 25
+	settingsRowTraceStream                             // 26
+	settingsRowGotoolHeader                            // 27 — SectionOnly
+	settingsRowGotoolLatest                            // 28
+	settingsRowGotoolLiveHeap                          // 29
+	settingsRowGotoolLiveCPU                           // 30
+	settingsRowServerState                             // 31 — read-only display
 )
 
 type summaryFlags struct {
@@ -240,6 +241,9 @@ type summaryFlags struct {
 	ShowHeap   bool
 	ShowGC     bool
 	ShowGorout bool
+	// ShowLink includes the estimated remote-link Tx/Rx rates (the router
+	// injects the text via SetLinkRateSummary; collection follows demand).
+	ShowLink bool
 }
 
 type pprofConfig struct {
@@ -342,6 +346,7 @@ type InspectorModel struct {
 	activeTab       debugTab
 	settingsCursor  int
 	statusSummary   summaryFlags
+	linkSummary     func() string
 	pprof           pprofConfig
 	settingsMessage string
 
@@ -627,6 +632,7 @@ func New() *InspectorModel {
 			ShowHeap:   true,
 			ShowGC:     true,
 			ShowGorout: true,
+			ShowLink:   true,
 		},
 		pprof: pprofConfig{
 			Enabled:        false,
@@ -1644,7 +1650,12 @@ func (m *InspectorModel) settingsRows() []debugSettingRow {
 			Value: strconv.FormatBool(m.statusSummary.ShowGorout),
 			Help:  "Enter toggles goroutine count in the status summary",
 		},
-		// 7-12: pprof server config
+		{
+			Field: "Include link rate",
+			Value: strconv.FormatBool(m.statusSummary.ShowLink),
+			Help:  "Enter toggles estimated remote Tx/Rx rates in the status summary (keeps the link meter collecting while the inspector is closed)",
+		},
+		// 8-13: pprof server config
 		{
 			Field: "Enable profiler HTTP server",
 			Value: pprofState,
@@ -1849,6 +1860,8 @@ func (m *InspectorModel) handleSettingsKey(km tea.KeyPressMsg) tea.Cmd {
 		m.statusSummary.ShowGC = !m.statusSummary.ShowGC
 	case settingsRowShowGoroutines:
 		m.statusSummary.ShowGorout = !m.statusSummary.ShowGorout
+	case settingsRowShowLink:
+		m.statusSummary.ShowLink = !m.statusSummary.ShowLink
 	// --- pprof server config ---
 	case settingsRowPprofEnabled:
 		m.pprof.Enabled = !m.pprof.Enabled
@@ -2199,6 +2212,20 @@ func openBrowserCmd(url string) tea.Cmd {
 	}
 }
 
+// SetLinkRateSummary injects the compact link-rate text (e.g. "tx 12 B/s rx
+// 1.2 KiB/s") shown in the status summary when "Include link rate" is on.
+// The router installs this; nil removes the part.
+func (m *InspectorModel) SetLinkRateSummary(fn func() string) {
+	m.linkSummary = fn
+}
+
+// StatusSummaryLinkEnabled reports whether the status summary wants link-rate
+// text right now — the router uses it to keep the link meter collecting while
+// the inspector is closed.
+func (m *InspectorModel) StatusSummaryLinkEnabled() bool {
+	return m.statusSummary.Enabled && m.statusSummary.ShowLink
+}
+
 // SetStatusSummaryEnabled toggles whether StatusLineSummary returns a non-empty
 // compact runtime summary (shown in the status bar when the inspector is closed).
 func (m *InspectorModel) SetStatusSummaryEnabled(enabled bool) {
@@ -2227,6 +2254,11 @@ func (m *InspectorModel) StatusLineSummary() string {
 	}
 	if m.statusSummary.ShowGorout {
 		parts = append(parts, fmt.Sprintf("gor %d", st.Goroutines))
+	}
+	if m.statusSummary.ShowLink && m.linkSummary != nil {
+		if link := m.linkSummary(); link != "" {
+			parts = append(parts, link)
+		}
 	}
 	return strings.Join(parts, " • ")
 }

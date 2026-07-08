@@ -367,9 +367,11 @@ func NewWithOptions(opts Options) *RouterModel {
 	// forward messages to it even when it's not the active page.
 	m.inspector = inspector.New()
 	// Built-in "Link" tab: estimated remote-link data rates (Tx/Rx). The
-	// meter collects only while the inspector is open (provider lifecycle).
+	// meter collects while the inspector's Link tab is open OR while the
+	// status summary's "Include link rate" is enabled (works closed).
 	m.linkMeter = newLinkRateMeter()
 	m.inspector.RegisterTab(&linkRateProvider{meter: m.linkMeter})
+	m.inspector.SetLinkRateSummary(m.linkMeter.statusLine)
 	// Inspector tabs cycle with the same next/previous keys as page navigation.
 	m.inspector.SetNavKeys(m.keys.NextPage, m.keys.PreviousPage)
 
@@ -1419,9 +1421,12 @@ func (m *RouterModel) View() tea.View {
 	// the overlay are never blanked.
 	contentStr = m.renderOverlays(contentStr, statusHeight)
 
-	// Price the finished frame for the link-rate estimate (no-op unless the
-	// inspector's Link tab has started collection).
+	// Sync status-bar demand, then price the finished frame for the
+	// link-rate estimate (no-op while nothing demands collection).
 	if m.linkMeter != nil {
+		if m.inspector != nil {
+			m.linkMeter.setDemand(demandStatusBar, m.inspector.StatusSummaryLinkEnabled())
+		}
 		m.linkMeter.ObserveFrame(contentStr)
 	}
 

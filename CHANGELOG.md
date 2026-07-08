@@ -21,6 +21,10 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
   1 s / 5 s / 60 s averages, peaks, totals, and the required link rate for a
   remote (SSH/serial/embedded) deployment. Collects only while the inspector
   is open.
+- Status-bar link rate: the inspector's status summary (the same one that
+  shows GC/heap when the inspector is closed) gained an "Include link rate"
+  toggle — compact `tx … rx …` 5-second averages, with the meter collecting
+  on demand while the summary displays it.
 
 ### Added
 

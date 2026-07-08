@@ -27,8 +27,13 @@ import (
 // meter adds no per-frame cost while the tab is not in use. All methods are
 // safe for concurrent use.
 type linkRateMeter struct {
-	mu      sync.Mutex
-	enabled bool
+	mu sync.Mutex
+	// Two independent consumers can demand collection: the inspector's Link
+	// tab (provider lifecycle) and the status-bar summary ("Include link
+	// rate", which works with the inspector closed). The meter runs while
+	// either wants it; the session resets when demand goes zero -> nonzero.
+	wantTab    bool
+	wantStatus bool
 
 	prevLines []string // previous frame, split into lines
 
@@ -53,11 +58,38 @@ const linkRateWindow = 60 // seconds of history kept
 
 func newLinkRateMeter() *linkRateMeter { return &linkRateMeter{} }
 
-// start begins collection with a fresh session (called by the provider).
-func (l *linkRateMeter) start() {
+// linkDemand names one consumer of the meter for setDemand.
+type linkDemand int
+
+const (
+	demandInspectorTab linkDemand = iota
+	demandStatusBar
+)
+
+// setDemand records that a consumer wants (or no longer wants) collection.
+// The first active demand starts a fresh session; collection stops when the
+// last demand is withdrawn.
+func (l *linkRateMeter) setDemand(who linkDemand, want bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.enabled = true
+	before := l.wantTab || l.wantStatus
+	switch who {
+	case demandInspectorTab:
+		l.wantTab = want
+	case demandStatusBar:
+		l.wantStatus = want
+	}
+	after := l.wantTab || l.wantStatus
+	switch {
+	case !before && after:
+		l.resetLocked()
+	case before && !after:
+		l.prevLines = nil
+	}
+}
+
+// resetLocked starts a fresh measuring session. Callers hold l.mu.
+func (l *linkRateMeter) resetLocked() {
 	l.prevLines = nil // next frame counts in full — a client just connected
 	l.txTotal, l.rxTotal = 0, 0
 	l.txPeak, l.rxPeak = 0, 0
@@ -66,18 +98,14 @@ func (l *linkRateMeter) start() {
 	l.sessionStart = time.Now()
 }
 
-func (l *linkRateMeter) stop() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.enabled = false
-	l.prevLines = nil
-}
+// enabledLocked reports whether any consumer wants collection. Callers hold l.mu.
+func (l *linkRateMeter) enabledLocked() bool { return l.wantTab || l.wantStatus }
 
 // ObserveMsg prices an input message in client→app wire bytes.
 func (l *linkRateMeter) ObserveMsg(msg tea.Msg) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if !l.enabled {
+	if !l.enabledLocked() {
 		return
 	}
 	n := estimateTxBytes(msg)
@@ -95,7 +123,7 @@ func (l *linkRateMeter) ObserveMsg(msg tea.Msg) {
 func (l *linkRateMeter) ObserveFrame(frame string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if !l.enabled {
+	if !l.enabledLocked() {
 		return
 	}
 	lines := strings.Split(frame, "\n")
@@ -183,6 +211,19 @@ func avgRates(buckets []rateSample, lastN int) (tx, rx uint64) {
 	return sumTx / spanU, sumRx / spanU
 }
 
+// statusLine returns the compact status-bar form (5-second averages), or ""
+// while the meter is idle.
+func (l *linkRateMeter) statusLine() string {
+	l.mu.Lock()
+	idle := !l.enabledLocked()
+	l.mu.Unlock()
+	if idle {
+		return ""
+	}
+	s := l.snapshot()
+	return fmt.Sprintf("tx %s rx %s", rate(s.tx5), rate(s.rx5))
+}
+
 // ── wire-cost estimation ─────────────────────────────────────────────────────
 
 // estimateTxBytes prices one input message as terminal-to-app wire bytes.
@@ -255,8 +296,10 @@ type linkRateProvider struct {
 
 func (p *linkRateProvider) TabName() string                { return "Link" }
 func (p *linkRateProvider) RefreshInterval() time.Duration { return time.Second }
-func (p *linkRateProvider) Start()                         { p.meter.start() }
-func (p *linkRateProvider) Stop()                          { p.meter.stop() }
+
+func (p *linkRateProvider) Start() { p.meter.setDemand(demandInspectorTab, true) }
+
+func (p *linkRateProvider) Stop() { p.meter.setDemand(demandInspectorTab, false) }
 func (p *linkRateProvider) BuildRows(c *theme.AppStyle) []string {
 	s := p.meter.snapshot()
 	label := c.Styles.TextOnBg.Bold(true)
