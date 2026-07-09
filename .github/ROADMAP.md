@@ -20,7 +20,7 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 | Q-12 | **A-4 scroll refactor — keep or replace the settings overview scroller?** The inspector already scrolls via `bubbles/viewport` (`tabScrollY` is only per-tab scroll *memory*), so the settings overview is the last hand-rolled scroller — but it is a multi-**column**, category-grouped, entry-windowed layout. `bubbles/list` is single-column with its own chrome; a raw viewport trades entry-snapping for line scrolling. | Recommend closing A-4 as "won't do for settings; inspector already compliant". | A-4 |
 | Q-13 | **CF-2 conformance tab: confirm the snapshot design.** The inspector renders *inside* `router.View`, so a tab checking the live frame would recurse. Sketch: the router records frame metrics (size fit, status-bar presence, border counts) at the end of `View`; a built-in `MetricsProvider` tab reports pass/fail from that snapshot. | Confirm that design — or drop CF-2 now that the unit-level conformance checks cover the same invariants. | CF-2 |
 | Q-15 | **T-4 YAML themes: pick the YAML dep and schema.** Needs `goccy/go-yaml` vs `gopkg.in/yaml.v3`, and a schema decision: full 16-slot terminal tint vs the smaller semantic `AppStyle` slots. | Recommend goccy/go-yaml + full tint schema (drops straight into bubbletint's registry). | T-4 |
-| Q-20 | **jarvis-bubbles dependency direction: once a component is extracted, does tui-base import it back?** tui-base is public, so importing jarvis-bubbles requires that repo to be public on GitHub too (Gitea-only won't resolve for outside consumers). Alternative: extract as a copy and let the two drift apart deliberately. | Recommend: make jarvis-bubbles public and have tui-base import it — one source of truth, and the components get real consumers immediately. | X-1…X-4 (beyond the scaffold) |
+| Q-20 | **snap dependency direction: once a component is extracted, does tui-base import it back?** tui-base is public, so importing snap requires that repo to be public on GitHub too (Gitea-only won't resolve for outside consumers). Alternative: extract as a copy and let the two drift apart deliberately. | Recommend: make snap public and have tui-base import it — one source of truth, and the components get real consumers immediately. | X-1…X-4 (beyond the scaffold) |
 | Q-16 | **Priority order for the remaining feature ideas?** Effort estimates: I-1 lifecycle hooks (S), I-3 confirm-modal service (M), I-4 persistent layout state (M), I-5 capability detection (M), I-2 command palette (L), I-6 panic overlay (M — riskiest: `recover()` inside the tea loop). | Pick the order (or "none for now") and I'll work down the list. | I-1…I-6 |
 | Q-17 | **I-8 release hardening: cosign keyless (OIDC) or a managed signing key?** Keyless is zero-secret and recommended; either way goreleaser + workflow permissions need a decision. | Confirm keyless and I'll wire SBOM + signing into the release workflow. | I-8 |
 | Q-18 | **I-9 i18n: recommend rejecting.** Message catalogs bloat every consumer, and a framework's user-facing strings are mostly consumer-owned anyway. | Confirm to close as rejected. | I-9 |
@@ -30,7 +30,7 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 
 | # | Question | Decision |
 |---|---|---|
-| Q-10 | Component extraction shape? | **One `jarvis-bubbles` repo** holding all the unique components, organized into category folders that grow over time — e.g. `navigation/` with one folder per swappable style (`tabs/`, `sidebar/`, `minimal-top/`). Each component gets a VHS `.tape` demo. Scaffolded 2026-07-07; dependency direction is the remaining decision (Q-20). |
+| Q-10 | Component extraction shape? | **One `snap` repo** holding all the unique components, organized into category folders that grow over time — e.g. `navigation/` with one folder per swappable style (`tabs/`, `sidebar/`, `minimal-top/`). Each component gets a VHS `.tape` demo. Scaffolded 2026-07-07; dependency direction is the remaining decision (Q-20). |
 | Q-11 | VS Code workspace manual pass? | **Confirmed working** (2026-07-07). Closed. |
 | Q-14 | FW-1 `fsnotify` dep? | **Yes** — dep accepted, and include settings-change notifications: external edits to `tui_settings.json` reload live and surface a notification. Shipped 2026-07-07 (see FW-1). |
 | Q-1 | Public release goal? | Already public at **v0.2.1**. v1.0 = "no more changes wanted"; until then breaking improvements are fine. Library-readiness items stay a priority band. |
@@ -133,11 +133,11 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 
 | Status | # | Candidate | Notes |
 |---|---|---|---|
-| 🔄 In Progress | X-0 | `jarvis-bubbles` repo scaffold (per Q-10) | Scaffolded 2026-07-07: category folders (`navigation/{tabs,sidebar,minimal-top}`, `inspector/`, `logging/`, `status/`), README with the extraction contract, go.mod. Actual moves are X-1…X-4, gated on Q-20 (dependency direction). |
-| ⬜ Planned | X-1 | `navigation` — Tabs, Sidebar, Slim/topnav → `jarvis-bubbles/navigation/{tabs,sidebar,minimal-top}` | Unblocked by Q-10. Sidebar is close to `bubbles/list` with a custom delegate — consider migrating before extraction to thin the key/mouse logic. |
-| ⬜ Planned | X-2 | `pages/inspector` → `jarvis-bubbles/inspector` | Unblocked by Q-10. Prime candidate; deps are only `bubbletea/v2` + `lipgloss/v2`. |
-| ⬜ Planned | X-3 | `logging` → `jarvis-bubbles/logging` | Unblocked by Q-10. Could grow a ring buffer, level histogram, export interface. |
-| ⬜ Planned | X-4 | `status` bar → `jarvis-bubbles/status` | Unblocked by Q-10. Remove the hard-coded notification seed before extracting. |
+| 🔄 In Progress | X-0 | `snap` repo scaffold (per Q-10) | Scaffolded 2026-07-07: category folders (`navigation/{tabs,sidebar,minimal-top}`, `inspector/`, `logging/`, `status/`), README with the extraction contract, go.mod. Actual moves are X-1…X-4, gated on Q-20 (dependency direction). |
+| ⬜ Planned | X-1 | `navigation` — Tabs, Sidebar, Slim/topnav → `snap/navigation/{tabs,sidebar,minimal-top}` | Unblocked by Q-10. Sidebar is close to `bubbles/list` with a custom delegate — consider migrating before extraction to thin the key/mouse logic. |
+| ⬜ Planned | X-2 | `pages/inspector` → `snap/inspector` | Unblocked by Q-10. Prime candidate; deps are only `bubbletea/v2` + `lipgloss/v2`. |
+| ⬜ Planned | X-3 | `logging` → `snap/logging` | Unblocked by Q-10. Could grow a ring buffer, level histogram, export interface. |
+| ⬜ Planned | X-4 | `status` bar → `snap/status` | Unblocked by Q-10. Remove the hard-coded notification seed before extracting. |
 | 🔄 In Progress | X-5 | VHS gif creator with `.tape` config for the main tui-base app | Tape written 2026-07-03 (`tools/demo.tape`: pages, settings, inspector tour). **🔔 Human action:** install `vhs` and run `vhs tools/demo.tape` once to render/verify the gif (not installed in the dev environment). |
 
 ## Ideas (unranked)
@@ -158,3 +158,28 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 | ❓ | I-9 | i18n keys in user-facing strings | Recommend rejecting — confirm via Q-18. |
 | ✅ Done | I-10 | **Inspector "Link" tab: estimated remote data rate** (Tx = input as ANSI wire bytes — key/mouse/drag/paste; Rx = frames as a line-diff renderer would transmit) | Done 2026-07-07 (human request): built-in `MetricsProvider` tab via the E-5 API. Shows last-second / 5 s / 60 s averages, peaks, session totals, and the required link rate in B/s + bit/s for a remote (SSH/serial/embedded) deployment. Collection runs on demand: the Link tab or the status summary. 2026-07-07 follow-up: "Include link rate" toggle in the inspector settings puts compact `tx … rx …` 5 s averages in the status bar with the inspector closed (like the GC part). `router/linkrate.go` + tests. |
 | ⬜ Planned | I-11 | **Data-rate limiter modes** — degrade visuals to fit a constrained link, guided by the I-10 meter | Human intent (2026-07-07): options like capping the update/refresh rate, disabling or reducing transitions/animations, and similar "looks less good, costs fewer bytes" behaviors, so the app can run within a target link budget on an embedded device. Design sketch: a `LinkBudget` setting (target bit/s) that gates spinner/progress tick rates, coalesces re-renders (min frame interval), and prefers full-cell updates over per-frame gradients. Build on the I-10 meter for feedback. |
+
+
+## Split out of Snap (Reusable components or widgets) and Inspector (debug any charm based app)
+ok, lets make some updates to our readme.md files and our plan forward... I renamed the jarvis-bubbles git repo to be snap instead (So Jarvis Friends Snap being the full name), this contains (well, we will make it contain) ready to use snap in features like navigation, tables, and calendar items that support both keyboard and mouse input ready for production use.
+Please update the questions that were still outstanding above this when you are done reading to the end of the file. inspector and snap are both public on github
+
+Lets move the following to the snap package, then update all of our references to use those instead of redefining them in tui-base. Some Snaps make since to include an interface that will then allow the software engineer to decide which one or more options are available for the user to change at runtime in the settings area of the tui-base.
+- Keys - Move the whole folder to the snap package so that each snap can include the common bindings with the least amount of copy and paste.
+- Geom
+- Date Picker (remove the name bubble from it)
+- Dependencies
+- Navigation with the new names and structure defined in snap, come up with or use an interface that encompasses the features of navigation. Use words like NextPage and Previous Page instead of up, down, left, right so the dev doesn't need to know how they are being shown on the screen. a top nav would return a 0 saying don't reduce the width of the users viewing area, where a side nav would return what makes since for that type of nav. I think we already do that, just make sure
+- Directory and File Pickers
+- Multi-file and Multi-Directory pickers
+- Time Picker... This one needs a lot of work... scrolling with the mouse or keyboard is tedious and the user doesn't understand whats happening right away... maybe show an analog clock with times around a circle that can be clicked in a an overlay when they click the hour or minutes? Not sure, find out what other people do about this one... follow the most popular option.
+- Table - This is becoming more useful than other options without taking up much more visual space, so yes, lets move this as well.
+
+Update the Settings view to collapse all categories that come from TUI Base and if there is only one option of a select (true/false counts as 2 options) then don't show the ability to change that option. Things like directory selection where there are zero or more available are 2+ options, so those are also shown. This would be for instances that the developer only added one set of colors, or one style to use for the forms.
+
+Lets try to keep the number of unit test files that tie directly to a single file down to just that files name with '_test.go' and maybe one for known regressions if it gets too large...
+
+We need to be a little more specific on User Notifications vs Developer logs... we should also make sure that we are using the uber.zap logging library for actual dev logs instead of recreating wrappers around something that zap already provides... I think we were swapping between a few different naming schemes for a while there and some mixed up. In the Inspector we have a tab showing tea.Msg messages, we should probably remove the word logs from there... maybe Message Passing Reader to follow the charm way of naming things?
+
+
+We will want to update our tui base to support to support the Program Options approach that bubbletea and other tools use on our New function. that way we can override and expand out customizations a little easier. The hope is that we can use this to change the default and the available Keys, Navigation, Status bar, debug pop-up (Inspector), etc values. and just like bubble tea, we can call all of the functions/Program Options, then set the defaults and available options if they are not set. The defaults should be what we currently use for our defaults, the available options (when not set) should be all of the values that we have in the snap repo.

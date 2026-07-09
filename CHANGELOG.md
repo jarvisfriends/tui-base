@@ -8,6 +8,64 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
 
 ### Added
 
+- App icon: a brand mark embedded in the Windows binary (Explorer/taskbar/
+  shortcuts). `assets/icon.svg` is the master vector; the `tools/genicon`
+  standalone module rasterizes it into `assets/icon.ico` and the committed
+  `cmd/tui-base/resource_windows_<arch>.syso` resources (arch-suffixed, so
+  non-Windows builds ignore them). Apps brand their own binary without
+  vendoring: `go run github.com/jarvisfriends/tui-base/tools/genicon@latest
+  -svg app.svg -syso ./cmd/app -name "My App"`. Regenerate tui-base's own icon
+  with `go -C tools/genicon generate .`; it is kept out of `go generate ./...`
+  so the CI drift check and release build never depend on the SVG toolchain.
+  See [docs/branding.md](docs/branding.md).
+- Windows Terminal tab icon: the tab glyph is a profile setting (the binary
+  icon covers Explorer/taskbar; the tab is separate — `wt new-tab` has no icon
+  flag). `tuibase.InstallWindowsTerminalProfile` /
+  `UninstallWindowsTerminalProfile` register a Windows Terminal profile
+  fragment so the app shows in the new-tab dropdown with its own name + icon;
+  `genicon -png` emits the icon PNG; and `TerminalRelaunchConfig.ProfileName`
+  makes the auto-relaunch open under that profile (when installed) so relaunched
+  tabs carry the icon too. The reference app wires all of it
+  (`tui-base -install-terminal-profile`). See
+  [docs/branding.md](docs/branding.md#windows-terminal-tab-icon).
+- App icon small-size quality: `genicon` now renders each icon size supersampled
+  (`-supersample`, default 4×) and downsamples with a Catmull-Rom filter, so the
+  16–48 px variants Windows shows in Explorer and the taskbar are crisp instead
+  of aliased.
+- Windows Terminal auto-relaunch: on Windows, when started under the legacy
+  console (conhost) in an interactive session with `wt.exe` available and no
+  modern terminal already in use, tui-base relaunches itself inside Windows
+  Terminal so the Charm v2 truecolor/mouse/styling features work — a guard
+  against the default-terminal registry setting being reset. Detection is
+  console-window based (`ConsoleWindowClass` vs ConPTY's
+  `PseudoConsoleWindow`), because a double-clicked app hosted by WT through the
+  default-terminal delegation inherits Explorer's environment and carries no
+  `WT_SESSION` — env markers alone would relaunch it into a duplicate window.
+  `tuibase.Run`/`RunContext` do it automatically; `tuibase.
+  EnsureWindowsTerminal` relaunches from the very top of `main`;
+  `router.MaybeRelaunchInWindowsTerminal` is the primitive. Opt out with
+  `Options.DisableTerminalRelaunch` or the `TUI_BASE_NO_WT_RELAUNCH` env var.
+  No-op on non-Windows platforms.
+- Live feature gates ([docs/feature-gates.md](docs/feature-gates.md)): flipping
+  a gate in the settings Feature Flags section now takes effect immediately —
+  the commit broadcasts `settings.GatesChangedMsg` and the router re-derives
+  gate-dependent UI on the spot. The inspector's Accessibility tab is the first
+  gated feature (`inspector.AccessibilityTabGate`, default **hidden**): enable
+  it at runtime via Feature Flags or at startup via
+  `<APPNAME>_GATE_INSPECTOR_ACCESSIBILITY_TAB=1`. The router now always has a
+  gate registry (creating one when the app passes none), registers built-in
+  gates the app hasn't defined (`gate.Has`), and applies env overrides. Gate
+  values are runtime-only — never persisted to the settings file. Hidden tabs
+  drop out of the tab bar, digit keys, cycling, and click targets; disabling
+  the gate while its tab is active snaps back to Runtime.
+- `winterm` package: read/write the Windows default-terminal delegation (the
+  `DelegationConsole`/`DelegationTerminal` values under
+  `HKCU\Console\%%Startup`) via `winterm.Detect` and `winterm.Set` with a typed
+  `Delegation` enum — the same mechanism the Windows Terminal settings UI uses
+  (there is no supported OS API). The settings page's "Default Terminal" item
+  now delegates to it, replacing per-platform registry code and GUID literals
+  in the UI layer; consumer apps can offer the same repair programmatically.
+  Off-Windows calls return `errors.ErrUnsupported`.
 - `filewatch` package (FW-1): fsnotify -> `tea.Cmd` bridge with rename-safe
   parent-directory watching (atomic writes are seen), debounced event bursts,
   and a `Next()`/`Stop()` lifecycle.
@@ -51,6 +109,14 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
 
 ### Fixed
 
+- Feature Flags edits on the settings page now actually commit: the select
+  bound its value to a variable that went out of scope before the form
+  completed, so toggling a gate silently did nothing. The binding now outlives
+  the form and the commit is covered by a regression test.
+- `router.NewProgram` now actually honors `TUI_BASE_COLOR_PROFILE` as its doc
+  comment (and consumer apps) always claimed — it previously forwarded straight
+  to `tea.NewProgram` without applying the override. Apps with a branded env
+  var should keep using `NewProgramWithEnvVar`.
 - Router stored the `tea.Model` returned by child `Update` calls (model-swap
   pattern) at every dispatch site.
 - Config writes are atomic (temp file + rename); crash mid-write can no

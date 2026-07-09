@@ -6,6 +6,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
+const (
+	RecorderPageTitle = "Recorder"
+)
+
 type gatedMsg struct{}
 
 type translatedFromMsg struct{}
@@ -19,7 +23,7 @@ func TestMessageMiddleware(t *testing.T) {
 	t.Parallel()
 
 	rec := &mouseRecorderPage{}
-	m := NewWithRegisteredPages([]RegisteredPage{{Title: "Recorder", Model: rec}})
+	m := NewWithRegisteredPages([]RegisteredPage{{Title: RecorderPageTitle, Model: rec}})
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 90, Height: 30})
 
 	var seen []tea.Msg

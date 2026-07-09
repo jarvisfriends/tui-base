@@ -149,7 +149,18 @@ func (h *FormOverlayHost) Open(f *huh.Form, termW, termH int) tea.Cmd {
 	h.termW, h.termH = termW, termH
 	h.form = f.WithWidth(FormWidth(termW))
 	h.open = true
-	return h.form.Init()
+	initCmd := h.form.Init()
+	// Deliver the current size the way tea.Program would on open. Plain
+	// input/select forms just take their natural height from this, but
+	// file-picker fields depend on it: bubbles' filepicker starts with a
+	// collapsed one-row browse window that only its WindowSizeMsg handler
+	// unconditionally expands — builder-API heights alone leave the first
+	// directory listing collapsed until a resize or directory change.
+	model, _ := h.form.Update(tea.WindowSizeMsg{Width: FormWidth(termW), Height: FormHeight(termH)})
+	if ff, ok := model.(*huh.Form); ok {
+		h.form = ff
+	}
+	return initCmd
 }
 
 // Close hides the overlay and releases the form.

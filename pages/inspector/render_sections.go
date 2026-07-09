@@ -382,9 +382,12 @@ func (m *InspectorModel) renderLogContent(c *theme.AppStyle) string {
 }
 
 func (m *InspectorModel) buildTabsLine(c *theme.AppStyle) string {
-	titles := m.tabTitles()
-	tabParts := make([]string, 0, len(titles))
-	tabRanges := make([]tabMouseRange, 0, len(titles))
+	// Only visible tabs are rendered (gate-hidden ones don't consume a number),
+	// and the recorded mouse ranges match the rendered layout, so click
+	// hit-testing stays correct as tabs show and hide at runtime.
+	vis := m.visibleTabs()
+	tabParts := make([]string, 0, len(vis))
+	tabRanges := make([]tabMouseRange, 0, len(vis))
 	tabX := 0
 	activeTabStyle := lipgloss.NewStyle().
 		Background(c.Accent).
@@ -392,10 +395,10 @@ func (m *InspectorModel) buildTabsLine(c *theme.AppStyle) string {
 		Bold(true).
 		Padding(0, 1)
 	inactiveTabStyle := c.Styles.Item.Padding(0, 1)
-	for i, t := range titles {
-		label := fmt.Sprintf("%d:%s", i+1, t)
+	for i, tab := range vis {
+		label := fmt.Sprintf("%d:%s", i+1, m.tabTitle(tab))
 		var rendered string
-		if debugTab(i) == m.activeTab {
+		if tab == m.activeTab {
 			rendered = activeTabStyle.Render(label)
 		} else {
 			rendered = inactiveTabStyle.Render(label)
@@ -403,7 +406,7 @@ func (m *InspectorModel) buildTabsLine(c *theme.AppStyle) string {
 		tabParts = append(tabParts, rendered)
 		w := lipgloss.Width(rendered)
 		tabRanges = append(tabRanges, tabMouseRange{
-			Tab:    debugTab(i),
+			Tab:    tab,
 			StartX: tabX + debugBorderPaddingX,
 			EndX:   tabX + w - 1 + debugBorderPaddingX,
 		})

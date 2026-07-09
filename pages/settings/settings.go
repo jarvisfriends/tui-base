@@ -41,8 +41,11 @@ const (
 	settingValOff = "Off"
 	settingValOn  = "On"
 
+	// Option keys for the "Default Terminal" setting; the winterm mapping
+	// lives in terminal.go.
 	defTerminalLetWindows = "let_windows"
-	blankGUID             = "{00000000-0000-0000-0000-000000000000}"
+	defTerminalClassic    = "classic"
+	defTerminalModern     = "modern"
 
 	itemTitleLogPath = "Log Path"
 
@@ -127,6 +130,17 @@ type NotificationsSettingsMsg struct {
 // so the router can apply them to the shared *keys.AppKeyMap at runtime.
 type KeybindingsChangedMsg struct {
 	CustomKeys map[string]string
+}
+
+// GatesChangedMsg is emitted when the user flips a feature gate on the
+// settings page (Feature Flags section). The shared *gate.GateRegistry is
+// already updated when this fires — the message is the "re-derive your
+// gate-dependent UI now" signal so changes show immediately; Values is a
+// snapshot for convenience. Gate values are runtime-only and are never
+// persisted to the settings file: startup state comes from each gate's
+// Default and the <APPNAME>_GATE_<NAME> environment overrides.
+type GatesChangedMsg struct {
+	Values map[string]bool
 }
 
 // A settingItem represents a single configurable value.
@@ -234,6 +248,16 @@ type SettingsModel struct {
 	// JSON settings file; the value is always read from / written to the
 	// registry directly.
 	defaultTerminal string
+
+	// gatesChanged records that a feature-gate apply mutated the registry
+	// during the current edit; the StateCompleted handler consumes it to emit
+	// a single GatesChangedMsg. Gates are runtime-only and never persisted.
+	gatesChanged bool
+	// gateEditVals holds each Feature Flags item's live edit binding (the
+	// string the huh select writes into). Keyed by gate name; rebuilt with the
+	// items. Kept on the model so tests can drive the commit path the same way
+	// the form does.
+	gateEditVals map[string]*string
 
 	// intermediate string forms for huh selects (not persisted directly)
 	notifEnabledStr    string
@@ -444,8 +468,8 @@ func (m *SettingsModel) buildItems() {
 	if runtime.GOOS == "windows" {
 		terminalOpts = []huh.Option[string]{
 			huh.NewOption("Let Windows Decide (system default)", defTerminalLetWindows),
-			huh.NewOption("Windows Console Host (Classic ConHost) — legacy", "classic"),
-			huh.NewOption("Windows Terminal (Modern) — recommended", "modern"),
+			huh.NewOption("Windows Console Host (Classic ConHost) — legacy", defTerminalClassic),
+			huh.NewOption("Windows Terminal (Modern) — recommended", defTerminalModern),
 		}
 	}
 
@@ -783,35 +807,27 @@ func (m *SettingsModel) buildItems() {
 				return huh.NewForm(huh.NewGroup(
 					huh.NewSelect[string]().
 						Title("Default Terminal").
-						Description("Choose the OS default terminal delegation (Windows only).").
+						Description("Choose the OS default terminal delegation (Windows only). " +
+							"Takes effect for newly opened console windows.").
 						Options(terminalOpts...).
 						Value(&m.defaultTerminal),
 				).WithTheme(theme.HuhThemeFunc()))
 			},
 			apply: func() error {
-				switch m.defaultTerminal {
-				case defTerminalLetWindows:
-					return applyTerminalSetting(blankGUID, blankGUID)
-				case "classic":
-					return applyTerminalSetting(
-						"{B23D10C0-E52E-411E-9D5B-C09FDF709C7D}",
-						"{B23D10C0-E52E-411E-9D5B-C09FDF709C7D}",
-					)
-				case "modern":
-					return applyTerminalSetting(
-						"{2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69}",
-						"{E12CFF52-A866-4C77-9A90-F570A7AA2C6B}",
-					)
-				default:
-					return nil
-				}
+				return applyTerminalSetting(m.defaultTerminal)
 			},
 		})
 	}
 
 	if m.opts.Gates != nil {
+		m.gateEditVals = make(map[string]*string, len(m.opts.Gates.Defs()))
 		for _, gateDef := range m.opts.Gates.Defs() {
 			gDef := gateDef // capture
+			// editVal outlives buildForm so the huh select's pointer binding
+			// still holds the user's choice when apply runs on completion.
+			// (Binding to a local inside buildForm silently discards the edit.)
+			editVal := new(string)
+			m.gateEditVals[gDef.Name] = editVal
 			addItem("Feature Flags", settingItem{
 				title: gDef.Name,
 				value: func() string {
@@ -825,20 +841,27 @@ func (m *SettingsModel) buildItems() {
 						huh.NewOption("Disabled", boolStrFalse),
 						huh.NewOption("Enabled", boolStrTrue),
 					}
-					valStr := "false"
+					*editVal = boolStrFalse
 					if m.opts.Gates.Value(gDef.Name) {
-						valStr = boolStrTrue
+						*editVal = boolStrTrue
 					}
 					return huh.NewForm(huh.NewGroup(
 						huh.NewSelect[string]().
 							Title(gDef.Name).
 							Description(gDef.Description).
 							Options(opts...).
-							Value(&valStr),
+							Value(editVal),
 					).WithTheme(theme.HuhThemeFunc()))
 				},
-				setValue: func(val string) {
-					m.opts.Gates.Set(gDef.Name, val == boolStrTrue)
+				apply: func() error {
+					enabled := *editVal == boolStrTrue
+					if enabled != m.opts.Gates.Value(gDef.Name) {
+						m.opts.Gates.Set(gDef.Name, enabled)
+						// Flag for the StateCompleted handler, which emits one
+						// GatesChangedMsg after all commit work is done.
+						m.gatesChanged = true
+					}
+					return nil
 				},
 			})
 		}
@@ -910,6 +933,9 @@ func (m *SettingsModel) itemFromDef(def config.FieldDef[string]) settingItem {
 				return dp
 			case config.FieldMultiFilePicker:
 				e := NewMultiFileEditor(*def.Value)
+				// A directory-only field browses with the DirPicker (folders
+				// and drives, no files) instead of the mixed file browser.
+				e.DirsOnly = def.DirAllowed && !def.FileAllowed
 				// Seed the current page size: ModelOverlayHost only sends
 				// WindowSizeMsg on later resizes, and the editor needs the
 				// height up front to size its file-picker form.
@@ -1290,6 +1316,14 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 			func() tea.Msg { return KeybindingsChangedMsg{CustomKeys: customKeys} },
 			m.saveCmd(),
 		)
+		// A feature-gate flip broadcasts immediately so gated UI (pages,
+		// inspector tabs) reacts without waiting for other interaction. The
+		// registry itself was already updated in the item's apply.
+		if m.gatesChanged && m.opts.Gates != nil {
+			m.gatesChanged = false
+			values := m.opts.Gates.Snapshot()
+			cmds = append(cmds, func() tea.Msg { return GatesChangedMsg{Values: values} })
+		}
 		m.loadedFromFile = true
 		if path, err := logging.InitFromSettings(m.LogOutput, m.LogPath); err == nil {
 			m.LogPath = path

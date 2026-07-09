@@ -18,6 +18,7 @@ func TestArchitectureLayering(t *testing.T) {
 	testutil.CheckNoImports(t, mod+"/geom", mod)
 	testutil.CheckNoImports(t, mod+"/envpath", mod)
 	testutil.CheckNoImports(t, mod+"/gate", mod)
+	testutil.CheckNoImports(t, mod+"/winterm", mod)
 
 	// Mid-layer packages: independent of the UI composition layers.
 	for _, pkg := range []string{

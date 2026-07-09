@@ -129,13 +129,27 @@ linters:
       - linters:
           - gosec
         text: "G204:"
+      # G702 (command injection): the Windows Terminal relaunch re-runs this
+      # same executable via wt.exe. The program path comes from os.Executable
+      # and wt.exe from PATH; the forwarded args are our own os.Args, not
+      # external input.
+      - linters:
+          - gosec
+        text: "G702:"
+        path: router/terminal_windows.go
+      # G103 (unsafe audit): GetClassNameW needs a pointer to a fixed-size
+      # stack buffer; the length is passed alongside, so no out-of-bounds
+      # write is possible.
+      - linters:
+          - gosec
+        text: "G103:"
+        path: router/terminal_windows.go
 
 formatters:
   enable:
     - gofmt
     - gofumpt
     - goimports
-    - golines
   settings:
     gofumpt:
       module-path: github.com/jarvisfriends/tui-base

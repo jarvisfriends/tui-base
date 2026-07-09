@@ -34,7 +34,7 @@ func TestModalOverlayBlocksUpdatePathMouse(t *testing.T) {
 	t.Parallel()
 
 	rec := &mouseRecorderPage{}
-	m := NewWithRegisteredPages([]RegisteredPage{{Title: "Recorder", Model: rec}})
+	m := NewWithRegisteredPages([]RegisteredPage{{Title: RecorderPageTitle, Model: rec}})
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 90, Height: 30})
 
 	wheel := func() {

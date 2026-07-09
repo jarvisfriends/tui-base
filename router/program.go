@@ -91,15 +91,11 @@ func effectiveColorProfileForEnvVar(envVar string) colorprofile.Profile {
 // should construct its program through this helper for consistent color
 // handling across local, WSL, and SSH sessions.
 //
-// The first element of opts may be a string — if it is, it is treated as the
-// app-specific color-profile env-var name (e.g. m.ColorProfileEnvVar()) and is
-// consumed before the remaining options are forwarded to tea.NewProgram.
-// This allows consumer apps to pass their branded env var without needing a
-// separate function:
-//
-//	p := router.NewProgram(m, m.ColorProfileEnvVar(), tea.WithAltScreen())
+// It reads the default TUI_BASE_COLOR_PROFILE variable; apps with a branded
+// app-specific env var should use [NewProgramWithEnvVar] with
+// m.ColorProfileEnvVar() instead so the program and router agree on the name.
 func NewProgram(m tea.Model, opts ...tea.ProgramOption) *tea.Program {
-	return tea.NewProgram(m, opts...)
+	return NewProgramWithEnvVar(m, ColorProfileEnvVar, opts...)
 }
 
 // NewProgramWithEnvVar constructs a tea.Program that honors the given

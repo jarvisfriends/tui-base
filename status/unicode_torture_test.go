@@ -31,7 +31,8 @@ func TestRenderStyledUnicodeContentFitsWidth(t *testing.T) {
 func TestHistoryOverlayUnicodeContentFitsWidth(t *testing.T) {
 	t.Parallel()
 
-	overlay := newHistoryOverlay(t,
+	overlay := newHistoryOverlay(
+		t,
 		"деплой завершён 🚀 в 環境 production",
 		"👨‍👩‍👧‍👦👨‍👩‍👧‍👦👨‍👩‍👧‍👦 long ZWJ content that must truncate cleanly at panel width",
 	)

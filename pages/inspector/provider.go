@@ -81,18 +81,64 @@ func (m *InspectorModel) RemoveTab(name string) {
 }
 
 // tabCount returns the number of tabs: built-ins plus registered providers.
+// It counts every tab including gate-hidden ones; use visibleTabs for what is
+// actually shown.
 func (m *InspectorModel) tabCount() int {
 	return len(debugTabTitles) + len(m.providers)
 }
 
-// tabTitles returns the built-in tab titles followed by provider tab names.
-func (m *InspectorModel) tabTitles() []string {
-	titles := make([]string, 0, m.tabCount())
-	titles = append(titles, debugTabTitles...)
-	for _, p := range m.providers {
-		titles = append(titles, p.TabName())
+// tabVisible reports whether tab is currently shown. Built-in tab identities
+// (debugTab values) are stable regardless of visibility; only rendering,
+// cycling, and digit keys consult this. The Accessibility tab is feature-gated
+// and hidden when no gate registry was provided (matching the gate's
+// Default:false registration).
+func (m *InspectorModel) tabVisible(tab debugTab) bool {
+	if tab == debugTabAccessibility {
+		return m.gates != nil && m.gates.Value(AccessibilityTabGate)
 	}
-	return titles
+	return true
+}
+
+// visibleTabs returns the tabs currently shown, in display order: built-ins
+// (minus gate-hidden ones) followed by provider tabs. The slice index is the
+// tab's display position — the number printed on the tab bar and matched by
+// the 1-9 digit keys.
+func (m *InspectorModel) visibleTabs() []debugTab {
+	out := make([]debugTab, 0, m.tabCount())
+	for i := range m.tabCount() {
+		if t := debugTab(i); m.tabVisible(t) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// stepTab moves the active tab delta positions through the visible tabs,
+// wrapping at both ends and skipping gate-hidden tabs.
+func (m *InspectorModel) stepTab(delta int) {
+	vis := m.visibleTabs()
+	if len(vis) == 0 {
+		return
+	}
+	cur := 0
+	for i, t := range vis {
+		if t == m.activeTab {
+			cur = i
+			break
+		}
+	}
+	m.switchTab(vis[((cur+delta)%len(vis)+len(vis))%len(vis)])
+}
+
+// tabTitle returns the display title for a tab (built-in or provider).
+func (m *InspectorModel) tabTitle(tab debugTab) string {
+	if int(tab) < len(debugTabTitles) {
+		return debugTabTitles[tab]
+	}
+	if p := m.providerForTab(tab); p != nil {
+		return p.TabName()
+	}
+	return ""
 }
 
 // providerForTab returns the provider backing tab, or nil for built-in tabs.

@@ -105,6 +105,15 @@ type Options struct {
 	// (*RouterModel).Close after Program.Run to release the OS watch
 	// (tuibase.Run/RunContext do this automatically).
 	WatchSettingsFile bool
+	// DisableTerminalRelaunch turns off the automatic relaunch into Windows
+	// Terminal when the app is started under the legacy Windows console
+	// (conhost). By default tuibase.Run/RunContext relaunch there — on Windows,
+	// in an interactive session, when wt.exe is present and no modern terminal
+	// is already in use — because conhost drops the truecolor/mouse/styling
+	// features the Charm v2 stack depends on. Set this (or the
+	// TUI_BASE_NO_WT_RELAUNCH env var) to opt out. See
+	// [MaybeRelaunchInWindowsTerminal].
+	DisableTerminalRelaunch bool
 }
 
 // pageIDFromTitle derives a stable navigation ID from a human-readable title
@@ -252,6 +261,23 @@ func NewWithOptions(opts Options) *RouterModel {
 		configDirName = strings.ToLower(appName)
 	}
 
+	// Feature gates: always have a registry (so built-in gated features appear
+	// in the settings Feature Flags section even when the app passes none),
+	// register the framework's own gates the app hasn't defined, then apply
+	// startup env overrides (<APPNAME>_GATE_<NAME>). Gate values are
+	// runtime-only — never persisted to the settings file.
+	if opts.Gates == nil {
+		opts.Gates = gate.NewGateRegistry()
+	}
+	if !opts.Gates.Has(inspector.AccessibilityTabGate) {
+		opts.Gates.Register(gate.FeatureGate{
+			Name:        inspector.AccessibilityTabGate,
+			Default:     false,
+			Description: "Show the Accessibility tab in the Ctrl+D inspector",
+		})
+	}
+	opts.Gates.LoadFromEnv(appName)
+
 	// Set the logging prefix so log files are named after the embedding app.
 	log.SetAppName(configDirName)
 
@@ -374,6 +400,8 @@ func NewWithOptions(opts Options) *RouterModel {
 	m.inspector.SetLinkRateSummary(m.linkMeter.statusLine)
 	// Inspector tabs cycle with the same next/previous keys as page navigation.
 	m.inspector.SetNavKeys(m.keys.NextPage, m.keys.PreviousPage)
+	// Gated inspector tabs (Accessibility) follow the shared gate registry.
+	m.inspector.SetGates(opts.Gates)
 
 	// Derive env-var names from the app name so consumers get branded vars
 	// (e.g. "My App", MY_APP_COLOR_PROFILE, MY_APP_DEBUG) instead of the
@@ -846,6 +874,16 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updatePageKeys()
 		return m, m.handleResizeCmd()
 
+	case settings.GatesChangedMsg:
+		// A feature gate flipped at runtime. The shared registry is already
+		// updated; re-derive gate-dependent UI immediately so the change is
+		// visible without further interaction. Pages read the registry live,
+		// and the resize pass forces a fresh render everywhere.
+		if m.inspector != nil {
+			m.inspector.OnGatesChanged()
+		}
+		return m, m.handleResizeCmd()
+
 	case tea.BackgroundColorMsg:
 		// T-3: terminal reported its background color on startup (or when the
 		// user changes their terminal theme). Auto-switch dark/light mode so the
@@ -1093,8 +1131,18 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ow, oh := m.inspectorOverlayInnerSize()
 		cmds = append(cmds, m.updateInspector(tea.WindowSizeMsg{Width: ow, Height: oh}))
 	}
+	// sidebarUsesKey gates which keys a focused sidebar may claim: only its
+	// own navigation keys (arrows, tab, enter, esc). Anything else — page
+	// action letters like `m`, `r`, `/` — falls through to the active page,
+	// so a page action never silently dies just because Esc/← previously
+	// moved focus to the sidebar.
+	sidebarUsesKey := false
+	if kp, ok := msg.(tea.KeyPressMsg); ok {
+		sidebarUsesKey = sidebarNavConsumesKey(kp)
+	}
 	if m.navigationVisible && m.nav != nil {
-		navGetsKeys := isKey && !modalVisible && m.sidebarFocused && !activeCapturesKeys
+		navGetsKeys := isKey && !modalVisible && m.sidebarFocused && !activeCapturesKeys &&
+			sidebarUsesKey
 		if (!isKey && !mouseModal) || navGetsKeys {
 			cmds = append(cmds, m.updateNav(msg))
 		}
@@ -1119,11 +1167,13 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Active page: receives all messages EXCEPT key events that were claimed
-	// by the sidebar (i.e. sidebar focused and page not capturing keys) or
-	// intercepted by a modal overlay, mouse events while a mouse-modal overlay
-	// is open (those belong to the overlay via the OnMouse path), and targeted
-	// messages addressed to a different page.
-	pageGetsKeys := isKey && !modalVisible && (!m.sidebarFocused || activeCapturesKeys)
+	// by the sidebar (i.e. sidebar focused, page not capturing keys, and the
+	// key is one the sidebar actually uses) or intercepted by a modal
+	// overlay, mouse events while a mouse-modal overlay is open (those
+	// belong to the overlay via the OnMouse path), and targeted messages
+	// addressed to a different page.
+	pageGetsKeys := isKey && !modalVisible &&
+		(!m.sidebarFocused || activeCapturesKeys || !sidebarUsesKey)
 	activeGetsTargeted := !isTargeted || m.pageMatchesTarget(idx, targeted.TargetPage())
 	if (!isKey && !mouseModal && activeGetsTargeted) || pageGetsKeys {
 		cmds = append(cmds, m.updatePage(idx, msg))
@@ -1567,6 +1617,13 @@ func (m *RouterModel) routeMouseWithNavVisible(
 		return route(navView, 0, 0, "tabs")
 	}
 	if mmPos.Y < mainHeight {
+		// Content area click: release nav keyboard focus (parity with the
+		// DockLeft branch) so page keys work right after clicking into the
+		// content.
+		if m.sidebarFocused {
+			m.sidebarFocused = false
+			m.setNavFocused(false)
+		}
 		return route(activePageView, 0, navH, "content")
 	}
 	return nil
@@ -1597,6 +1654,20 @@ func (m *RouterModel) handleNavKeys(keyMsg tea.KeyPressMsg) (tea.Cmd, bool) {
 
 // handleSidebarNavKey handles key events when the active nav is a sidebar
 // (implements navigation.Focusable). It manages focus transitions between the
+// sidebarNavConsumesKey reports whether a focused sidebar claims this key.
+// It must cover exactly the keys navigation.DefaultKeyMap and
+// handleSidebarNavKey react to: arrows, tab/shift+tab, enter, and esc.
+// Every other key falls through to the active page even while the sidebar
+// is focused, so page action keys (`m`, `r`, `/`) always work.
+func sidebarNavConsumesKey(k tea.KeyPressMsg) bool {
+	switch k.Code {
+	case tea.KeyUp, tea.KeyDown, tea.KeyLeft, tea.KeyRight,
+		tea.KeyTab, tea.KeyEnter, tea.KeyEscape:
+		return true
+	}
+	return false
+}
+
 // sidebar region and the page region without cycling pages via Tab/Shift+Tab.
 func (m *RouterModel) handleSidebarNavKey(keyMsg tea.KeyPressMsg) (tea.Cmd, bool) {
 	// Region focus model for the sidebar (the recommended UX):

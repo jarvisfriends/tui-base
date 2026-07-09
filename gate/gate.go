@@ -56,6 +56,16 @@ func (g *GateRegistry) RegisterAll(gates []FeatureGate) {
 	}
 }
 
+// Has reports whether a gate with the given name is registered. It lets
+// framework code register built-in gates only when the app has not already
+// defined them (Register panics on duplicates).
+func (g *GateRegistry) Has(name string) bool {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	_, ok := g.vals[name]
+	return ok
+}
+
 // Value returns the current boolean value of the named gate.
 func (g *GateRegistry) Value(name string) bool {
 	g.mu.RLock()

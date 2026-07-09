@@ -23,11 +23,13 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/table"
 	"charm.land/bubbles/v2/viewport"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/dustin/go-humanize"
+	"github.com/jarvisfriends/tui-base/gate"
 	"github.com/jarvisfriends/tui-base/notifications"
 	"github.com/jarvisfriends/tui-base/page"
 	"github.com/jarvisfriends/tui-base/theme"
@@ -49,6 +51,13 @@ func saturatingDuration(ns uint64) time.Duration {
 	}
 	return time.Duration(ns)
 }
+
+// AccessibilityTabGate is the feature-gate name controlling whether the
+// inspector shows its Accessibility tab. The router registers it with
+// Default:false (hidden) when the app has not defined it, so the tab is
+// opt-in: flip it at runtime on the settings page (Feature Flags section)
+// or at startup via the <APPNAME>_GATE_INSPECTOR_ACCESSIBILITY_TAB env var.
+const AccessibilityTabGate = "Inspector Accessibility Tab"
 
 const (
 	debugTabTitleAccessibility = "Accessibility"
@@ -300,6 +309,10 @@ type InspectorModel struct {
 	logWarnPlus bool
 	// Accessibility panel — shown when its tab is active
 	acPanel *AccessibilityPanel
+	// gates controls visibility of gated tabs (currently the Accessibility
+	// tab via AccessibilityTabGate). Nil means "no gates": gated tabs stay
+	// hidden, matching the gate's Default:false registration.
+	gates *gate.GateRegistry
 	// highlight when stable values change, Change background color
 	ShowHighlight    bool
 	LastMouseClick   tea.Mouse
@@ -467,6 +480,29 @@ func (m *InspectorModel) SetNavKeys(next, prev key.Binding) {
 	)
 }
 
+// SetGates hands the inspector the app's feature-gate registry so gated tabs
+// (the Accessibility tab) can show or hide live. The router calls this once at
+// startup; the registry pointer is shared, so later gate flips are visible
+// immediately without re-wiring.
+func (m *InspectorModel) SetGates(g *gate.GateRegistry) {
+	m.gates = g
+	m.OnGatesChanged()
+}
+
+// OnGatesChanged re-derives gate-dependent state after a feature gate flips at
+// runtime (the router calls it on settings.GatesChangedMsg). If the active tab
+// just became hidden, the inspector snaps to the Runtime tab so the user is
+// never left on an invisible tab.
+func (m *InspectorModel) OnGatesChanged() {
+	if !m.tabVisible(m.activeTab) {
+		m.saveActiveTabScroll()
+		m.activeTab = debugTabRuntime
+		m.syncAcPanelVisibility()
+		m.restoreActiveTabScroll()
+	}
+	m.dirty = true
+}
+
 // activeDataTable returns the bubbles table backing the active tab, or nil
 // when the active tab is not table-based or its last render fell back to the
 // flat layout (narrow terminals), in which case keys scroll the viewport.
@@ -516,7 +552,7 @@ func (m *InspectorModel) restoreActiveTabScroll() {
 }
 
 func (m *InspectorModel) switchTab(tab debugTab) {
-	if tab < 0 || int(tab) >= m.tabCount() || tab == m.activeTab {
+	if tab < 0 || int(tab) >= m.tabCount() || tab == m.activeTab || !m.tabVisible(tab) {
 		return
 	}
 	m.saveActiveTabScroll()
@@ -851,17 +887,19 @@ func (m *InspectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			if km.Code == tea.KeyLeft || key.Matches(km, m.keys.PrevTab) {
-				m.switchTab(
-					debugTab((int(m.activeTab) - 1 + m.tabCount()) % m.tabCount()),
-				)
+				m.stepTab(-1)
 				return m, preCmd
 			}
 			if km.Code == tea.KeyRight || key.Matches(km, m.keys.NextTab) {
-				m.switchTab(debugTab((int(m.activeTab) + 1) % m.tabCount()))
+				m.stepTab(1)
 				return m, preCmd
 			}
 			if km.Text >= "1" && km.Text <= "9" {
-				m.switchTab(debugTab(int(km.Text[0] - '1')))
+				// Digits address the tabs as displayed (hidden tabs don't
+				// consume a number), matching the numbers on the tab bar.
+				if vis := m.visibleTabs(); int(km.Text[0]-'1') < len(vis) {
+					m.switchTab(vis[km.Text[0]-'1'])
+				}
 				return m, preCmd
 			}
 			switch {
@@ -1337,12 +1375,10 @@ func (m *InspectorModel) handleWheel(me tea.Mouse) {
 	shifted := me.Mod&tea.ModShift != 0
 	switch {
 	case me.Button == tea.MouseWheelLeft || (shifted && me.Button == tea.MouseWheelUp):
-		m.switchTab(
-			debugTab((int(m.activeTab) - 1 + m.tabCount()) % m.tabCount()),
-		)
+		m.stepTab(-1)
 		return
 	case me.Button == tea.MouseWheelRight || (shifted && me.Button == tea.MouseWheelDown):
-		m.switchTab(debugTab((int(m.activeTab) + 1) % m.tabCount()))
+		m.stepTab(1)
 		return
 	}
 	if tbl := m.activeDataTable(); tbl != nil {
@@ -1468,7 +1504,8 @@ func (m *InspectorModel) buildTermSection(c *theme.AppStyle, width int) string {
 	// downsamples 24-bit theme colors. Surface the fix when we detect the
 	// classic signature (ANSI256 + SSH + no override + COLORTERM unset).
 	if prof == colorprofile.ANSI256 && isSSH && profileOverride == "" && colorterm == "(not set)" {
-		colorRows = append(colorRows,
+		colorRows = append(
+			colorRows,
 			termRow{
 				k:    "Color hint",
 				v:    "24-bit colors quantized to ANSI256 (COLORTERM not forwarded over SSH)",

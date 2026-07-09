@@ -130,6 +130,21 @@ func (m *DirPicker) Init() tea.Cmd {
 	return readDirCmd(m.dir)
 }
 
+// listDrives returns the mounted drive roots (e.g. ["C:\", "E:\"]) by
+// probing every letter; on non-Windows systems no letter resolves so the
+// list is empty and the drive view is never entered ("/" is its own parent,
+// but Back at "/" simply finds nothing to list).
+func listDrives() []string {
+	var drives []string
+	for l := 'A'; l <= 'Z'; l++ {
+		root := string(l) + `:\`
+		if st, err := os.Stat(root); err == nil && st.IsDir() {
+			drives = append(drives, root)
+		}
+	}
+	return drives
+}
+
 // readDirCmd lists the subdirectories of dir, hiding all files.
 func readDirCmd(dir string) tea.Cmd {
 	return func() tea.Msg {
@@ -183,8 +198,19 @@ func (m *DirPicker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, readDirCmd(filepath.Join(m.dir, m.entries[m.cursor]))
 			}
 		case key.Matches(msg, m.KeyMap.Back):
+			if m.dir == "" {
+				break // already at the drive list
+			}
 			if parent := filepath.Dir(m.dir); parent != m.dir {
 				return m, readDirCmd(parent)
+			}
+			// At a filesystem root: offer the available drives so the user
+			// can navigate anywhere, not just below the starting directory.
+			if drives := listDrives(); len(drives) > 0 {
+				m.dir = ""
+				m.entries = drives
+				m.cursor, m.scrollTop = 0, 0
+				m.err = nil
 			}
 		case key.Matches(msg, m.KeyMap.Select):
 			if m.cursor < len(m.entries) {
@@ -192,8 +218,10 @@ func (m *DirPicker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Done = true
 			}
 		case key.Matches(msg, m.KeyMap.SelectCurrent):
-			m.selected = m.dir
-			m.Done = true
+			if m.dir != "" {
+				m.selected = m.dir
+				m.Done = true
+			}
 		}
 	}
 	return m, nil
@@ -227,7 +255,11 @@ func (m *DirPicker) View() tea.View {
 	normStyle := c.Styles.TextOnBg
 	dimStyle := c.Styles.Dim
 
-	current := fitLine(pathStyle.Render("📁 "+envpath.Collapse(m.dir)), maxW)
+	location := "📁 " + envpath.Collapse(m.dir)
+	if m.dir == "" {
+		location = "💾 Drives"
+	}
+	current := fitLine(pathStyle.Render(location), maxW)
 
 	var rows []string
 	switch {
