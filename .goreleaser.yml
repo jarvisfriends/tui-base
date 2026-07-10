@@ -36,6 +36,27 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+# I-8 supply-chain hardening (Q-17: cosign keyless/OIDC).
+# SBOMs: one SPDX JSON per archive, attached to the release.
+sboms:
+  - artifacts: archive
+
+# Sign the checksum file keylessly; verifying it transitively verifies every
+# archive (their hashes are inside). Requires the workflow to grant
+# id-token: write and have cosign installed. COSIGN_YES skips the interactive
+# transparency-log prompt in CI.
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    output: true
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--output-certificate=${certificate}"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+      - "--yes"
+
 snapshot:
   version_template: "{{ .Tag }}-next"
 

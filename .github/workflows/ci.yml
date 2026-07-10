@@ -248,7 +248,8 @@ jobs:
         uses: goreleaser/goreleaser-action@v7
         with:
           version: v2.16.0
-          args: release --snapshot --clean --skip=publish
+          # sign/sbom skipped: cosign+syft only install in the release workflow (I-8)
+          args: release --snapshot --clean --skip=publish,sign,sbom
 
   coverage:
     name: Coverage (ubuntu)
