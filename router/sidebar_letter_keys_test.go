@@ -5,7 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/jarvisfriends/tui-base/navigation"
+	"github.com/jarvisfriends/snap/navigation"
 )
 
 // keyRecorderPage records every key press routed to it, so tests can prove

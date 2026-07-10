@@ -8,9 +8,9 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/jarvisfriends/snap/geom"
-	"github.com/jarvisfriends/tui-base/notifications"
+	"github.com/jarvisfriends/snap/notifications"
+	"github.com/jarvisfriends/snap/status"
 	ov "github.com/jarvisfriends/tui-base/overlay"
-	"github.com/jarvisfriends/tui-base/status"
 )
 
 // Re-export overlay package types so router consumers can use router.Overlay,

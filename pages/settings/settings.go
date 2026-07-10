@@ -17,13 +17,14 @@ import (
 	"github.com/jarvisfriends/snap/datepicker"
 	"github.com/jarvisfriends/snap/gate"
 	"github.com/jarvisfriends/snap/keys"
+	"github.com/jarvisfriends/snap/page"
+	"github.com/jarvisfriends/snap/pickers"
 	"github.com/jarvisfriends/snap/timepicker"
 	"github.com/jarvisfriends/tui-base/common"
 	"github.com/jarvisfriends/tui-base/config"
 	"github.com/jarvisfriends/tui-base/envpath"
 	"github.com/jarvisfriends/tui-base/logging"
 	"github.com/jarvisfriends/tui-base/overlay"
-	"github.com/jarvisfriends/tui-base/page"
 	"github.com/jarvisfriends/tui-base/theme"
 
 	"charm.land/bubbles/v2/key"
@@ -572,7 +573,7 @@ func (m *SettingsModel) buildItems() {
 			if m.LogOutput != logOutputDir {
 				return nil
 			}
-			dp := NewDirPicker(m.LogPath)
+			dp := newThemedDirPicker(m.LogPath)
 			dp.Width, dp.Height = m.Width(), m.Height()
 			return dp
 		},
@@ -593,7 +594,7 @@ func (m *SettingsModel) buildItems() {
 					Picking(true).
 					Height(overlay.FormHeight(m.Height())).
 					Value(&m.LogPath),
-			).WithTheme(theme.HuhThemeFunc())).WithKeyMap(filePickerKeyMap())
+			).WithTheme(theme.HuhThemeFunc())).WithKeyMap(pickers.FilePickerKeyMap())
 		},
 	})
 	addItem(
@@ -926,7 +927,7 @@ func (m *SettingsModel) itemFromDef(def config.FieldDef[string]) settingItem {
 			}
 			form := huh.NewForm(huh.NewGroup(f).WithTheme(theme.HuhThemeFunc()))
 			if def.Kind == config.FieldFilePicker {
-				form = form.WithKeyMap(filePickerKeyMap())
+				form = form.WithKeyMap(pickers.FilePickerKeyMap())
 			}
 			return form
 		},
@@ -938,11 +939,11 @@ func (m *SettingsModel) itemFromDef(def config.FieldDef[string]) settingItem {
 				if !def.DirAllowed || def.FileAllowed {
 					return nil
 				}
-				dp := NewDirPicker(*def.Value)
+				dp := newThemedDirPicker(*def.Value)
 				dp.Width, dp.Height = m.Width(), m.Height()
 				return dp
 			case config.FieldMultiFilePicker:
-				e := NewMultiFileEditor(*def.Value)
+				e := newThemedMultiFileEditor(*def.Value)
 				// A directory-only field browses with the DirPicker (folders
 				// and drives, no files) instead of the mixed file browser.
 				e.DirsOnly = def.DirAllowed && !def.FileAllowed
@@ -1159,7 +1160,7 @@ func (m *SettingsModel) updateActiveOverlay(msg tea.Msg) (huh.FormState, tea.Cmd
 	cmd := m.modelOverlay.Update(msg)
 	mod := m.modelOverlay.Model()
 	switch v := mod.(type) {
-	case *MultiFileEditor:
+	case *pickers.MultiFileEditor:
 		if v.Done {
 			if m.editIndex >= 0 && m.items[m.editIndex].setValue != nil {
 				m.items[m.editIndex].setValue(v.Value())
@@ -1177,7 +1178,7 @@ func (m *SettingsModel) updateActiveOverlay(msg tea.Msg) (huh.FormState, tea.Cmd
 		} else if v.Aborted {
 			return huh.StateAborted, cmd
 		}
-	case *DirPicker:
+	case *pickers.DirPicker:
 		if v.Done {
 			if m.editIndex >= 0 && m.items[m.editIndex].setValue != nil {
 				m.items[m.editIndex].setValue(v.Value())

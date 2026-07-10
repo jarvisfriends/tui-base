@@ -3,8 +3,8 @@ package router
 import (
 	"testing"
 
-	"github.com/jarvisfriends/tui-base/notifications"
-	"github.com/jarvisfriends/tui-base/status"
+	"github.com/jarvisfriends/snap/notifications"
+	"github.com/jarvisfriends/snap/status"
 
 	tea "charm.land/bubbletea/v2"
 )

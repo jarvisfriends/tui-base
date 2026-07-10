@@ -13,6 +13,13 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
   (`theme.LoadYAMLTints`/`RegisterYAMLTints`; `gopkg.in/yaml.v3`; bad files
   are skipped with a logged warning). Authoring recipe in
   docs/theme-cookbook.md.
+- **BREAKING (wholesale wave, 2026-07-10):** `navigation`, `page`, `status`,
+  `table`, `notifications`, and the picker components moved to
+  `github.com/jarvisfriends/snap`; the entire `theme` implementation moved to
+  `snap/styles`, with tui-base's `theme` package remaining as aliases so
+  existing imports keep compiling. dash's chart primitives joined snap as
+  `snap/charts`. tui-base builds against the local snap checkout via an
+  untracked `go.work` replace until the snap PR merges and tags.
 - **BREAKING (SP-14):** the render/layout test helpers (goldens, border
   integrity, viewport fit, layout-math + key-binding standards) moved from
   `testutil` to `github.com/jarvisfriends/snap/rendercheck` (snap v0.1.1).

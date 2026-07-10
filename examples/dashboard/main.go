@@ -14,8 +14,8 @@ import (
 	"charm.land/bubbles/v2/table"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/jarvisfriends/tui-base/notifications"
-	"github.com/jarvisfriends/tui-base/page"
+	"github.com/jarvisfriends/snap/notifications"
+	"github.com/jarvisfriends/snap/page"
 	"github.com/jarvisfriends/tui-base/router"
 	"github.com/jarvisfriends/tui-base/theme"
 )

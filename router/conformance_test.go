@@ -3,9 +3,9 @@ package router
 import (
 	"testing"
 
+	"github.com/jarvisfriends/snap/navigation"
+	"github.com/jarvisfriends/snap/notifications"
 	"github.com/jarvisfriends/snap/rendercheck"
-	"github.com/jarvisfriends/tui-base/navigation"
-	"github.com/jarvisfriends/tui-base/notifications"
 	"github.com/jarvisfriends/tui-base/pages/settings"
 
 	tea "charm.land/bubbletea/v2"

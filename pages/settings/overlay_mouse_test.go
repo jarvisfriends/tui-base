@@ -73,8 +73,9 @@ func datepickerCellPos(t *testing.T, dp *datepicker.DatePickerModel, day int) (x
 	for py := range 30 {
 		for px := range 60 {
 			scratch := datepicker.New(dp.Time)
-			_ = scratch.View()
-			_, _ = scratch.Update(tea.MouseClickMsg{X: px, Y: py, Button: tea.MouseLeft})
+			// View records the hit zones and carries OnMouse — the only
+			// door mouse goes through now.
+			_ = scratch.View().OnMouse(tea.MouseClickMsg{X: px, Y: py, Button: tea.MouseLeft})
 			if scratch.Time.Day() == day && scratch.Focused == datepicker.FocusCalendar {
 				return px, py
 			}

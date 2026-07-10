@@ -323,18 +323,27 @@ func (h *ModelOverlayHost) ForwardMouse(mm tea.MouseMsg) tea.Cmd {
 		Button: me.Button,
 		Mod:    me.Mod,
 	}
+	var translated tea.MouseMsg
 	switch mm.(type) {
 	case tea.MouseClickMsg:
-		return h.Update(tea.MouseClickMsg(nm))
+		translated = tea.MouseClickMsg(nm)
 	case tea.MouseReleaseMsg:
-		return h.Update(tea.MouseReleaseMsg(nm))
+		translated = tea.MouseReleaseMsg(nm)
 	case tea.MouseMotionMsg:
-		return h.Update(tea.MouseMotionMsg(nm))
+		translated = tea.MouseMotionMsg(nm)
 	case tea.MouseWheelMsg:
-		return h.Update(tea.MouseWheelMsg(nm))
+		translated = tea.MouseWheelMsg(nm)
 	default:
 		return nil
 	}
+	// Mouse goes to the hosted model's View().OnMouse, never its Update:
+	// snap components keep pointer handling out of Update entirely, and a
+	// single delivery door prevents double-processing.
+	v := h.model.View()
+	if v.OnMouse == nil {
+		return nil
+	}
+	return v.OnMouse(translated)
 }
 
 // Composite renders the overlay centered over base.

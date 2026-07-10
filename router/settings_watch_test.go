@@ -7,8 +7,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/jarvisfriends/snap/notifications"
 	"github.com/jarvisfriends/tui-base/filewatch"
-	"github.com/jarvisfriends/tui-base/notifications"
 	"github.com/jarvisfriends/tui-base/pages/settings"
 )
 
