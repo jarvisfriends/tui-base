@@ -52,19 +52,47 @@ The following milestone capabilities are already implemented:
 - `tuibase.go`: root consumer package — `tuibase.Run(tuibase.Options{...})` bootstraps a full app.
 - `cmd/tui-base/`: runnable reference application.
 - `router/`: root model and message routing.
-- `navigation/`: Sidebar and Tabs components.
 - `pages/`: page models (`home`, `settings`, `inspector`).
-- `status/`: status bar and notification overlays.
-- `theme/`: app style model and style helpers.
-- `notifications/`: notification manager and persistence.
+- `theme/`: compatibility alias shim over `snap/styles` (kept until downstream
+  apps migrate their imports).
 - `logging/`: runtime logger + subscriber fanout.
-- key bindings, geometry, date/time pickers, gates, and winterm now live in
-  [snap](https://github.com/jarvisfriends/snap) and are imported back.
+- the reusable components (navigation, status bar, notifications, table,
+  styles, pickers, key bindings, geometry, date/time pickers, gates, winterm)
+  live in [snap](https://github.com/jarvisfriends/snap) and are imported back.
 - `common/`: shared public interfaces/types.
 
 ## Quick Start
 
 For a practical walkthrough, see [docs/getting-started.md](docs/getting-started.md).
+
+## Demos
+
+The snap components that need a router+pages host — navigation, status bar,
+notifications — are demoed here, in the reference app (their tapes can't live
+in a synthetic snap example). Regenerate every gif with
+`go -C tools/rendertapes run .` (Docker or Podman; the tool cross-compiles the
+demo binaries, runs each `*.tape` in the official vhs container, and drops the
+gifs next to their tapes).
+
+### Reference app tour
+
+![reference app tour](cmd/tui-base/demo.gif)
+
+Pages, the settings overlay editor, and the Ctrl+D inspector.
+
+### Navigation
+
+![navigation demo](examples/multipage/demo.gif)
+
+The multipage example cycling pages with Tab, focusing the sidebar with
+Ctrl+B for live arrow-key switching, and hiding/showing the nav chrome.
+
+### Notifications + status bar
+
+![notifications demo](cmd/tui-base/notifications.gif)
+
+Info/warning/error toasts fired from the inspector's test keys, TTL expiry,
+the status bar's notification count, full help, and hiding/showing the bar.
 
 ## Architectural Notes
 

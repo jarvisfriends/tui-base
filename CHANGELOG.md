@@ -8,6 +8,15 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
 
 ### Added
 
+- VHS demo tapes rendered through the container pipeline:
+  `tools/rendertapes` (ported from snap) cross-compiles `cmd/*` and
+  `examples/*` and renders every `*.tape` in the official vhs image. New
+  tapes: `cmd/tui-base/demo.tape` (app tour, relocated from
+  `tools/demo.tape`), `cmd/tui-base/notifications.tape` (toasts, TTL expiry,
+  status bar), and `examples/multipage/demo.tape` (navigation) — the
+  host-shaped demos the snap ROADMAP called for. README gained a Demos
+  section (gifs pending a Docker-equipped render).
+
 - Custom YAML themes (T-4): drop full 16-slot tint files into
   `<config-dir>/themes/` and they join the Theme selector at startup
   (`theme.LoadYAMLTints`/`RegisterYAMLTints`; `gopkg.in/yaml.v3`; bad files
@@ -18,8 +27,8 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
   `github.com/jarvisfriends/snap`; the entire `theme` implementation moved to
   `snap/styles`, with tui-base's `theme` package remaining as aliases so
   existing imports keep compiling. dash's chart primitives joined snap as
-  `snap/charts`. tui-base builds against the local snap checkout via an
-  untracked `go.work` replace until the snap PR merges and tags.
+  `snap/charts`. tui-base now depends on the tagged `snap v0.1.5` (the
+  wholesale-move release); the interim `go.work` replace is gone.
 - **BREAKING (SP-14):** the render/layout test helpers (goldens, border
   integrity, viewport fit, layout-math + key-binding standards) moved from
   `testutil` to `github.com/jarvisfriends/snap/rendercheck` (snap v0.1.1).
