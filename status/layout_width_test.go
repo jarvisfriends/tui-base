@@ -10,14 +10,14 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/jarvisfriends/snap/keys"
-	"github.com/jarvisfriends/tui-base/testutil"
+	"github.com/jarvisfriends/snap/rendercheck"
 )
 
 // TestStatusBarNeverOverflows asserts that the rendered status bar content does
 // not exceed the requested width at a variety of terminal widths. The status
 // bar is a single row and must always fit in exactly `width` cells.
 func TestStatusBarNeverOverflows(t *testing.T) {
-	for _, w := range testutil.StandardWidths {
+	for _, w := range rendercheck.StandardWidths {
 		b := New()
 		b.SetKeys(keys.DefaultKeyMap())
 		b.SetWidth(w)
@@ -25,7 +25,7 @@ func TestStatusBarNeverOverflows(t *testing.T) {
 			got := lipgloss.Width(line)
 			if got > w {
 				t.Errorf("status bar at width=%d line %d overflows by %d: %q",
-					w, i, got-w, testutil.StripANSI(line))
+					w, i, got-w, rendercheck.StripANSI(line))
 			}
 		}
 	}
@@ -34,7 +34,7 @@ func TestStatusBarNeverOverflows(t *testing.T) {
 // TestFullHelpBarNeverOverflows asserts that even in full-help (multi-row)
 // mode the status bar does not overflow the terminal width.
 func TestFullHelpBarNeverOverflows(t *testing.T) {
-	for _, w := range testutil.StandardWidths {
+	for _, w := range rendercheck.StandardWidths {
 		b := New()
 		b.SetKeys(keys.DefaultKeyMap())
 		b.help.ShowAll = true
@@ -43,7 +43,7 @@ func TestFullHelpBarNeverOverflows(t *testing.T) {
 			got := lipgloss.Width(line)
 			if got > w {
 				t.Errorf("full-help bar at width=%d line %d overflows by %d: %q",
-					w, i, got-w, testutil.StripANSI(line))
+					w, i, got-w, rendercheck.StripANSI(line))
 			}
 		}
 	}
@@ -61,12 +61,12 @@ func TestFullHelpBarNeverOverflows(t *testing.T) {
 // unreadable.
 func TestDNSColumnEmojiWidths(t *testing.T) {
 	symbols := []string{"✔", "⚠", "❌", "-"}
-	testutil.CheckEmojiColumnWidths(t, symbols, 3)
+	rendercheck.CheckEmojiColumnWidths(t, symbols, 3)
 }
 
 // TestStatusColumnEmojiWidths verifies the HTTP status symbols used in the
 // STATUS column render within a 22-cell wide column.
 func TestStatusColumnEmojiWidths(t *testing.T) {
 	symbols := []string{"✔️ OK", "⚠️ HTTP ERROR", "❌ HTTP FAILED", "❌ DNS INVALID"}
-	testutil.CheckEmojiColumnWidths(t, symbols, 22)
+	rendercheck.CheckEmojiColumnWidths(t, symbols, 22)
 }

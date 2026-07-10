@@ -1284,9 +1284,9 @@ func navDigitIndex(keyMsg tea.KeyPressMsg) (int, bool) {
 
 // StatusBarContent reports the status bar's currently rendered text and whether
 // it is visible. Exposed as an introspection seam so conformance tests
-// (testutil.CheckStatusBarVisible) can assert the status bar is present in every
+// (rendercheck.CheckStatusBarVisible) can assert the status bar is present in every
 // rendered frame — on every page and with overlays open. Satisfies
-// testutil.StatusProvider structurally.
+// rendercheck.StatusProvider structurally.
 func (m *RouterModel) StatusBarContent() (string, bool) {
 	return m.status.View().Content, m.status.IsVisible()
 }

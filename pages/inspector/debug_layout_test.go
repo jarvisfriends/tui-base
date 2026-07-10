@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/jarvisfriends/tui-base/testutil"
+	"github.com/jarvisfriends/snap/rendercheck"
 	"github.com/jarvisfriends/tui-base/theme"
 	tint "github.com/lrstanley/bubbletint/v2"
 )
@@ -19,5 +19,5 @@ func TestInspectorLayoutOverflows(t *testing.T) {
 	m := New()
 	m.SetColors(theme.Active())
 
-	testutil.CheckNoLineOverflowAtSizes(t, m)
+	rendercheck.CheckNoLineOverflowAtSizes(t, m)
 }

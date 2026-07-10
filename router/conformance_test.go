@@ -3,10 +3,10 @@ package router
 import (
 	"testing"
 
+	"github.com/jarvisfriends/snap/rendercheck"
 	"github.com/jarvisfriends/tui-base/navigation"
 	"github.com/jarvisfriends/tui-base/notifications"
 	"github.com/jarvisfriends/tui-base/pages/settings"
-	"github.com/jarvisfriends/tui-base/testutil"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -17,7 +17,7 @@ import (
 // framework and serves as the reference for how to invoke them.
 func TestConformanceSuite(t *testing.T) {
 	t.Run("FitsViewport", func(t *testing.T) {
-		testutil.CheckFitsViewport(t, New())
+		rendercheck.CheckFitsViewport(t, New())
 	})
 
 	t.Run("FitsViewportEverywhere", func(t *testing.T) {
@@ -35,11 +35,11 @@ func TestConformanceSuite(t *testing.T) {
 			tea.KeyPressMsg{Text: testKeyInspector}, // inspector overlay
 			tea.KeyPressMsg{Text: testKeyOpenSettings}, // settings page
 		)
-		testutil.CheckFitsViewport(t, m, states...)
+		rendercheck.CheckFitsViewport(t, m, states...)
 	})
 
 	t.Run("ThemeResponsive", func(t *testing.T) {
-		testutil.CheckThemeResponsive(
+		rendercheck.CheckThemeResponsive(
 			t, New(),
 			settings.ThemeMsg{ID: "dracula", Mode: "dark", ApplyPreferences: true},
 			settings.ThemeMsg{ID: "dracula", Mode: "light", ApplyPreferences: true},
@@ -60,7 +60,7 @@ func TestConformanceSuite(t *testing.T) {
 			tea.KeyPressMsg{Text: testKeyInspector},
 			tea.KeyPressMsg{Text: testKeyOpenSettings},
 		)
-		testutil.CheckStatusBarVisible(t, m, states)
+		rendercheck.CheckStatusBarVisible(t, m, states)
 	})
 }
 

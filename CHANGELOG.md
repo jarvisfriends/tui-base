@@ -8,6 +8,11 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
 
 ### Added
 
+- **BREAKING (SP-14):** the render/layout test helpers (goldens, border
+  integrity, viewport fit, layout-math + key-binding standards) moved from
+  `testutil` to `github.com/jarvisfriends/snap/rendercheck` (snap v0.1.1).
+  tui-base's `testutil` keeps `CheckNoImports` and
+  `CheckDescriptiveStructNames` only.
 - **BREAKING (SP-2, minor bump):** the `keys`, `geom`, `datepicker`,
   `timepicker`, `gate`, and `winterm` packages and the dependency/build-info
   reader (`common.Dependencies`/`ExpandedBuildInfo`) moved to

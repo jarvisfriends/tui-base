@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/jarvisfriends/tui-base/testutil"
+	"github.com/jarvisfriends/snap/rendercheck"
 )
 
 func TestTabsBounds(t *testing.T) {
@@ -23,15 +23,15 @@ func TestTabsBounds(t *testing.T) {
 
 	// Test with first tab selected
 	tabs.ActiveIndex = 0
-	testutil.AssertBounds(t, tabs, width, height)
+	rendercheck.AssertBounds(t, tabs, width, height)
 
 	// Test with last tab selected
 	tabs.ActiveIndex = len(pages) - 1
-	testutil.AssertBounds(t, tabs, width, height)
+	rendercheck.AssertBounds(t, tabs, width, height)
 
 	// Test a few middle tabs
 	for i := 1; i < len(pages)-1; i++ {
 		tabs.ActiveIndex = i
-		testutil.AssertBounds(t, tabs, width, height)
+		rendercheck.AssertBounds(t, tabs, width, height)
 	}
 }

@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/jarvisfriends/snap/rendercheck"
 	settings "github.com/jarvisfriends/tui-base/pages/settings"
-	"github.com/jarvisfriends/tui-base/testutil"
 	"github.com/jarvisfriends/tui-base/theme"
 	tint "github.com/lrstanley/bubbletint/v2"
 
@@ -34,7 +34,7 @@ func TestSettingsLayoutOverflows(t *testing.T) {
 	m := settings.NewWithOptions(settings.Options{})
 	m.SetColors(theme.Active())
 
-	testutil.CheckNoLineOverflowAtSizes(t, m)
+	rendercheck.CheckNoLineOverflowAtSizes(t, m)
 }
 
 func TestSettingsNarrowWidths(t *testing.T) {
@@ -43,5 +43,5 @@ func TestSettingsNarrowWidths(t *testing.T) {
 	m.SetColors(theme.Active())
 
 	// Check narrow width rendering down to min width (30 columns)
-	testutil.CheckNoBorderOverflow(t, m, 30, 24)
+	rendercheck.CheckNoBorderOverflow(t, m, 30, 24)
 }
