@@ -299,6 +299,44 @@ func (h *ModelOverlayHost) IsOutsideClick(x, y int) bool {
 	return h.IsOpen() && !h.bounds.Contains(x, y)
 }
 
+// Content insets applied by Composite's box: RoundedBorder (1 cell) plus
+// Padding(1, 2). ForwardMouse subtracts these so hosted models receive
+// content-relative coordinates. Keep in sync with Composite.
+const (
+	modelOverlayInsetX = 3 // border 1 + horizontal padding 2
+	modelOverlayInsetY = 2 // border 1 + vertical padding 1
+)
+
+// ForwardMouse translates a page-relative mouse event into the hosted
+// model's content coordinates (using the bounds from the last Composite) and
+// forwards it. Components like snap's date/time pickers hit-test against
+// their own rendered content, so translation is what makes their zones line
+// up. No-op when the overlay is closed.
+func (h *ModelOverlayHost) ForwardMouse(mm tea.MouseMsg) tea.Cmd {
+	if !h.IsOpen() {
+		return nil
+	}
+	me := mm.Mouse()
+	nm := tea.Mouse{
+		X:      me.X - h.bounds.X - modelOverlayInsetX,
+		Y:      me.Y - h.bounds.Y - modelOverlayInsetY,
+		Button: me.Button,
+		Mod:    me.Mod,
+	}
+	switch mm.(type) {
+	case tea.MouseClickMsg:
+		return h.Update(tea.MouseClickMsg(nm))
+	case tea.MouseReleaseMsg:
+		return h.Update(tea.MouseReleaseMsg(nm))
+	case tea.MouseMotionMsg:
+		return h.Update(tea.MouseMotionMsg(nm))
+	case tea.MouseWheelMsg:
+		return h.Update(tea.MouseWheelMsg(nm))
+	default:
+		return nil
+	}
+}
+
 // Composite renders the overlay centered over base.
 func (h *ModelOverlayHost) Composite(base string, borderStyle lipgloss.Style) string {
 	if !h.IsOpen() {

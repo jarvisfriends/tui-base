@@ -1223,9 +1223,14 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.abortEdit()
 	}
 
-	// Translate mouse wheel events to key presses for the edit overlay so
-	// users can scroll select controls with a mouse wheel even though huh
-	// lacks mouse support. Wheel up -> KeyUp, Wheel down -> KeyDown.
+	// Mouse routing while overlays are open: hosted model overlays receive
+	// mouse exclusively via View.OnMouse (translated coordinates); letting the
+	// raw page-relative event through here would double-deliver it with wrong
+	// coordinates. The huh edit overlay has no mouse support, so its wheel
+	// events become arrow keys instead.
+	if _, isMouse := msg.(tea.MouseMsg); isMouse && m.modelOverlay.IsOpen() {
+		return m, nil
+	}
 	if wm, ok := msg.(tea.MouseWheelMsg); ok {
 		if wm.Mouse().Button == tea.MouseWheelUp {
 			msg = tea.KeyPressMsg{Code: tea.KeyUp}
@@ -1376,18 +1381,26 @@ func (m *SettingsModel) View() tea.View {
 	// its edit overlay. Coordinates here are child-relative (router translates
 	// them before calling OnMouse).
 	v.OnMouse = func(mm tea.MouseMsg) tea.Cmd {
+		// A hosted model overlay (dir picker, date/time picker, ...) gets the
+		// mouse first: outside clicks dismiss it, everything else is forwarded
+		// with coordinates translated into the hosted content's space — that
+		// is what makes snap's click/wheel hit zones line up live, not just in
+		// unit tests. Mouse reaches hosted models ONLY through this path (the
+		// Update path drops mouse while the overlay is open, mirroring the
+		// router's own OnMouse/Update modality gate).
+		if m.modelOverlay.IsOpen() {
+			if click, ok := mm.(tea.MouseClickMsg); ok &&
+				m.modelOverlay.IsOutsideClick(click.X, click.Y) {
+				return m.abortEdit()
+			}
+			return m.modelOverlay.ForwardMouse(mm)
+		}
 		click, ok := mm.(tea.MouseClickMsg)
 		if !ok {
 			return nil
 		}
 		if m.editOverlay.IsOpen() {
 			if m.editOverlay.IsOutsideClick(click.X, click.Y) {
-				return m.abortEdit()
-			}
-			return nil
-		}
-		if m.modelOverlay.IsOpen() {
-			if m.modelOverlay.IsOutsideClick(click.X, click.Y) {
 				return m.abortEdit()
 			}
 			return nil

@@ -139,6 +139,16 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
 
 ### Fixed
 
+- Mouse clicks on date/time pickers hosted in the settings model overlay now
+  work: the page's OnMouse used to swallow inside clicks while the Update
+  path forwarded them with untranslated page coordinates that missed every
+  hit zone (and wheel events were converted to arrow keys before reaching
+  the picker). Hosted models now receive mouse exclusively via
+  `ModelOverlayHost.ForwardMouse`, translated into their content space;
+  regression test drives a real click through the composed overlay. The
+  standalone snap demos additionally needed `MouseMode` on the root view
+  (Bubble Tea v2 only reports mouse when the root view requests it).
+
 - Feature Flags edits on the settings page now actually commit: the select
   bound its value to a variable that went out of scope before the form
   completed, so toggling a gate silently did nothing. The binding now outlives
