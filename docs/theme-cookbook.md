@@ -57,3 +57,40 @@ form := huh.NewForm(groups...).WithTheme(theme.HuhThemeFunc())
 `testutil.CheckThemeResponsive` fails if switching themes doesn't change your
 rendered colors — add it to your conformance test so hardcoded colors can't
 creep back in.
+
+## Custom YAML themes (T-4)
+
+Drop `*.yaml` files into `<config-dir>/themes/` (next to `tui_settings.json`,
+e.g. `%AppData%/<app>/themes/` on Windows) and they appear in the Theme
+selector next to the built-ins on the next launch. The schema is the full
+16-slot terminal tint:
+
+```yaml
+id: my-ocean            # required, unique
+display_name: My Ocean  # optional (defaults to id)
+dark: true              # optional (derived from bg luminance when omitted)
+fg: "#e6e6e6"           # required
+bg: "#0a1930"           # required
+selection_bg: "#254a7d" # optional
+cursor: "#ffcc00"       # optional
+black: "#000000"        # the 16 ANSI slots are all required:
+red: "#ff5555"          # black red green yellow blue purple cyan white
+green: "#50fa7b"        # + the bright_ variants of each
+yellow: "#f1fa8c"
+blue: "#6272a4"
+purple: "#bd93f9"
+cyan: "#8be9fd"
+white: "#f8f8f2"
+bright_black: "#44475a"
+bright_red: "#ff6e6e"
+bright_green: "#69ff94"
+bright_yellow: "#ffffa5"
+bright_blue: "#d6acff"
+bright_purple: "#ff92df"
+bright_cyan: "#a4ffff"
+bright_white: "#ffffff"
+```
+
+Colors accept `#rgb` or `#rrggbb`. A file that fails to parse is skipped with
+a WARN in the log — it never hides the other themes. Programmatic access:
+`theme.LoadYAMLTints(dir)` / `theme.RegisterYAMLTints(dir)`.

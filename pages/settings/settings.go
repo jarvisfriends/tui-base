@@ -353,6 +353,16 @@ func NewWithOptions(opts Options) *SettingsModel {
 	// goroutine-safe; calling NewDefaultRegistry from concurrent goroutines races
 	// on the module-level registry pointer.
 	initRegistryOnce.Do(tint.NewDefaultRegistry)
+	// T-4: user-authored YAML themes load from <config-dir>/themes into the
+	// registry, appearing in the Theme selector next to the built-ins. One bad
+	// file never hides the rest; problems land in the log.
+	themesDir := filepath.Join(filepath.Dir(settingsFilePath()), "themes")
+	if n, errs := theme.RegisterYAMLTints(themesDir); n > 0 || len(errs) > 0 {
+		logging.Infof("Settings: loaded %d custom theme(s) from %s", n, themesDir)
+		for _, e := range errs {
+			logging.Warnf("Settings: custom theme skipped: %v", e)
+		}
+	}
 	if m.ThemeMode == "" {
 		m.ThemeMode = theme.ThemeModeDark
 	}

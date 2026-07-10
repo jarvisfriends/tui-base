@@ -2,7 +2,7 @@ module github.com/jarvisfriends/tui-base
 
 go 1.26.5 // Need to use 1.26.5 because of crypto/tls vulnerability in 1.26.4 and earlier
 
-require github.com/jarvisfriends/snap v0.1.1
+require github.com/jarvisfriends/snap v0.1.3
 
 require (
 	charm.land/bubbles/v2 v2.1.1
@@ -12,6 +12,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/fsnotify/fsnotify v1.10.1
 	golang.org/x/tools v0.48.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (

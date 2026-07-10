@@ -17,12 +17,13 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 
 | # | Question | Options / Recommendation | Unblocks |
 |---|---|---|---|
-| Q-25 | **testutil split name: `rendercheck` shipped in snap v0.1.1** — veto still possible (a rename is one `gofmt -r` while pre-v1). | Keep `rendercheck` unless you prefer another name. | SP-14 (done) |
+
 
 ### ✅ Answered (2026-07-01, updated 2026-07-09)
 
 | # | Question | Decision |
 |---|---|---|
+| Q-25 | rendercheck name? | **Answered 2026-07-09 (human): `rendercheck` confirmed.** Closed. |
 | Q-16 | Feature-idea priority? | **Answered 2026-07-09 (human): do all of them**, lower number = higher priority (I-1 → I-6). |
 | Q-17 | Release signing? | **Answered 2026-07-09 (human): cosign keyless (OIDC)** — wire SBOM + signing into the release workflow (I-8). |
 | Q-18 | i18n? | **Answered 2026-07-09 (human): rejected.** I-9 closed. |
@@ -149,7 +150,7 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 
 | Status | # | Task | Notes |
 |---|---|---|---|
-| ⬜ Planned | T-4 | Custom theme authoring (user-defined YAML tints) | Load from `~/.config/tui-base/themes/`. Unblocked 2026-07-09 per Q-15: `gopkg.in/yaml.v3`, full 16-slot tint schema (drops into bubbletint's registry). |
+| ✅ Done | T-4 | Custom theme authoring (user-defined YAML tints) | Done 2026-07-09 per Q-15: `theme.LoadYAMLTints`/`RegisterYAMLTints` parse the full 16-slot schema (`gopkg.in/yaml.v3`, `#rgb`/`#rrggbb`, dark derived from bg luminance) from `<config-dir>/themes/`; the settings page registers them at startup so they appear in the Theme selector. Bad files are skipped with a logged warning. Recipe in docs/theme-cookbook.md. |
 | 🔄 Reopened | L-6 | Migrate developer logging to Uber `zap` | 2026-07-03 evaluation recommended rejecting (slog if anything) — **vetoed by the human 2026-07-09**: use zap for actual dev logs instead of maintaining wrappers around what zap provides. Now tracked as SP-10 (zap core + a custom sink preserving the subscriber fan-out the inspector Log tab consumes). |
 | ✅ Done | FW-1 | **Filewatch helper** (`fsnotify` → `tea.Cmd`) for live-reloading views | Done 2026-07-07 per Q-14: new `filewatch` package (parent-dir watch so atomic renames are seen, debounced bursts, `Next()`/`Stop()` lifecycle) + `Options.WatchSettingsFile` — external edits to `tui_settings.json` reload live, re-apply the theme, and raise a notification; the app's own saves stay silent (JSON no-op detection). `RouterModel.Close` releases the OS watch; `tuibase.Run/RunContext` call it automatically. Tests: `filewatch/filewatch_test.go`, `router/settings_watch_test.go`. |
 | ⬜ Planned | I-1 | Page lifecycle hooks (`OnEnter`, `OnLeave`, `OnResize`, `OnThemeChange`) | Approved per Q-16 (2026-07-09), priority 1 of 6 (effort: S). |
@@ -192,7 +193,7 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 | ✅ Done | SP-11 | **Program-options API** (shape per Q-21: struct + `WithXXX`) | Shipped 2026-07-09: `tuibase.Option` + `With*` funcs for every Options field; `Run/RunContext/NewWithOptions` gained source-compatible variadic tails; `tuibase.New(options ...Option)`. Includes `WithDebugOverlay(tea.Model)` (Q-22's tui-base half): the injected model owns Ctrl+D, rendered in the inspector's overlay box with keys/mouse/resize forwarded. Available-set options (navigation styles etc.) grow as snap fills out. |
 | ⬜ Planned | SP-12 | **Inspector → `github.com/jarvisfriends/inspector`** (own repo, "debug any charm based app") | Design per Q-22: library form is a plain `tea.Model`; `cmd/inspector` main runs it under snap's **minimal-top nav** (⇒ depends on SP-5). tui-base consumes it via `WithDebugOverlay`. Untangling needed first: theme pointer, logging fan-out, shared table styles, router overlay stack. |
 | ✅ Done | SP-14 | **Render/layout checks moved to `snap/rendercheck`** | Done 2026-07-09 (shipped in snap v0.1.1): golden files, border integrity, viewport fit, layout-math + key-binding standards now live in snap; every tui-base call site re-pointed. tui-base testutil keeps only `CheckNoImports` and `CheckDescriptiveStructNames`. Name `rendercheck` stands unless Q-25 is vetoed. |
-| 🔄 In Progress | SP-15 | **VHS `.tape` per snap component + run vhs** | Tapes + example mains for the visual snaps (datepicker, timepicker/TimeField) committed 2026-07-09; the other moved packages are non-visual libraries (no tape applies). **vhs hangs on this Windows setup** (vhs 0.10.0 + ttyd 1.7.7 — process sat >10 min with no output; killed): render the gifs on WSL/Linux or debug ttyd locally. Determinism answer lives in the gaps note. |
+| 🔄 In Progress | SP-15 | **VHS `.tape` per snap component + run vhs** | Tapes + example mains committed. **vhs hangs on this Windows box** — diagnosed 2026-07-09: invocation is correct (`vhs datepicker/demo.tape` from the snap root); ttyd serves fine standalone; the hang is inside vhs.exe's browser/ttyd orchestration right after tape parsing (rod never even downloads Chromium). Also found a **Linux ELF `vhs` at `E:\code\home\goinhs`** (WSL artifact) that can shadow the real vhs.exe depending on PATH order — delete/rename it. Recommended: render the tapes under WSL (vhs+ttyd+ffmpeg there), or try a newer vhs than v0.10.0. |
 | ⬜ Planned | SP-13 | **Test-file policy: one `<file>_test.go` per source file** (+ optional `<file>_regressions_test.go` when it grows) | Consolidate the current per-feature test files (e.g. router has 20+ suffixed test files) during each package's move; consider a `testutil.CheckCodeStandards` rule to hold the line afterward. |
 
 ### Gaps found while planning (the "did I forget anything?" answer)

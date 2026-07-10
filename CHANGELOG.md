@@ -8,6 +8,11 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
 
 ### Added
 
+- Custom YAML themes (T-4): drop full 16-slot tint files into
+  `<config-dir>/themes/` and they join the Theme selector at startup
+  (`theme.LoadYAMLTints`/`RegisterYAMLTints`; `gopkg.in/yaml.v3`; bad files
+  are skipped with a logged warning). Authoring recipe in
+  docs/theme-cookbook.md.
 - **BREAKING (SP-14):** the render/layout test helpers (goldens, border
   integrity, viewport fit, layout-math + key-binding standards) moved from
   `testutil` to `github.com/jarvisfriends/snap/rendercheck` (snap v0.1.1).
