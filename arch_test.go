@@ -15,23 +15,17 @@ func TestArchitectureLayering(t *testing.T) {
 	ui := []string{mod + "/router", mod + "/pages", mod + "/status", mod + "/navigation"}
 
 	// Pure foundations: no tui-base dependencies at all beyond themselves.
-	testutil.CheckNoImports(t, mod+"/geom", mod)
 	testutil.CheckNoImports(t, mod+"/envpath", mod)
-	testutil.CheckNoImports(t, mod+"/gate", mod)
-	testutil.CheckNoImports(t, mod+"/winterm", mod)
 
 	// Mid-layer packages: independent of the UI composition layers.
 	for _, pkg := range []string{
 		mod + "/theme",
-		mod + "/keys",
 		mod + "/logging",
 		mod + "/common",
 		mod + "/config",
 		mod + "/notifications",
 		mod + "/overlay",
 		mod + "/page",
-		mod + "/datepicker",
-		mod + "/timepicker",
 		mod + "/table",
 	} {
 		testutil.CheckNoImports(t, pkg, ui...)

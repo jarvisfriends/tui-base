@@ -1,6 +1,6 @@
 # Feature gates
 
-Named boolean flags (package [`gate`](../gate)) that show or hide functionality
+Named boolean flags (package [`gate`](https://github.com/jarvisfriends/snap) in the snap repo) that show or hide functionality
 at **startup** (defaults + environment overrides) and at **runtime** (the
 settings page), with changes visible immediately. Gate values are
 deliberately **never persisted** to the settings file — every launch starts

@@ -14,17 +14,17 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/jarvisfriends/snap/datepicker"
+	"github.com/jarvisfriends/snap/gate"
+	"github.com/jarvisfriends/snap/keys"
+	"github.com/jarvisfriends/snap/timepicker"
 	"github.com/jarvisfriends/tui-base/common"
 	"github.com/jarvisfriends/tui-base/config"
-	"github.com/jarvisfriends/tui-base/datepicker"
 	"github.com/jarvisfriends/tui-base/envpath"
-	"github.com/jarvisfriends/tui-base/gate"
-	"github.com/jarvisfriends/tui-base/keys"
 	"github.com/jarvisfriends/tui-base/logging"
 	"github.com/jarvisfriends/tui-base/overlay"
 	"github.com/jarvisfriends/tui-base/page"
 	"github.com/jarvisfriends/tui-base/theme"
-	"github.com/jarvisfriends/tui-base/timepicker"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"

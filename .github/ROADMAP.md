@@ -17,20 +17,25 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 
 | # | Question | Options / Recommendation | Unblocks |
 |---|---|---|---|
-| Q-12 | **A-4 scroll refactor — keep or replace the settings overview scroller?** The inspector already scrolls via `bubbles/viewport` (`tabScrollY` is only per-tab scroll *memory*), so the settings overview is the last hand-rolled scroller — but it is a multi-**column**, category-grouped, entry-windowed layout. `bubbles/list` is single-column with its own chrome; a raw viewport trades entry-snapping for line scrolling. | Recommend closing A-4 as "won't do for settings; inspector already compliant". | A-4 |
-| Q-13 | **CF-2 conformance tab: confirm the snapshot design.** The inspector renders *inside* `router.View`, so a tab checking the live frame would recurse. Sketch: the router records frame metrics (size fit, status-bar presence, border counts) at the end of `View`; a built-in `MetricsProvider` tab reports pass/fail from that snapshot. | Confirm that design — or drop CF-2 now that the unit-level conformance checks cover the same invariants. | CF-2 |
-| Q-15 | **T-4 YAML themes: pick the YAML dep and schema.** Needs `goccy/go-yaml` vs `gopkg.in/yaml.v3`, and a schema decision: full 16-slot terminal tint vs the smaller semantic `AppStyle` slots. | Recommend goccy/go-yaml + full tint schema (drops straight into bubbletint's registry). | T-4 |
-| Q-20 | **snap dependency direction: once a component is extracted, does tui-base import it back?** tui-base is public, so importing snap requires that repo to be public on GitHub too (Gitea-only won't resolve for outside consumers). Alternative: extract as a copy and let the two drift apart deliberately. | Recommend: make snap public and have tui-base import it — one source of truth, and the components get real consumers immediately. | X-1…X-4 (beyond the scaffold) |
-| Q-16 | **Priority order for the remaining feature ideas?** Effort estimates: I-1 lifecycle hooks (S), I-3 confirm-modal service (M), I-4 persistent layout state (M), I-5 capability detection (M), I-2 command palette (L), I-6 panic overlay (M — riskiest: `recover()` inside the tea loop). | Pick the order (or "none for now") and I'll work down the list. | I-1…I-6 |
-| Q-17 | **I-8 release hardening: cosign keyless (OIDC) or a managed signing key?** Keyless is zero-secret and recommended; either way goreleaser + workflow permissions need a decision. | Confirm keyless and I'll wire SBOM + signing into the release workflow. | I-8 |
-| Q-18 | **I-9 i18n: recommend rejecting.** Message catalogs bloat every consumer, and a framework's user-facing strings are mostly consumer-owned anyway. | Confirm to close as rejected. | I-9 |
-| Q-19 | **A-8 cyclomatic-complexity linter: enable now or after the big files shrink?** Enabling `cyclop`/`gocyclo` today flags `router.go` and inspector `debug.go`; a high threshold (~25) would pass but adds little until those files are split. | Recommend enabling at threshold 25 now and ratcheting down later. | A-8 |
+| Q-25 | **testutil split name (SP-14): what should the moved render/layout checks be called in snap?** "Conformance" is out per the human note. | Proposal: **`rendercheck`** — it checks rendered-string building (layout math, borders, viewport fit, goldens). Veto/rename welcome; building with this name meanwhile. | SP-14 |
 
-### ✅ Answered (2026-07-01, updated 2026-07-07)
+### ✅ Answered (2026-07-01, updated 2026-07-09)
 
 | # | Question | Decision |
 |---|---|---|
-| Q-10 | Component extraction shape? | **One `snap` repo** holding all the unique components, organized into category folders that grow over time — e.g. `navigation/` with one folder per swappable style (`tabs/`, `sidebar/`, `minimal-top/`). Each component gets a VHS `.tape` demo. Scaffolded 2026-07-07; dependency direction is the remaining decision (Q-20). |
+| Q-16 | Feature-idea priority? | **Answered 2026-07-09 (human): do all of them**, lower number = higher priority (I-1 → I-6). |
+| Q-17 | Release signing? | **Answered 2026-07-09 (human): cosign keyless (OIDC)** — wire SBOM + signing into the release workflow (I-8). |
+| Q-18 | i18n? | **Answered 2026-07-09 (human): rejected.** I-9 closed. |
+| Q-19 | Cyclomatic-complexity linter? | **Answered 2026-07-09 (human): enable at a high threshold and gradually reduce.** A-8 unblocked. |
+| Q-12 | Settings overview scroller? | **Answered 2026-07-09 (human): keep the existing scroller** — it works and has nice features. A-4 closed as won't-do (inspector already viewport-based). |
+| Q-13 | CF-2 conformance tab design? | **Answered 2026-07-09 (human): drop CF-2** — the unit-level conformance checks are the better approach. Closed. |
+| Q-15 | T-4 YAML dep + schema? | **Answered 2026-07-09 (human): `gopkg.in/yaml.v3` + the full tint schema.** T-4 unblocked. |
+| Q-21 | Program-options API shape (SP-11)? | **Answered 2026-07-09 (human): both** — keep the `Options` struct *and* add variadic `WithXXX` functional options. Implemented as `Run(opts, options...)` / `RunContext` / `NewWithOptions` gaining a source-compatible variadic tail plus `tuibase.New(options ...Option)`; options apply on top of the struct, defaults fill anything unset. |
+| Q-22 | Inspector standalone API (SP-12)? | **Answered 2026-07-09 (human):** the independent inspector ships a `cmd/` main that runs it under snap's minimal-top nav; as a library it is delivered as a plain `tea.Model`. tui-base adds `WithDebugOverlay(tea.Model)` — the stored model becomes the Ctrl+D overlay, and tui-base controls Ctrl+D whenever the pointer is non-nil. Depends on SP-5 (minimal-top must live in snap first). |
+| Q-23 | Pickers move timing (SP-7)? | **Answered 2026-07-09 (human):** the dir/file-picker WIP is committed — SP-7 unblocked. |
+| Q-24 | Timepicker redesign model (SP-8)? | **Answered 2026-07-09 (human):** two columns with a highlight color on the colon; clicking either side opens a scrollable dropdown; Enter or click commits mouse-set numbers; validate when leaving the field. |
+| Q-20 | snap dependency direction? | **Answered 2026-07-09 (human):** `snap` and `inspector` are both public on GitHub; tui-base imports them back — one source of truth. The old `jarvis-bubbles` repo was renamed to `snap` ("Jarvis Friends Snap"). Sequencing constraint: tui-base's `go.mod` can only reference *pushed, tagged* snap releases (a public library must not carry `replace` directives), so each move lands in snap first, gets tagged, then tui-base flips imports. |
+| Q-10 | Component extraction shape? | **One `snap` repo** holding all the unique components, organized into category folders that grow over time — e.g. `navigation/` with one folder per swappable style (`tabs/`, `sidebar/`, `minimal-top/`). Each component gets a VHS `.tape` demo. Scaffolded 2026-07-07; dependency direction answered 2026-07-09 (Q-20). The inspector now goes to its **own repo** (`jarvisfriends/inspector`), not a snap subfolder — see SP-12. |
 | Q-11 | VS Code workspace manual pass? | **Confirmed working** (2026-07-07). Closed. |
 | Q-14 | FW-1 `fsnotify` dep? | **Yes** — dep accepted, and include settings-change notifications: external edits to `tui_settings.json` reload live and surface a notification. Shipped 2026-07-07 (see FW-1). |
 | Q-1 | Public release goal? | Already public at **v0.2.1**. v1.0 = "no more changes wanted"; until then breaking improvements are fine. Library-readiness items stay a priority band. |
@@ -90,11 +95,11 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 | ✅ Done | A-1 | **Bound background message fanning** | Done 2026-07-03: `router.TargetedMsg{ TargetPage() string }` fast path — targeted background messages wake only the page whose nav ID/title matches; everything else keeps broadcasting. Test: `TestTargetedMsgWakesOnlyItsPage`. |
 | ✅ Done | A-2 | `tea.WithContext` support for graceful shutdown | Done 2026-07-03: `router.NewProgramWithContext(ctx, m, envVar, opts...)` and `tuibase.RunContext(ctx, opts)` — cancel the context (e.g. `signal.NotifyContext`) for a SIGTERM-clean exit. Test: `TestNewProgramWithContextCancelsRun`. |
 | ✅ Done | A-3 | Theme the datepicker/timepicker | Done 2026-07-03: components stay theme-free (extraction candidates) but expose style hooks (`datepicker.Styles`, timepicker `Active/Inactive/HelpStyle`); settings maps the active theme onto them (`picker_theme.go` — selection colors for focus, accent for the active segment). The small editor overlays (DirPicker/MultiFileEditor/KeyRecorder) now use theme styles too. |
-| ❓ | A-4 | **Tier 2: replace hand-rolled scrolling with `bubbles` list/viewport** | Re-analyzed 2026-07-03: the inspector already scrolls via `bubbles/viewport`; only the settings overview scroller is hand-rolled, and its multi-column entry-windowed layout doesn't map onto `bubbles/list`. Decision per Q-12 (recommend: close as won't-do). |
+| ✅ Won't do | A-4 | **Tier 2: replace hand-rolled scrolling with `bubbles` list/viewport** | Closed 2026-07-09 per Q-12: keep the existing settings scroller (works, feature-rich); the inspector was already viewport-based. |
 | ✅ Done | A-5 | **Tier 4: display-width column rendering** | Done 2026-07-03: the info modal's dependency table was the last byte-padded (`%-50s`) column layout — now display-cell padded (lipgloss `Width` cells + ANSI-aware tail truncation). `renderRuntimeFlat` audited: already width-based. Full `lipgloss/table` adoption judged unnecessary for these two-column views. |
 | ✅ Done | A-6 | Small audits: all key handling via `key.Binding` (no `.String()==` compares); `tea.Batch` for multi-cmd returns; `ReapplyBg` on every `View()` that needs it | Done 2026-07-03: last two `.String()==` compares removed (redundant shift+tab clause; KeyRecorder save now Code+Mod, tests use the real key form). Multi-cmd sites all batch via `cmds` slices + `tea.Batch` (verified during the sweep). `ReapplyBg` covers both composition roots (router layout, status help); other surfaces are protected by the themed `View.BackgroundColor`. |
 | ✅ Done | A-7 | **Eliminate `init()` functions; shrink globals** | Per Q-5. Verified zero `init()` functions in the library. Removed the global `RegisterPage()`/`RegisteredPages()`/`ClearRegisteredPages()` registry (2026-07-01) — construction-time pages go through `Options.ExtraPages`/`NewWithRegisteredPages`; runtime adds through the `(*RouterModel).RegisterPage` method. Remaining globals (theme cache, logging state) are mutex-guarded. |
-| ❓ | A-8 | Add `gocyclo`/`cyclop` linter; periodically review new golangci-lint linters (`default: none` hides new ones) | Threshold decision via Q-19 (recommend enable at 25, ratchet down). |
+| 🔄 In Progress | A-8 | Add `cyclop` linter at a high threshold, ratchet down over time | Per Q-19 (2026-07-09): enabled high; reduce gradually as router.go/debug.go split. Keep reviewing new golangci-lint linters periodically. |
 | 💡 Idea | A-9 | `context.Context` in notification TTL, config I/O, logging fan-out | Partially covered 2026-07-03: `RunContext`/`NewProgramWithContext` bound the program lifetime (A-2). Remaining idea is plumbing ctx into TTL timers and config I/O — still gated on Bubble Tea's loop not passing contexts. |
 | 📋 Noted | A-10 | Tier 5 (consumer repo): decompose dash `dashboard.go` god-object (927 lines) into mode handlers + overlay manager mirroring the router `Overlay` pattern | Lives in the dash repo, tracked here so the tier list stays complete. |
 | ⬜ Planned | A-11 | **Restyle the inspector's settings surface to match the main Settings page** | Human feedback (2026-07-07): "The main Settings page is great, the Inspector settings page should look like the main one." Reuse the settings page's section/field rendering (or its styles) inside the inspector so the two read as one design. |
@@ -108,7 +113,7 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 | ✅ Done | TS-3 | Tiny-terminal tests | Done 2026-07-03: router driven at 40×10, 60×20, 80×24 across page switch + inspector overlay (`TestTinyTerminals`). |
 | ✅ Done | TS-4 | Architectural dependency enforcement | Done 2026-07-03: `testutil.CheckNoImports` + root `TestArchitectureLayering` (foundations import nothing internal; mid-layer never imports router/pages/status/navigation; pages/status never import router). |
 | ⬜ Planned | TS-5 | `teatest` integration tests | Drive the full app through `tea.Program`, assert terminal output. |
-| ❓ | CF-2 | **Inspector "Conformance" tab** — runtime pass/fail | Blocked on the Q-13 design confirmation (frame-snapshot provider; naive live checks would recurse through `router.View`). |
+| ✅ Won't do | CF-2 | **Inspector "Conformance" tab** — runtime pass/fail | Dropped 2026-07-09 per Q-13: the unit-level conformance checks cover the same invariants better. |
 | ✅ Done | CF-3 | **Border-count invariant** check | Done 2026-07-03: `testutil.CheckBorderIntegrity` (model, all standard sizes) + `CheckBorderIntegrityString` (prerendered overlays) — every bordered line must carry exactly two edge glyphs; the glyph is a parameter for content that legitimately contains `│`. Applied to the inspector box and history panel. |
 | 💡 Idea | TS-6 | Theme fuzzing (randomized fg/bg/border/accent — never panic); overlay-stacking + mouse-routing integration tests | |
 
@@ -133,10 +138,10 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 
 | Status | # | Candidate | Notes |
 |---|---|---|---|
-| 🔄 In Progress | X-0 | `snap` repo scaffold (per Q-10) | Scaffolded 2026-07-07: category folders (`navigation/{tabs,sidebar,minimal-top}`, `inspector/`, `logging/`, `status/`), README with the extraction contract, go.mod. Actual moves are X-1…X-4, gated on Q-20 (dependency direction). |
-| ⬜ Planned | X-1 | `navigation` — Tabs, Sidebar, Slim/topnav → `snap/navigation/{tabs,sidebar,minimal-top}` | Unblocked by Q-10. Sidebar is close to `bubbles/list` with a custom delegate — consider migrating before extraction to thin the key/mouse logic. |
-| ⬜ Planned | X-2 | `pages/inspector` → `snap/inspector` | Unblocked by Q-10. Prime candidate; deps are only `bubbletea/v2` + `lipgloss/v2`. |
-| ⬜ Planned | X-3 | `logging` → `snap/logging` | Unblocked by Q-10. Could grow a ring buffer, level histogram, export interface. |
+| 🔄 In Progress | X-0 | `snap` repo scaffold (per Q-10) | Scaffolded 2026-07-07; **first five packages moved in 2026-07-09** (SP-1/SP-3). Remaining moves tracked as SP-items in the "Snap & Inspector split" section below. |
+| ⬜ Planned | X-1 | `navigation` — Tabs, Sidebar, Slim/topnav → `snap/navigation/{tabs,sidebar,minimal-top}` | Superseded by **SP-5** (adds the Navigator-interface requirements). Sidebar is close to `bubbles/list` with a custom delegate — consider migrating before extraction to thin the key/mouse logic. |
+| ⬜ Planned | X-2 | `pages/inspector` → own repo | **Superseded by SP-12** (2026-07-09): the inspector goes to `github.com/jarvisfriends/inspector` (its own public repo, "debug any charm based app"), not a snap subfolder. |
+| ⬜ Planned | X-3 | `logging` → `snap/logging` | Shape now depends on **SP-10** (zap for dev logs); what remains framework-specific is the subscriber fan-out feeding the inspector. |
 | ⬜ Planned | X-4 | `status` bar → `snap/status` | Unblocked by Q-10. Remove the hard-coded notification seed before extracting. |
 | 🔄 In Progress | X-5 | VHS gif creator with `.tape` config for the main tui-base app | Tape written 2026-07-03 (`tools/demo.tape`: pages, settings, inspector tour). **🔔 Human action:** install `vhs` and run `vhs tools/demo.tape` once to render/verify the gif (not installed in the dev environment). |
 
@@ -144,42 +149,78 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 
 | Status | # | Task | Notes |
 |---|---|---|---|
-| ❓ | T-4 | Custom theme authoring (user-defined YAML tints) | Load from `~/.config/tui-base/themes/`. Blocked on Q-15 (YAML dep + schema). |
-| ✅ Done | L-6 | Evaluate migration to Uber `zap` logging lib | Evaluated 2026-07-03 — **recommend rejecting**: zap optimizes high-throughput structured logging; this logger is low-volume and UI-bound, already rotates files, and its framework value is the subscriber fan-out. If structured logging becomes a consumer ask, stdlib `log/slog` (zero dep, expose a `slog.Handler`) is the path. Veto welcome. |
+| ⬜ Planned | T-4 | Custom theme authoring (user-defined YAML tints) | Load from `~/.config/tui-base/themes/`. Unblocked 2026-07-09 per Q-15: `gopkg.in/yaml.v3`, full 16-slot tint schema (drops into bubbletint's registry). |
+| 🔄 Reopened | L-6 | Migrate developer logging to Uber `zap` | 2026-07-03 evaluation recommended rejecting (slog if anything) — **vetoed by the human 2026-07-09**: use zap for actual dev logs instead of maintaining wrappers around what zap provides. Now tracked as SP-10 (zap core + a custom sink preserving the subscriber fan-out the inspector Log tab consumes). |
 | ✅ Done | FW-1 | **Filewatch helper** (`fsnotify` → `tea.Cmd`) for live-reloading views | Done 2026-07-07 per Q-14: new `filewatch` package (parent-dir watch so atomic renames are seen, debounced bursts, `Next()`/`Stop()` lifecycle) + `Options.WatchSettingsFile` — external edits to `tui_settings.json` reload live, re-apply the theme, and raise a notification; the app's own saves stay silent (JSON no-op detection). `RouterModel.Close` releases the OS watch; `tuibase.Run/RunContext` call it automatically. Tests: `filewatch/filewatch_test.go`, `router/settings_watch_test.go`. |
-| ❓ | I-1 | Page lifecycle hooks (`OnEnter`, `OnLeave`, `OnResize`, `OnThemeChange`) | Prioritize via Q-16 (effort: S). |
-| ❓ | I-2 | Command palette (Ctrl+P) | Prioritize via Q-16 (effort: L). |
-| ❓ | I-3 | Modal confirmation service (router-owned, `ConfirmMsg`) | Prioritize via Q-16 (effort: M). |
-| ❓ | I-4 | Persistent layout state (sidebar width, tab order, last page) | Prioritize via Q-16 (effort: M; nav style already persists). |
-| ❓ | I-5 | Terminal capability detection beyond background color (truecolor, kitty graphics) | Prioritize via Q-16 (effort: M). |
-| ❓ | I-6 | Global error overlay — panic → inspector with stack | Prioritize via Q-16 (effort: M; riskiest — `recover()` inside the tea loop). |
+| ⬜ Planned | I-1 | Page lifecycle hooks (`OnEnter`, `OnLeave`, `OnResize`, `OnThemeChange`) | Approved per Q-16 (2026-07-09), priority 1 of 6 (effort: S). |
+| ⬜ Planned | I-2 | Command palette (Ctrl+P) | Approved per Q-16, priority 2 of 6 (effort: L). |
+| ⬜ Planned | I-3 | Modal confirmation service (router-owned, `ConfirmMsg`) | Approved per Q-16, do in number order (effort: M). |
+| ⬜ Planned | I-4 | Persistent layout state (sidebar width, tab order, last page) | Approved per Q-16, do in number order (effort: M; nav style already persists). |
+| ⬜ Planned | I-5 | Terminal capability detection beyond background color (truecolor, kitty graphics) | Approved per Q-16, do in number order (effort: M). |
+| ⬜ Planned | I-6 | Global error overlay — panic → inspector with stack | Approved per Q-16, priority 6 of 6 (effort: M; riskiest — `recover()` inside the tea loop). |
 | ✅ Done | I-7 | Configurable ring-buffer size for inspector message dedup | Done 2026-07-03: `inspector.SetLogCapacity(n)` (floor 10, 0 restores the 50 default); both dedup paths trim through one helper. |
-| ❓ | I-8 | Supply-chain hardening at release: SBOM, cosign, provenance attestations | Blocked on Q-17 (keyless vs managed key). |
-| ❓ | I-9 | i18n keys in user-facing strings | Recommend rejecting — confirm via Q-18. |
+| ⬜ Planned | I-8 | Supply-chain hardening at release: SBOM, cosign keyless, provenance attestations | Unblocked 2026-07-09 per Q-17 (keyless OIDC). Wire goreleaser sboms+signs and workflow `id-token: write`. |
+| ✅ Rejected | I-9 | i18n keys in user-facing strings | Rejected 2026-07-09 per Q-18. |
 | ✅ Done | I-10 | **Inspector "Link" tab: estimated remote data rate** (Tx = input as ANSI wire bytes — key/mouse/drag/paste; Rx = frames as a line-diff renderer would transmit) | Done 2026-07-07 (human request): built-in `MetricsProvider` tab via the E-5 API. Shows last-second / 5 s / 60 s averages, peaks, session totals, and the required link rate in B/s + bit/s for a remote (SSH/serial/embedded) deployment. Collection runs on demand: the Link tab or the status summary. 2026-07-07 follow-up: "Include link rate" toggle in the inspector settings puts compact `tx … rx …` 5 s averages in the status bar with the inspector closed (like the GC part). `router/linkrate.go` + tests. |
 | ⬜ Planned | I-11 | **Data-rate limiter modes** — degrade visuals to fit a constrained link, guided by the I-10 meter | Human intent (2026-07-07): options like capping the update/refresh rate, disabling or reducing transitions/animations, and similar "looks less good, costs fewer bytes" behaviors, so the app can run within a target link budget on an embedded device. Design sketch: a `LinkBudget` setting (target bit/s) that gates spinner/progress tick rates, coalesces re-renders (min frame interval), and prefers full-cell updates over per-frame gradients. Build on the I-10 meter for feedback. |
 
 
-## Split out of Snap (Reusable components or widgets) and Inspector (debug any charm based app)
-ok, lets make some updates to our readme.md files and our plan forward... I renamed the jarvis-bubbles git repo to be snap instead (So Jarvis Friends Snap being the full name), this contains (well, we will make it contain) ready to use snap in features like navigation, tables, and calendar items that support both keyboard and mouse input ready for production use.
-Please update the questions that were still outstanding above this when you are done reading to the end of the file. inspector and snap are both public on github
+## Snap & Inspector split (directive 2026-07-09)
 
-Lets move the following to the snap package, then update all of our references to use those instead of redefining them in tui-base. Some Snaps make since to include an interface that will then allow the software engineer to decide which one or more options are available for the user to change at runtime in the settings area of the tui-base.
-- Keys - Move the whole folder to the snap package so that each snap can include the common bindings with the least amount of copy and paste.
-- Geom
-- Date Picker (remove the name bubble from it)
-- Dependencies
-- Navigation with the new names and structure defined in snap, come up with or use an interface that encompasses the features of navigation. Use words like NextPage and Previous Page instead of up, down, left, right so the dev doesn't need to know how they are being shown on the screen. a top nav would return a 0 saying don't reduce the width of the users viewing area, where a side nav would return what makes since for that type of nav. I think we already do that, just make sure
-- Directory and File Pickers
-- Multi-file and Multi-Directory pickers
-- Time Picker... This one needs a lot of work... scrolling with the mouse or keyboard is tedious and the user doesn't understand whats happening right away... maybe show an analog clock with times around a circle that can be clicked in a an overlay when they click the hour or minutes? Not sure, find out what other people do about this one... follow the most popular option.
-- Table - This is becoming more useful than other options without taking up much more visual space, so yes, lets move this as well.
+> Human directive: `jarvis-bubbles` is renamed to **`snap`** ("Jarvis Friends
+> Snap") — production-ready components with first-class keyboard **and** mouse
+> support. `snap` and `inspector` are both public on GitHub; tui-base imports
+> them back (Q-20). Components that have multiple implementations expose an
+> interface so the engineer can decide which options users may switch between
+> at runtime in the settings area.
+>
+> **Sequencing rule for every move:** land in snap → push + tag → flip
+> tui-base imports in a dedicated changeset (a public library must not carry
+> `replace` directives, so unpushed snap code is unusable from tui-base).
 
-Update the Settings view to collapse all categories that come from TUI Base and if there is only one option of a select (true/false counts as 2 options) then don't show the ability to change that option. Things like directory selection where there are zero or more available are 2+ options, so those are also shown. This would be for instances that the developer only added one set of colors, or one style to use for the forms.
+| Status | # | Task | Notes |
+|---|---|---|---|
+| ✅ Done | SP-1 | `keys` → `snap/keys` (whole folder) | Moved 2026-07-09 (builds/tests green in snap) so every snap can share the common bindings without copy-paste. tui-base import flip is SP-2. |
+| ✅ Done | SP-2 | **snap `v0.1.0` published + wholesale import flip** | Done 2026-07-09: snap pushed to GitHub (master + `adding_fun_stuff` branch; `v0.1.0` tagged, including gate/winterm/timefield). tui-base imports `keys`, `geom`, `datepicker`, `timepicker`, `gate`, `winterm`, and `dependencies` from `github.com/jarvisfriends/snap@v0.1.0` — local packages deleted, no compat aliases, go.sum recorded, full gate green without any workspace. Minor version bump lands at the next tui-base tag. New rule: snap work goes through non-master branches. |
+| ✅ Done | SP-3 | `geom`, `datepicker` (renamed from `bubble-datepicker`), `timepicker`, `dependencies` (from `common/dependencies.go`) → snap | Moved 2026-07-09; all had zero internal tui-base imports. Datepicker file + doc renamed to drop "bubble". Timepicker moved as-is; its UX redesign is SP-8. |
+| ⬜ Planned | SP-5 | `navigation` → `snap/navigation/{tabs,sidebar,minimal-top}` + **Navigator interface** | Interface speaks intent, not geometry: `NextPage`/`PreviousPage` (never up/down/left/right). Width contract: a navigator reports how much horizontal space it consumes — top nav returns 0, sidebar returns its width. Audit says tui-base mostly does this already (`navigation.Navigator`); verify and codify in the interface docs during the move. |
+| ⬜ Planned | SP-6 | `table` → `snap/table` after style-hook decoupling | Only 4 theme touchpoints (`c.Border`, `c.Filter`, `c.SelectionBg`, `c.Styles`); replace with an injected `table.Styles` (the A-3 datepicker pattern), tui-base maps its theme onto it. |
+| ⬜ Planned | SP-7 | Directory/File pickers + Multi-file/Multi-directory pickers → `snap/pickers` | Unblocked 2026-07-09 (Q-23: WIP committed). Needs style-hook decoupling from `theme` during the move. |
+| ✅ Done | SP-8 | **Timepicker UX redesign** (spec per Q-24) | Shipped 2026-07-09 in `snap/timepicker` as `TimeFieldModel`: two `HH:MM` columns, highlighted colon, click/space opens a scrollable per-side dropdown (wheel scrolls, click/Enter commits), digit type-ahead, and validation (range clamping) whenever the field is left. Legacy `TimePickerModel` (duration editing) kept until tui-base migrates its settings usage. |
+| ⬜ Planned | SP-9 | Settings view: **collapse TUI Base categories by default; hide zero-choice fields** | A select whose effective option count is 1 is display-only — hide the edit affordance (true/false counts as 2; "zero or more directories" counts as 2+ because the set can change). Covers apps that ship one theme or one form style. Interacts with the gates section: a gate is always 2 options, never hidden. |
+| ⬜ Planned | SP-10 | **Dev logs on `zap`; sharpen User Notifications vs Developer Logs; rename the inspector's tea.Msg tab** | Human veto of the L-6 rejection: use `uber-go/zap` for dev logs instead of homegrown wrappers; keep the subscriber fan-out as a custom zap sink (the inspector Log tab consumes it). Naming cleanup: **User Notifications** = `notifications` (user-visible toasts/history); **Developer Logs** = zap (files + inspector Log tab); the inspector tab that shows `tea.Msg` traffic drops the word "log" — rename to **Messages** (candidate: "Message Passing Reader"; pick during implementation, charm-style naming). |
+| ✅ Done | SP-11 | **Program-options API** (shape per Q-21: struct + `WithXXX`) | Shipped 2026-07-09: `tuibase.Option` + `With*` funcs for every Options field; `Run/RunContext/NewWithOptions` gained source-compatible variadic tails; `tuibase.New(options ...Option)`. Includes `WithDebugOverlay(tea.Model)` (Q-22's tui-base half): the injected model owns Ctrl+D, rendered in the inspector's overlay box with keys/mouse/resize forwarded. Available-set options (navigation styles etc.) grow as snap fills out. |
+| ⬜ Planned | SP-12 | **Inspector → `github.com/jarvisfriends/inspector`** (own repo, "debug any charm based app") | Design per Q-22: library form is a plain `tea.Model`; `cmd/inspector` main runs it under snap's **minimal-top nav** (⇒ depends on SP-5). tui-base consumes it via `WithDebugOverlay`. Untangling needed first: theme pointer, logging fan-out, shared table styles, router overlay stack. |
+| ⬜ Planned | SP-14 | **Move the render/layout checks from `testutil` to snap** (name via Q-25; proposal `rendercheck`) | Everything that catches string-building issues moves (layout calcs, border integrity, viewport fit, goldens, key-mapping standards); tui-base keeps `CheckNoImports` + the descriptive-type-name checker and re-points all call sites at the snap package. |
+| 🔄 In Progress | SP-15 | **VHS `.tape` per snap component + run vhs** | Tapes added 2026-07-09 for the moved components; vhs execution requires the vhs binary (see the determinism note in the gaps section — gifs are artifacts, not diffable sources). |
+| ⬜ Planned | SP-13 | **Test-file policy: one `<file>_test.go` per source file** (+ optional `<file>_regressions_test.go` when it grows) | Consolidate the current per-feature test files (e.g. router has 20+ suffixed test files) during each package's move; consider a `testutil.CheckCodeStandards` rule to hold the line afterward. |
 
-Lets try to keep the number of unit test files that tie directly to a single file down to just that files name with '_test.go' and maybe one for known regressions if it gets too large...
+### Gaps found while planning (the "did I forget anything?" answer)
 
-We need to be a little more specific on User Notifications vs Developer logs... we should also make sure that we are using the uber.zap logging library for actual dev logs instead of recreating wrappers around something that zap already provides... I think we were swapping between a few different naming schemes for a while there and some mixed up. In the Inspector we have a tab showing tea.Msg messages, we should probably remove the word logs from there... maybe Message Passing Reader to follow the charm way of naming things?
-
-
-We will want to update our tui base to support to support the Program Options approach that bubbletea and other tools use on our New function. that way we can override and expand out customizations a little easier. The hope is that we can use this to change the default and the available Keys, Navigation, Status bar, debug pop-up (Inspector), etc values. and just like bubble tea, we can call all of the functions/Program Options, then set the defaults and available options if they are not set. The defaults should be what we currently use for our defaults, the available options (when not set) should be all of the values that we have in the snap repo.
+- **Versioning/CI sequencing** — confirmed (human 2026-07-09): push and tag
+  snap before rebuilding tui-base.
+- **Compat shims** — decided (human 2026-07-09): **none.** No deprecation
+  aliases; push and tag in order, wholesale flip, minor-version bump pre-1.0,
+  CHANGELOG entries in both repos.
+- **Theme contract for snap** — agreed (human 2026-07-09): theme-free with
+  injected style hooks (A-3 pattern); tui-base keeps the theme→styles mapping.
+- **`testutil` sharing** — decided (human 2026-07-09), tracked as **SP-14**:
+  move the render/layout "string building" checks (layout math, borders,
+  viewport fit, goldens, key-mapping standards) to snap under a better name
+  than "conformance" (proposal: `rendercheck`, Q-25), and re-point every
+  current call site. The **type-name checker stays in tui-base** testutil
+  (it is a tui-base house rule), as does `CheckNoImports`.
+- **`gate` and `winterm`** — approved (human 2026-07-09): both move to snap,
+  riding the SP-2 wave so `v0.1.0` ships them.
+- **Arch tests + docs** — `TestArchitectureLayering`, `.github/`
+  copilot-instructions, and `docs/` all reference the moved packages; each
+  flip must update them (the arch test shrinks as foundations leave).
+- **VHS tapes** — directed (human 2026-07-09): add a `.tape` per snap and run
+  vhs on it (SP-15). **Determinism answer:** re-rendering the same tape on the
+  same code is *not* guaranteed byte-identical — GIF output depends on the
+  render environment (fonts, vhs/ttyd versions) and encoder timing, so treat
+  gifs as build artifacts (regenerate on change, don't diff-gate them); with a
+  pinned vhs version and environment the output is *visually* identical and
+  usually byte-stable, but there is no tool-level guarantee.
+- **go.work dev recipe** — the human keeps a `_go.work` file and moves it in
+  when a change spans repos; `go.work` stays untracked.

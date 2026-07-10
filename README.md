@@ -8,6 +8,16 @@ you understand message flow while you build.
 
 [![Coverage Status](https://coveralls.io/repos/github/jarvisfriends/tui-base/badge.svg?branch=main)](https://coveralls.io/github/jarvisfriends/tui-base?branch=main)
 
+## Sibling repos
+
+- [jarvisfriends/snap](https://github.com/jarvisfriends/snap) — "Jarvis Friends
+  Snap": the reusable components (keys, geometry, date/time pickers, and more
+  on the way — navigation, table, pickers). tui-base imports them back; snap is
+  the single source of truth. First packages moved 2026-07-09.
+- [jarvisfriends/inspector](https://github.com/jarvisfriends/inspector) — the
+  runtime debugger, being split out so any Charm-based app can use it (see
+  ROADMAP SP-12).
+
 ## Why This Exists
 
 Building a large TUI gets hard when app state, routing, styling, and diagnostics are scattered.
@@ -48,7 +58,8 @@ The following milestone capabilities are already implemented:
 - `theme/`: app style model and style helpers.
 - `notifications/`: notification manager and persistence.
 - `logging/`: runtime logger + subscriber fanout.
-- `keys/`: global key map model.
+- key bindings, geometry, date/time pickers, gates, and winterm now live in
+  [snap](https://github.com/jarvisfriends/snap) and are imported back.
 - `common/`: shared public interfaces/types.
 
 ## Quick Start

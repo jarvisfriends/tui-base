@@ -29,7 +29,7 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/dustin/go-humanize"
-	"github.com/jarvisfriends/tui-base/gate"
+	"github.com/jarvisfriends/snap/gate"
 	"github.com/jarvisfriends/tui-base/notifications"
 	"github.com/jarvisfriends/tui-base/page"
 	"github.com/jarvisfriends/tui-base/theme"

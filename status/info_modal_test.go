@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jarvisfriends/tui-base/keys"
+	"github.com/jarvisfriends/snap/keys"
 	"github.com/jarvisfriends/tui-base/theme"
 
 	"charm.land/bubbles/v2/key"

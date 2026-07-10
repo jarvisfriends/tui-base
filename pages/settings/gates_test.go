@@ -3,7 +3,7 @@ package settings
 import (
 	"testing"
 
-	"github.com/jarvisfriends/tui-base/gate"
+	"github.com/jarvisfriends/snap/gate"
 )
 
 // findItem returns the settings item with the given title, or nil.

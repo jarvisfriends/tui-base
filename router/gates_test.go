@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/jarvisfriends/tui-base/gate"
+	"github.com/jarvisfriends/snap/gate"
 	"github.com/jarvisfriends/tui-base/pages/inspector"
 	"github.com/jarvisfriends/tui-base/pages/settings"
 )

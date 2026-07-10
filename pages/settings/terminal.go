@@ -1,6 +1,6 @@
 package settings
 
-import "github.com/jarvisfriends/tui-base/winterm"
+import "github.com/jarvisfriends/snap/winterm"
 
 // detectDefaultTerminal reads the machine's default-terminal delegation via
 // the winterm package and maps it to the option key used by the settings UI.

@@ -8,6 +8,14 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
 
 ### Added
 
+- **BREAKING (SP-2, minor bump):** the `keys`, `geom`, `datepicker`,
+  `timepicker`, `gate`, and `winterm` packages and the dependency/build-info
+  reader (`common.Dependencies`/`ExpandedBuildInfo`) moved to
+  [github.com/jarvisfriends/snap](https://github.com/jarvisfriends/snap) —
+  tui-base imports them back; no compat aliases (per the 2026-07-09 decision).
+  Update imports from `github.com/jarvisfriends/tui-base/<pkg>` to
+  `github.com/jarvisfriends/snap/<pkg>` (build-info: `snap/dependencies`).
+
 - App icon: a brand mark embedded in the Windows binary (Explorer/taskbar/
   shortcuts). `assets/icon.svg` is the master vector; the `tools/genicon`
   standalone module rasterizes it into `assets/icon.ico` and the committed
@@ -46,6 +54,18 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
   `router.MaybeRelaunchInWindowsTerminal` is the primitive. Opt out with
   `Options.DisableTerminalRelaunch` or the `TUI_BASE_NO_WT_RELAUNCH` env var.
   No-op on non-Windows platforms.
+- Program-options API (SP-11, shape per Q-21): `tuibase.Option` functional
+  options (`WithAppName`, `WithPages`, `WithGates`, `WithKeyMap`,
+  `WithWatchSettingsFile`, `WithoutTerminalRelaunch`, …) coexist with the
+  `Options` struct — `Run`/`RunContext`/`NewWithOptions` gained
+  source-compatible variadic tails and `tuibase.New(options ...Option)` builds
+  from options alone. Options apply on top of the struct; defaults fill the
+  rest.
+- `WithDebugOverlay(tea.Model)` / `Options.DebugOverlay` (Q-22): an injected
+  model replaces the built-in inspector as the Ctrl+D debug pop-up — tui-base
+  owns the toggle whenever the model is non-nil, rendering it in the
+  inspector's overlay box with keys, mouse, and sizing forwarded. Pairs with
+  the standalone `jarvisfriends/inspector` (delivered as a plain `tea.Model`).
 - Live feature gates ([docs/feature-gates.md](docs/feature-gates.md)): flipping
   a gate in the settings Feature Flags section now takes effect immediately —
   the commit broadcasts `settings.GatesChangedMsg` and the router re-derives

@@ -5,7 +5,7 @@ import (
 
 	"github.com/jarvisfriends/tui-base/status"
 
-	"github.com/jarvisfriends/tui-base/keys"
+	"github.com/jarvisfriends/snap/keys"
 )
 
 func TestToggleVisibleHeight(t *testing.T) {

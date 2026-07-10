@@ -80,25 +80,35 @@ func EnsureWindowsTerminal() {
 	}
 }
 
-// New returns a router with the built-in pages only (Home and Settings, with
-// the inspector available as the Ctrl+D overlay).
-func New() *RouterModel { return router.New() }
+// New returns a router built from the given functional options (SP-11); with
+// none it has the built-in pages only (Home and Settings, with the inspector
+// available as the Ctrl+D overlay):
+//
+//	m := tuibase.New(tuibase.WithAppName("My App"), tuibase.WithPages(pages...))
+func New(options ...Option) *RouterModel {
+	return router.NewWithOptions(applyOptions(Options{}, options))
+}
 
 // NewWithOptions returns a router configured for the embedding application.
-func NewWithOptions(opts Options) *RouterModel { return router.NewWithOptions(opts) }
+// Functional options, when given, apply on top of the struct.
+func NewWithOptions(opts Options, options ...Option) *RouterModel {
+	return router.NewWithOptions(applyOptions(opts, options))
+}
 
 // Run builds the router for opts, wraps it in a Bubble Tea program with
 // tui-base's standard options (including the app-derived color-profile env
-// var), and blocks until the program exits.
-func Run(opts Options) error {
-	return RunContext(context.Background(), opts)
+// var), and blocks until the program exits. Functional options, when given,
+// apply on top of the struct (see [Option]).
+func Run(opts Options, options ...Option) error {
+	return RunContext(context.Background(), opts, options...)
 }
 
 // RunContext is Run bound to ctx: cancel it (e.g. from
 // signal.NotifyContext on SIGINT/SIGTERM) and the program shuts down
 // cleanly with the terminal restored — the graceful-shutdown path for
 // services and wrappers embedding a tui-base app.
-func RunContext(ctx context.Context, opts Options) error {
+func RunContext(ctx context.Context, opts Options, options ...Option) error {
+	opts = applyOptions(opts, options)
 	// Move into Windows Terminal before building anything when running under the
 	// legacy console; if a relaunch was started, this process is done.
 	// ProfileName defaults to the app name so a profile installed via

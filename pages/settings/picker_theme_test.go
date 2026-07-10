@@ -7,8 +7,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/jarvisfriends/snap/timepicker"
 	"github.com/jarvisfriends/tui-base/theme"
-	"github.com/jarvisfriends/tui-base/timepicker"
 )
 
 // TestThemedDatePickerStylesUseSelectionColors verifies the datepicker's

@@ -7,7 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/jarvisfriends/tui-base/geom"
+	"github.com/jarvisfriends/snap/geom"
 	"github.com/jarvisfriends/tui-base/notifications"
 	ov "github.com/jarvisfriends/tui-base/overlay"
 	"github.com/jarvisfriends/tui-base/status"
@@ -66,6 +66,9 @@ func (m *RouterModel) buildOverlays() {
 		&toastOverlay{m: m},
 		&historyOverlay{m: m},
 		&inspectorOverlay{m: m},
+		// App-injected Ctrl+D debug model (Options.DebugOverlay); shares the
+		// inspector layer — only one of the two is ever reachable.
+		&customDebugOverlay{m: m},
 		&infoOverlay{m: m},
 	}
 }

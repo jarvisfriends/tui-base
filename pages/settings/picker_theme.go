@@ -3,9 +3,9 @@ package settings
 import (
 	"charm.land/lipgloss/v2"
 
-	"github.com/jarvisfriends/tui-base/datepicker"
+	"github.com/jarvisfriends/snap/datepicker"
+	"github.com/jarvisfriends/snap/timepicker"
 	"github.com/jarvisfriends/tui-base/theme"
-	"github.com/jarvisfriends/tui-base/timepicker"
 )
 
 // The datepicker and timepicker components ship theme-free (they are

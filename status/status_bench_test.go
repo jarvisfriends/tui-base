@@ -3,7 +3,7 @@ package status
 import (
 	"testing"
 
-	"github.com/jarvisfriends/tui-base/keys"
+	"github.com/jarvisfriends/snap/keys"
 )
 
 func BenchmarkSetWidth(b *testing.B) {

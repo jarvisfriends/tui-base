@@ -50,6 +50,8 @@ github.com/fsnotify/fsnotify v1.10.1 h1:b0/UzAf9yR5rhf3RPm9gf3ehBPpf0oZKIjtpKrx5
 github.com/fsnotify/fsnotify v1.10.1/go.mod h1:TLheqan6HD6GBK6PrDWyDPBaEV8LspOxvPSjC+bVfgo=
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
+github.com/jarvisfriends/snap v0.1.0 h1:1sqpld053MdUolpVJyiiooEwIrCPVytWaCs/sqd8VhY=
+github.com/jarvisfriends/snap v0.1.0/go.mod h1:oSLw0fLU7PhEOF5xr0ykYZHZ2Y/xfyN1htYzCJOZivE=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/lrstanley/bubbletint/v2 v2.0.2 h1:JvLHMf7qI/UE47AyNsD9jVI7h2VQvq+4AYcHNe8DwSQ=

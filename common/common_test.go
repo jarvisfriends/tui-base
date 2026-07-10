@@ -25,22 +25,4 @@ func TestInterfaceAssertions(t *testing.T) {
 	if AppVersion() == "" {
 		t.Fatal("expected AppVersion to return a non-empty value")
 	}
-	if normalizeVersion("(devel)") != "development" {
-		t.Fatal("expected normalizeVersion to normalize devel builds")
-	}
-}
-
-func TestDependenciesAndBuildInfo(t *testing.T) {
-	t.Parallel()
-
-	deps := Dependencies()
-	t.Logf("Found %d dependencies", len(deps))
-
-	info := ExpandedBuildInfo()
-	if info != nil {
-		t.Logf("Go Version: %s", info.GoVersion)
-		t.Logf("OS: %s, Arch: %s", info.Runtime.GOOS, info.Runtime.GOARCH)
-	} else {
-		t.Log("ExpandedBuildInfo returned nil (not in module context)")
-	}
 }

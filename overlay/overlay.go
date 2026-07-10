@@ -21,7 +21,7 @@ import (
 	huh "charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/jarvisfriends/tui-base/geom"
+	"github.com/jarvisfriends/snap/geom"
 )
 
 // Context carries the parent-supplied dimensions an overlay needs to position

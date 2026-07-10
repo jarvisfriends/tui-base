@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jarvisfriends/snap/dependencies"
+	"github.com/jarvisfriends/snap/keys"
 	"github.com/jarvisfriends/tui-base/common"
-	"github.com/jarvisfriends/tui-base/keys"
 	"github.com/jarvisfriends/tui-base/theme"
 
 	"charm.land/bubbles/v2/key"
@@ -216,7 +217,7 @@ func (m *InfoModal) buildInfoLines(
 	accentStyle, mutedStyle, dimStyle lipgloss.Style,
 ) []string {
 	var lines []string
-	info := common.ExpandedBuildInfo()
+	info := dependencies.ExpandedBuildInfo()
 	if info == nil {
 		return append(lines, mutedStyle.Render("  (build info unavailable)"))
 	}

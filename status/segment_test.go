@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jarvisfriends/tui-base/keys"
+	"github.com/jarvisfriends/snap/keys"
 )
 
 // TestStatusSegments verifies the E-1 consumer hook: named segments render

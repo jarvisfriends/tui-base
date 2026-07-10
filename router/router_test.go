@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jarvisfriends/tui-base/keys"
+	"github.com/jarvisfriends/snap/keys"
 	log "github.com/jarvisfriends/tui-base/logging"
 	"github.com/jarvisfriends/tui-base/navigation"
 	"github.com/jarvisfriends/tui-base/notifications"

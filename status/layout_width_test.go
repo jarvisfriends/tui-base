@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
-	"github.com/jarvisfriends/tui-base/keys"
+	"github.com/jarvisfriends/snap/keys"
 	"github.com/jarvisfriends/tui-base/testutil"
 )
 

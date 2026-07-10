@@ -29,7 +29,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jarvisfriends/tui-base/keys"
+	"github.com/jarvisfriends/snap/keys"
 	"github.com/jarvisfriends/tui-base/notifications"
 	"github.com/jarvisfriends/tui-base/theme"
 

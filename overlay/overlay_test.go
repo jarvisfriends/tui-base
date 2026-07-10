@@ -6,7 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	huh "charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/jarvisfriends/tui-base/geom"
+	"github.com/jarvisfriends/snap/geom"
 )
 
 func TestCenteredBase_Place(t *testing.T) {

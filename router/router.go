@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/charmbracelet/colorprofile"
+	"github.com/jarvisfriends/snap/gate"
+	"github.com/jarvisfriends/snap/keys"
 	cfg "github.com/jarvisfriends/tui-base/config"
 	"github.com/jarvisfriends/tui-base/filewatch"
-	"github.com/jarvisfriends/tui-base/gate"
-	"github.com/jarvisfriends/tui-base/keys"
 	log "github.com/jarvisfriends/tui-base/logging"
 	"github.com/jarvisfriends/tui-base/navigation"
 	"github.com/jarvisfriends/tui-base/notifications"
@@ -105,6 +105,13 @@ type Options struct {
 	// (*RouterModel).Close after Program.Run to release the OS watch
 	// (tuibase.Run/RunContext do this automatically).
 	WatchSettingsFile bool
+	// DebugOverlay, when non-nil, replaces the built-in inspector as the
+	// Ctrl+D debug pop-up: tui-base owns the Ctrl+D toggle and presents this
+	// model in the inspector's overlay box (set via tuibase.WithDebugOverlay).
+	// The model receives WindowSizeMsg with the overlay's inner dimensions,
+	// forwarded keys while visible, and mouse events when its View sets
+	// OnMouse.
+	DebugOverlay tea.Model
 	// DisableTerminalRelaunch turns off the automatic relaunch into Windows
 	// Terminal when the app is started under the legacy Windows console
 	// (conhost). By default tuibase.Run/RunContext relaunch there — on Windows,
@@ -162,6 +169,10 @@ type RouterModel struct {
 	// inspector is a dedicated debug model that receives all messages for
 	// logging/stats and is rendered as an overlay (Ctrl+D).
 	inspector *inspector.InspectorModel
+	// debugOverlay, when non-nil, is the app-injected Ctrl+D debug model
+	// (Options.DebugOverlay); it replaces the built-in inspector pop-up.
+	debugOverlay        tea.Model
+	debugOverlayVisible bool
 	// settingsPage is kept as a stable pointer so app-page replacement can
 	// preserve the settings model and its internal state.
 	settingsPage *settings.SettingsModel
@@ -392,6 +403,7 @@ func NewWithOptions(opts Options) *RouterModel {
 	// create a single inspector instance and keep a pointer to it so we can
 	// forward messages to it even when it's not the active page.
 	m.inspector = inspector.New()
+	m.debugOverlay = opts.DebugOverlay
 	// Built-in "Link" tab: estimated remote-link data rates (Tx/Rx). The
 	// meter collects while the inspector's Link tab is open OR while the
 	// status summary's "Include link rate" is enabled (works closed).
@@ -625,10 +637,15 @@ func (m *RouterModel) Init() tea.Cmd {
 	if m.inspector != nil {
 		inspectorInit = m.inspector.Init()
 	}
+	var debugOverlayInit tea.Cmd
+	if m.debugOverlay != nil {
+		debugOverlayInit = m.debugOverlay.Init()
+	}
 	return tea.Batch(
 		m.nav.Init(),
 		m.status.Init(),
 		inspectorInit,
+		debugOverlayInit,
 		m.settingsWatchInit(),
 		tea.Batch(pgInits...),
 		// Request an explicit initial size so the first full-frame render is
@@ -1008,9 +1025,16 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status.ToggleVisible()
 			return m, m.handleResizeCmd()
 		case key.Matches(keyMsg, m.keys.Debug):
-			// Only reached when the inspector is not already visible (a visible
-			// inspector consumes keys via overlayHandleKey above), so this opens it.
-			m.inspector.ToggleVisible()
+			// Only reached when no debug overlay is already visible (a visible
+			// one consumes keys via overlayHandleKey above), so this opens it.
+			// An app-injected debug model (Options.DebugOverlay /
+			// tuibase.WithDebugOverlay) takes over Ctrl+D from the built-in
+			// inspector whenever it is non-nil.
+			if m.debugOverlay != nil {
+				m.debugOverlayVisible = true
+			} else {
+				m.inspector.ToggleVisible()
+			}
 			m.updatePageKeys()
 			return m, m.handleResizeCmd()
 		}
