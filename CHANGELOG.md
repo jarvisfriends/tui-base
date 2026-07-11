@@ -8,6 +8,12 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
 
 ### Added
 
+- Page lifecycle hooks (I-1): page models may implement
+  `common.PageEnterer` (`OnEnter() tea.Cmd`) and/or `common.PageLeaver`
+  (`OnLeave() tea.Cmd`); the router calls them on every page switch (and
+  OnEnter for the startup page). Resize and theme changes intentionally
+  stay on the existing mechanisms (size forwarding, `styles.ColorAware`).
+
 - VHS demo tapes rendered through the container pipeline:
   `tools/rendertapes` (ported from snap) cross-compiles `cmd/*` and
   `examples/*` and renders every `*.tape` in the official vhs image. New

@@ -15,6 +15,7 @@ import (
 	"github.com/jarvisfriends/snap/navigation"
 	"github.com/jarvisfriends/snap/notifications"
 	"github.com/jarvisfriends/snap/status"
+	"github.com/jarvisfriends/tui-base/common"
 	cfg "github.com/jarvisfriends/tui-base/config"
 	"github.com/jarvisfriends/tui-base/filewatch"
 	log "github.com/jarvisfriends/tui-base/logging"
@@ -548,19 +549,43 @@ func (m *RouterModel) activeWindowTitle() string {
 	return m.appName
 }
 
-func (m *RouterModel) activatePageByID(id string) bool {
+func (m *RouterModel) activatePageByID(id string) (tea.Cmd, bool) {
 	if m.nav == nil {
-		return false
+		return nil, false
 	}
 	for i, p := range m.nav.GetPages() {
 		if p.ID != id {
 			continue
 		}
-		m.nav.SetActiveIndex(i)
+		cmd := m.switchActivePage(i)
 		m.updatePageKeys()
-		return true
+		return cmd, true
 	}
-	return false
+	return nil, false
+}
+
+// switchActivePage makes index the active page and fires the I-1 lifecycle
+// hooks: OnLeave on the outgoing page, then OnEnter on the incoming one.
+// Selecting the already-active page is a no-op for the hooks — re-selecting
+// a nav item is not a page change.
+func (m *RouterModel) switchActivePage(index int) tea.Cmd {
+	if m.nav == nil || index < 0 || index >= len(m.pages) {
+		return nil
+	}
+	old := m.activePageIndex()
+	if old == index {
+		m.nav.SetActiveIndex(index)
+		return nil
+	}
+	var cmds []tea.Cmd
+	if lv, ok := m.pages[old].(common.PageLeaver); ok {
+		cmds = append(cmds, lv.OnLeave())
+	}
+	m.nav.SetActiveIndex(index)
+	if en, ok := m.pages[index].(common.PageEnterer); ok {
+		cmds = append(cmds, en.OnEnter())
+	}
+	return tea.Batch(cmds...)
 }
 
 // replaceAppPages rebuilds the router page list from app-provided pages while
@@ -632,6 +657,11 @@ func (m *RouterModel) Init() tea.Cmd {
 	pgInits := make([]tea.Cmd, len(m.pages))
 	for i, p := range m.pages {
 		pgInits[i] = p.Init()
+	}
+	// The initial page "enters" at startup too (I-1), after its Init so the
+	// hook observes an initialized model.
+	if en, ok := m.GetActivePage().(common.PageEnterer); ok {
+		pgInits = append(pgInits, en.OnEnter())
 	}
 	var inspectorInit tea.Cmd
 	if m.inspector != nil {
@@ -1017,8 +1047,8 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status.ToggleFullHelpVisible()
 			return m, m.handleResizeCmd()
 		case key.Matches(keyMsg, m.keys.OpenSettings):
-			if m.activatePageByID("settings") {
-				return m, m.handleResizeCmd()
+			if cmd, ok := m.activatePageByID("settings"); ok {
+				return m, tea.Batch(cmd, m.handleResizeCmd())
 			}
 			return m, nil
 		case key.Matches(keyMsg, m.keys.ToggleStatus):
@@ -1071,7 +1101,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Defensive: SelectedMsg with invalid index still triggers a resize
 			return m, m.handleResizeCmd()
 		}
-		m.nav.SetActiveIndex(msg.PageIndex)
+		cmds = append(cmds, m.switchActivePage(msg.PageIndex))
 		// Keyboard focus is NOT changed here: navigating the sidebar with Up/Down
 		// keeps focus on the sidebar (live page switch). Focus moves to the page
 		// content only on an explicit Right/Enter/Tab (see the key handler). A
@@ -1120,8 +1150,8 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.handleResizeCmd()
 		}
 		if m.nav != nil {
-			if m.activatePageByID(name) {
-				return m, m.handleResizeCmd()
+			if cmd, ok := m.activatePageByID(name); ok {
+				return m, tea.Batch(cmd, m.handleResizeCmd())
 			}
 		}
 		return m, nil
@@ -1253,11 +1283,11 @@ func (m *RouterModel) cyclePage(delta int) tea.Cmd {
 	}
 	cur := m.nav.GetActiveIndex()
 	next := ((cur+delta)%len(pages) + len(pages)) % len(pages)
-	m.nav.SetActiveIndex(next)
+	switchCmd := m.switchActivePage(next)
 	m.sidebarFocused = false
 	m.setNavFocused(false)
 	m.updatePageKeys()
-	return m.handleResizeCmd()
+	return tea.Batch(switchCmd, m.handleResizeCmd())
 }
 
 // cyclePageTo switches directly to an absolute page index, moving keyboard focus
@@ -1266,11 +1296,11 @@ func (m *RouterModel) cyclePageTo(index int) tea.Cmd {
 	if m.nav == nil || index < 0 || index >= len(m.nav.GetPages()) {
 		return nil
 	}
-	m.nav.SetActiveIndex(index)
+	switchCmd := m.switchActivePage(index)
 	m.sidebarFocused = false
 	m.setNavFocused(false)
 	m.updatePageKeys()
-	return m.handleResizeCmd()
+	return tea.Batch(switchCmd, m.handleResizeCmd())
 }
 
 // navDigitIndex maps a "1".."9" key press to a zero-based page index.
