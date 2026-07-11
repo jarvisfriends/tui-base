@@ -6,7 +6,6 @@ set -euo pipefail
 FUZZTIME="${FUZZTIME:-10s}"
 
 echo "Running fuzzers (${FUZZTIME} each)..."
-go test ./navigation -run '^$' -fuzz='^FuzzMouseY$' -fuzztime="${FUZZTIME}"
 go test ./pages/inspector -run '^$' -fuzz='^FuzzLogMessage$' -fuzztime="${FUZZTIME}"
 
 echo "Fuzz runs completed (timed)."

@@ -42,7 +42,7 @@ pages/
   home/              — placeholder home page
   inspector/         — inspector: message log + mouse highlight + debug overlay (Ctrl+D)
   settings/          — three-pane settings: Layout | Log | Theme
-keys/                — AppKeyMap with all global key bindings
+(keys, geom, datepicker, timepicker, gate, winterm — moved to github.com/jarvisfriends/snap)
 status/              — themed status bar with click regions (candidate: bubblestatus)
   statusbar/         — low-level render helpers and region detection
 theme/               — AppColors struct + Active() + style helpers

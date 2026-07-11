@@ -1,159 +1,16 @@
 package settings
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jarvisfriends/snap/pickers"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"github.com/jarvisfriends/tui-base/config"
 )
-
-// makePickerTree builds a temp directory containing two subdirectories and
-// two files, returning its path.
-func makePickerTree(t *testing.T) string {
-	t.Helper()
-	root := t.TempDir()
-	for _, d := range []string{"alpha", "beta"} {
-		if err := os.Mkdir(filepath.Join(root, d), 0o750); err != nil {
-			t.Fatalf("mkdir %s: %v", d, err)
-		}
-	}
-	for _, f := range []string{"notes.txt", "config.json"} {
-		if err := os.WriteFile(filepath.Join(root, f), []byte("x"), 0o600); err != nil {
-			t.Fatalf("write %s: %v", f, err)
-		}
-	}
-	return root
-}
-
-// newTestDirPicker returns a DirPicker browsing root with its initial
-// directory listing loaded (executing the Init command like tea.Program would).
-func newTestDirPicker(t *testing.T, root string) *DirPicker {
-	t.Helper()
-	dp := NewDirPicker(root)
-	dp.Width, dp.Height = 80, 24
-	if cmd := dp.Init(); cmd != nil {
-		_, _ = dp.Update(cmd())
-	}
-	return dp
-}
-
-func TestDirPickerHidesFiles(t *testing.T) {
-	t.Parallel()
-
-	root := makePickerTree(t)
-	dp := newTestDirPicker(t, root)
-
-	if len(dp.entries) != 2 {
-		t.Fatalf("entries = %v; want only the 2 subdirectories", dp.entries)
-	}
-	view := dp.View().Content
-	for _, dir := range []string{"alpha", "beta"} {
-		if !strings.Contains(view, dir) {
-			t.Errorf("view is missing directory %q", dir)
-		}
-	}
-	for _, file := range []string{"notes.txt", "config.json"} {
-		if strings.Contains(view, file) {
-			t.Errorf("view shows file %q; files must be hidden", file)
-		}
-	}
-}
-
-func TestDirPickerEnterOpensFolder(t *testing.T) {
-	t.Parallel()
-
-	root := makePickerTree(t)
-	dp := newTestDirPicker(t, root)
-
-	_, cmd := dp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if cmd == nil {
-		t.Fatal("expected enter on a folder to return a read command")
-	}
-	_, _ = dp.Update(cmd())
-	if dp.dir != filepath.Join(root, "alpha") {
-		t.Fatalf("dir = %q; want %q", dp.dir, filepath.Join(root, "alpha"))
-	}
-	if dp.Done || dp.Aborted {
-		t.Fatal("enter must browse, not complete the picker")
-	}
-}
-
-func TestDirPickerBackGoesToParent(t *testing.T) {
-	t.Parallel()
-
-	root := makePickerTree(t)
-	dp := newTestDirPicker(t, filepath.Join(root, "alpha"))
-
-	_, cmd := dp.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
-	if cmd == nil {
-		t.Fatal("expected left to return a read command for the parent")
-	}
-	_, _ = dp.Update(cmd())
-	if dp.dir != root {
-		t.Fatalf("dir = %q; want parent %q", dp.dir, root)
-	}
-}
-
-func TestDirPickerSpaceSelectsHighlighted(t *testing.T) {
-	t.Parallel()
-
-	root := makePickerTree(t)
-	dp := newTestDirPicker(t, root)
-
-	_, _ = dp.Update(tea.KeyPressMsg{Code: tea.KeyDown}) // highlight "beta"
-	_, _ = dp.Update(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
-	if !dp.Done {
-		t.Fatal("expected space to complete the picker")
-	}
-	if want := filepath.Join(root, "beta"); dp.Value() != want {
-		t.Fatalf("Value() = %q; want %q", dp.Value(), want)
-	}
-}
-
-func TestDirPickerCtrlSSelectsCurrentDir(t *testing.T) {
-	t.Parallel()
-
-	root := makePickerTree(t)
-	dp := newTestDirPicker(t, root)
-
-	_, _ = dp.Update(tea.KeyPressMsg{Text: keyCtrlS})
-	if !dp.Done {
-		t.Fatal("expected ctrl+s to complete the picker")
-	}
-	if dp.Value() != root {
-		t.Fatalf("Value() = %q; want the browsed dir %q", dp.Value(), root)
-	}
-}
-
-func TestDirPickerEscAborts(t *testing.T) {
-	t.Parallel()
-
-	root := makePickerTree(t)
-	dp := newTestDirPicker(t, root)
-
-	_, _ = dp.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	if !dp.Aborted {
-		t.Fatal("expected esc to abort the picker")
-	}
-	if dp.Done || dp.Value() != "" {
-		t.Fatal("aborted picker must not report a value")
-	}
-}
-
-func TestDirPickerStartsAtParentForFilePath(t *testing.T) {
-	t.Parallel()
-
-	root := makePickerTree(t)
-	dp := NewDirPicker(filepath.Join(root, "notes.txt"))
-	if dp.dir != root {
-		t.Fatalf("dir = %q; want file's parent %q", dp.dir, root)
-	}
-}
 
 // findItemIndex returns the index of the settings item with the given title.
 func findItemIndex(t *testing.T, m *SettingsModel, title string) int {
@@ -173,7 +30,7 @@ func TestLogPathEditBlockedForTempDestination(t *testing.T) {
 	m := NewWithOptions(Options{})
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m.LogOutput = logOutputTemp
-	m.cursor = findItemIndex(t, m, itemTitleLogPath)
+	selectItemForTest(m, findItemIndex(t, m, itemTitleLogPath))
 
 	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.editOverlay.IsOpen() || m.modelOverlay.IsOpen() {
@@ -187,7 +44,7 @@ func TestLogPathDirDestinationOpensDirPicker(t *testing.T) {
 	m := NewWithOptions(Options{})
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m.LogOutput = logOutputDir
-	m.cursor = findItemIndex(t, m, itemTitleLogPath)
+	selectItemForTest(m, findItemIndex(t, m, itemTitleLogPath))
 
 	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.editOverlay.IsOpen() {
@@ -196,8 +53,8 @@ func TestLogPathDirDestinationOpensDirPicker(t *testing.T) {
 	if !m.modelOverlay.IsOpen() {
 		t.Fatal("expected the directory-picker overlay to open")
 	}
-	if _, ok := m.modelOverlay.Model().(*DirPicker); !ok {
-		t.Fatalf("overlay model = %T; want *DirPicker", m.modelOverlay.Model())
+	if _, ok := m.modelOverlay.Model().(*pickers.DirPicker); !ok {
+		t.Fatalf("overlay model = %T; want *pickers.DirPicker", m.modelOverlay.Model())
 	}
 }
 
@@ -207,7 +64,7 @@ func TestLogPathFileDestinationOpensFilePickerForm(t *testing.T) {
 	m := NewWithOptions(Options{})
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m.LogOutput = logOutputFile
-	m.cursor = findItemIndex(t, m, itemTitleLogPath)
+	selectItemForTest(m, findItemIndex(t, m, itemTitleLogPath))
 
 	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !m.editOverlay.IsOpen() {
@@ -246,7 +103,7 @@ func TestLogPathDirOverlayFitsNarrowTallTerminal(t *testing.T) {
 	m := NewWithOptions(Options{})
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 90, Height: 76})
 	m.LogOutput = logOutputDir
-	m.cursor = findItemIndex(t, m, itemTitleLogPath)
+	selectItemForTest(m, findItemIndex(t, m, itemTitleLogPath))
 
 	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !m.modelOverlay.IsOpen() {
@@ -260,42 +117,6 @@ func TestLogPathDirOverlayFitsNarrowTallTerminal(t *testing.T) {
 	}
 
 	assertFrameFits(t, m.View().Content, 90, 76)
-}
-
-// TestDirPickerViewFitsWidth drives the picker directly with entries and a
-// long browse path; every line must fit the declared width.
-func TestDirPickerViewFitsWidth(t *testing.T) {
-	t.Parallel()
-
-	root := makePickerTree(t)
-	deep := filepath.Join(
-		root,
-		"alpha",
-		strings.Repeat("very-long-directory-name-", 4),
-	)
-	if err := os.MkdirAll(deep, 0o750); err != nil {
-		t.Fatalf("mkdir deep: %v", err)
-	}
-
-	dp := NewDirPicker(deep)
-	dp.Width, dp.Height = 90, 76
-	if cmd := dp.Init(); cmd != nil {
-		_, _ = dp.Update(cmd())
-	}
-
-	assertFrameFits(t, dp.View().Content, 90, 76)
-}
-
-// TestMultiFileEditorViewFitsWidth guards the same class of bug in the
-// multi-file editor: long stored paths must be truncated, not wrapped.
-func TestMultiFileEditorViewFitsWidth(t *testing.T) {
-	t.Parallel()
-
-	long := "C:\\" + strings.Repeat("deeply\\nested\\folders\\", 8) + "file.log"
-	e := NewMultiFileEditor(long + "; " + long)
-	_, _ = e.Update(tea.WindowSizeMsg{Width: 90, Height: 76})
-
-	assertFrameFits(t, e.View().Content, 90, 76)
 }
 
 func TestDirOnlyConsumerFieldUsesDirPicker(t *testing.T) {
@@ -312,13 +133,13 @@ func TestDirOnlyConsumerFieldUsesDirPicker(t *testing.T) {
 		}},
 	}}})
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
-	m.cursor = findItemIndex(t, m, "Data Dir")
+	selectItemForTest(m, findItemIndex(t, m, "Data Dir"))
 
 	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !m.modelOverlay.IsOpen() {
 		t.Fatal("expected dir-only consumer field to open the directory picker")
 	}
-	if _, ok := m.modelOverlay.Model().(*DirPicker); !ok {
-		t.Fatalf("overlay model = %T; want *DirPicker", m.modelOverlay.Model())
+	if _, ok := m.modelOverlay.Model().(*pickers.DirPicker); !ok {
+		t.Fatalf("overlay model = %T; want *pickers.DirPicker", m.modelOverlay.Model())
 	}
 }

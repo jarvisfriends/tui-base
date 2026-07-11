@@ -14,6 +14,7 @@ linters:
   enable:
     # ── Core correctness ──────────────────────────────────────────────
     - govet # suspicious constructs (printf args, shadowing, etc.)
+    - cyclop # cyclomatic complexity (A-8): high ceiling now, ratchet down as the big files split
     - staticcheck # broad correctness + simplification analyses
     - unused # unused code (vars, funcs, types)
     - errcheck # unchecked error return values
@@ -72,6 +73,12 @@ linters:
     - gosec # common security anti-patterns
 
   settings:
+    cyclop:
+      # A-8 (Q-19): start high and gradually reduce. Current worst offenders
+      # (2026-07-09): inspector handleSettingsKey (53) and Update (51),
+      # settings buildItems (44), tabs View (40), router Update. Split those,
+      # then ratchet this down toward ~25.
+      max-complexity: 54
     govet:
       enable:
         - shadow
@@ -123,19 +130,39 @@ linters:
 
   exclusions:
     rules:
+      # A-8: router.Update is the known 116-complexity god-function; its split
+      # is the ratchet's first target. Everything else holds the 54 ceiling.
+      - linters:
+          - cyclop
+        text: "for function Update"
+        path: router/router.go
       # G204 (subprocess with variable): the pprof browser-opener and
       # 'go tool pprof' launcher use controlled internal URLs/paths, not
       # external user input.
       - linters:
           - gosec
         text: "G204:"
+      # G702 (command injection): the Windows Terminal relaunch re-runs this
+      # same executable via wt.exe. The program path comes from os.Executable
+      # and wt.exe from PATH; the forwarded args are our own os.Args, not
+      # external input.
+      - linters:
+          - gosec
+        text: "G702:"
+        path: router/terminal_windows.go
+      # G103 (unsafe audit): GetClassNameW needs a pointer to a fixed-size
+      # stack buffer; the length is passed alongside, so no out-of-bounds
+      # write is possible.
+      - linters:
+          - gosec
+        text: "G103:"
+        path: router/terminal_windows.go
 
 formatters:
   enable:
     - gofmt
     - gofumpt
     - goimports
-    - golines
   settings:
     gofumpt:
       module-path: github.com/jarvisfriends/tui-base

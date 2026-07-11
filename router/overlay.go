@@ -1,17 +1,23 @@
 package router
 
 import (
+	"fmt"
 	"slices"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/jarvisfriends/tui-base/geom"
-	"github.com/jarvisfriends/tui-base/notifications"
+	"github.com/jarvisfriends/snap/charts"
+	"github.com/jarvisfriends/snap/geom"
+	"github.com/jarvisfriends/snap/notifications"
+	"github.com/jarvisfriends/snap/status"
 	ov "github.com/jarvisfriends/tui-base/overlay"
-	"github.com/jarvisfriends/tui-base/status"
 )
+
+// toastProgressBarWidth is the charts.HBar width drawn under a progress
+// toast's message line.
+const toastProgressBarWidth = 20
 
 // Re-export overlay package types so router consumers can use router.Overlay,
 // router.Context, etc. without a separate import.
@@ -66,6 +72,9 @@ func (m *RouterModel) buildOverlays() {
 		&toastOverlay{m: m},
 		&historyOverlay{m: m},
 		&inspectorOverlay{m: m},
+		// App-injected Ctrl+D debug model (Options.DebugOverlay); shares the
+		// inspector layer — only one of the two is ever reachable.
+		&customDebugOverlay{m: m},
 		&infoOverlay{m: m},
 	}
 }
@@ -219,6 +228,13 @@ func (o *toastOverlay) Render(ctx layoutContext) string {
 	if len([]rune(msg)) > 40 {
 		msg = string([]rune(msg)[:39]) + "…"
 	}
+	if toast.Percent != nil {
+		// Progress toasts carry a severity-tinted charts.HBar under the
+		// message; ProgressMsg updates redraw it in place.
+		bar := lipgloss.NewStyle().Foreground(borderColor).
+			Render(charts.HBar(*toast.Percent, toastProgressBarWidth))
+		msg += fmt.Sprintf("\n%s %3.0f%%", bar, *toast.Percent)
+	}
 	toastStr := toastStyle.Render(msg)
 	tw, th := lipgloss.Size(toastStr)
 	o.rect = Rect{X: max(ctx.Width-tw, 0), Y: max(ctx.Height-ctx.StatusHeight-th, 0), W: tw, H: th}
@@ -265,7 +281,7 @@ func (o *historyOverlay) OverlayKey(k tea.KeyPressMsg) tea.Cmd {
 		notifCount = len(m.notifMgr.Active())
 	}
 	switch {
-	case key.Matches(k, m.keys.Quit):
+	case key.Matches(k, m.keys.Quit), key.Matches(k, m.keys.ToggleHistory):
 		m.status.CloseHistory()
 	case key.Matches(k, m.keys.Up):
 		m.status.NotifHistoryCursorUp()

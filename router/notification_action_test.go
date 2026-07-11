@@ -5,7 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/jarvisfriends/tui-base/notifications"
+	"github.com/jarvisfriends/snap/notifications"
 )
 
 type actionFiredMsg struct{ id int64 }

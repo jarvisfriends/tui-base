@@ -195,6 +195,27 @@ func MultiFilePickerField(
 		Description: description,
 		Kind:        FieldMultiFilePicker,
 		Value:       value,
+		DirAllowed:  true,
+		FileAllowed: true,
+		Apply:       apply,
+	}
+}
+
+// MultiDirPickerField is like MultiFilePickerField but each row browses
+// directories only (with drive navigation), for path lists that must hold
+// folders.
+func MultiDirPickerField(
+	key, title, description string,
+	value *string,
+	apply func(string) error,
+) FieldDef[string] {
+	return FieldDef[string]{
+		Key:         key,
+		Title:       title,
+		Description: description,
+		Kind:        FieldMultiFilePicker,
+		Value:       value,
+		DirAllowed:  true,
 		Apply:       apply,
 	}
 }

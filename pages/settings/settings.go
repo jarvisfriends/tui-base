@@ -14,17 +14,18 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/jarvisfriends/snap/datepicker"
+	"github.com/jarvisfriends/snap/gate"
+	"github.com/jarvisfriends/snap/keys"
+	"github.com/jarvisfriends/snap/page"
+	"github.com/jarvisfriends/snap/pickers"
+	"github.com/jarvisfriends/snap/timepicker"
 	"github.com/jarvisfriends/tui-base/common"
 	"github.com/jarvisfriends/tui-base/config"
-	"github.com/jarvisfriends/tui-base/datepicker"
 	"github.com/jarvisfriends/tui-base/envpath"
-	"github.com/jarvisfriends/tui-base/gate"
-	"github.com/jarvisfriends/tui-base/keys"
 	"github.com/jarvisfriends/tui-base/logging"
 	"github.com/jarvisfriends/tui-base/overlay"
-	"github.com/jarvisfriends/tui-base/page"
 	"github.com/jarvisfriends/tui-base/theme"
-	"github.com/jarvisfriends/tui-base/timepicker"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -41,8 +42,11 @@ const (
 	settingValOff = "Off"
 	settingValOn  = "On"
 
+	// Option keys for the "Default Terminal" setting; the winterm mapping
+	// lives in terminal.go.
 	defTerminalLetWindows = "let_windows"
-	blankGUID             = "{00000000-0000-0000-0000-000000000000}"
+	defTerminalClassic    = "classic"
+	defTerminalModern     = "modern"
 
 	itemTitleLogPath = "Log Path"
 
@@ -129,6 +133,17 @@ type KeybindingsChangedMsg struct {
 	CustomKeys map[string]string
 }
 
+// GatesChangedMsg is emitted when the user flips a feature gate on the
+// settings page (Feature Flags section). The shared *gate.GateRegistry is
+// already updated when this fires — the message is the "re-derive your
+// gate-dependent UI now" signal so changes show immediately; Values is a
+// snapshot for convenience. Gate values are runtime-only and are never
+// persisted to the settings file: startup state comes from each gate's
+// Default and the <APPNAME>_GATE_<NAME> environment overrides.
+type GatesChangedMsg struct {
+	Values map[string]bool
+}
+
 // A settingItem represents a single configurable value.
 type settingItem struct {
 	category   string
@@ -139,17 +154,35 @@ type settingItem struct {
 	buildForm  func() *huh.Form
 	buildModel func() tea.Model
 	apply      func() error
+	// choices is the effective option count for select-backed items; 0 means
+	// unrestricted (text fields, pickers, key recorder — the set can always
+	// change). A count of exactly 1 makes the row display-only (SP-9): the
+	// value shows but there is nothing to choose, so the edit affordance and
+	// cursor stop are hidden.
+	choices int
 }
+
+// displayOnly reports whether the item shows a value without offering an
+// edit: a select whose effective option count is one (SP-9).
+func (it settingItem) displayOnly() bool { return it.choices == 1 }
 
 type settingsCategory struct {
 	title      string
 	itemIdxSet []int
+	// appOwned marks categories from Options.ExtraSections — the app's own
+	// settings stay expanded by default while the framework's categories
+	// start collapsed (SP-9).
+	appOwned  bool
+	collapsed bool
 }
 
 type overviewEntry struct {
 	header    string
 	itemIndex int
 	isHeader  bool
+	// catIndex is the m.categories index behind a header entry, so clicks
+	// and the header cursor can toggle the right category (SP-9).
+	catIndex int
 }
 
 type overviewLayout struct {
@@ -235,6 +268,16 @@ type SettingsModel struct {
 	// registry directly.
 	defaultTerminal string
 
+	// gatesChanged records that a feature-gate apply mutated the registry
+	// during the current edit; the StateCompleted handler consumes it to emit
+	// a single GatesChangedMsg. Gates are runtime-only and never persisted.
+	gatesChanged bool
+	// gateEditVals holds each Feature Flags item's live edit binding (the
+	// string the huh select writes into). Keyed by gate name; rebuilt with the
+	// items. Kept on the model so tests can drive the commit path the same way
+	// the form does.
+	gateEditVals map[string]*string
+
 	// intermediate string forms for huh selects (not persisted directly)
 	notifEnabledStr    string
 	notifPersistStr    string
@@ -253,6 +296,10 @@ type SettingsModel struct {
 
 	// Overview state.
 	cursor int
+	// headerCursor puts the overview cursor on a category header instead of
+	// an item: >= 0 selects m.categories[headerCursor] (Enter toggles its
+	// collapse, SP-9); -1 means the cursor is on m.items[m.cursor].
+	headerCursor int
 	// scrollTop is the first visible overview entry in the flattened
 	// category + item list used by the responsive overview layout.
 	scrollTop int
@@ -311,6 +358,7 @@ func NewWithOptions(opts Options) *SettingsModel {
 		extraSections:        opts.ExtraSections,
 		keys:                 DefaultKeys(),
 		opts:                 opts,
+		headerCursor:         -1,
 	}
 	if err := m.LoadFromFile(settingsFilePath()); err == nil {
 		m.loadedFromFile = true
@@ -329,6 +377,16 @@ func NewWithOptions(opts Options) *SettingsModel {
 	// goroutine-safe; calling NewDefaultRegistry from concurrent goroutines races
 	// on the module-level registry pointer.
 	initRegistryOnce.Do(tint.NewDefaultRegistry)
+	// T-4: user-authored YAML themes load from <config-dir>/themes into the
+	// registry, appearing in the Theme selector next to the built-ins. One bad
+	// file never hides the rest; problems land in the log.
+	themesDir := filepath.Join(filepath.Dir(settingsFilePath()), "themes")
+	if n, errs := theme.RegisterYAMLTints(themesDir); n > 0 || len(errs) > 0 {
+		logging.Infof("Settings: loaded %d custom theme(s) from %s", n, themesDir)
+		for _, e := range errs {
+			logging.Warnf("Settings: custom theme skipped: %v", e)
+		}
+	}
 	if m.ThemeMode == "" {
 		m.ThemeMode = theme.ThemeModeDark
 	}
@@ -357,9 +415,18 @@ func NewWithOptions(opts Options) *SettingsModel {
 // buildItems constructs the settingItem slice. Call this once in New() and
 // again after LoadFromFile (pointer addresses stay stable; only values change).
 func (m *SettingsModel) buildItems() {
+	// Collapse state is runtime-only but must survive the rebuilds that
+	// follow every save/abort — snapshot it before resetting (SP-9).
+	prevCollapsed := make(map[string]bool, len(m.categories))
+	for _, cat := range m.categories {
+		prevCollapsed[cat.title] = cat.collapsed
+	}
 	m.categories = nil
 	m.items = nil
 
+	// The extraSections loop below runs first; buildItems flips this off
+	// before adding the framework's own categories.
+	appOwnedPhase := true
 	addItem := func(category string, item settingItem) {
 		item.category = category
 		idx := len(m.items)
@@ -370,9 +437,18 @@ func (m *SettingsModel) buildItems() {
 				return
 			}
 		}
+		collapsed := !appOwnedPhase
+		if prev, seen := prevCollapsed[category]; seen {
+			collapsed = prev
+		}
 		m.categories = append(
 			m.categories,
-			settingsCategory{title: category, itemIdxSet: []int{idx}},
+			settingsCategory{
+				title:      category,
+				itemIdxSet: []int{idx},
+				appOwned:   appOwnedPhase,
+				collapsed:  collapsed,
+			},
 		)
 	}
 
@@ -444,8 +520,8 @@ func (m *SettingsModel) buildItems() {
 	if runtime.GOOS == "windows" {
 		terminalOpts = []huh.Option[string]{
 			huh.NewOption("Let Windows Decide (system default)", defTerminalLetWindows),
-			huh.NewOption("Windows Console Host (Classic ConHost) — legacy", "classic"),
-			huh.NewOption("Windows Terminal (Modern) — recommended", "modern"),
+			huh.NewOption("Windows Console Host (Classic ConHost) — legacy", defTerminalClassic),
+			huh.NewOption("Windows Terminal (Modern) — recommended", defTerminalModern),
 		}
 	}
 
@@ -458,10 +534,13 @@ func (m *SettingsModel) buildItems() {
 			addItem(cat, m.itemFromDef(def))
 		}
 	}
+	// Everything from here down is framework-owned: collapsed by default.
+	appOwnedPhase = false
 
 	addItem("Navigation", settingItem{
-		title: "Navigation Style",
-		value: func() string { return labelFor(m.NavStyle, navOpts) },
+		title:   "Navigation Style",
+		choices: len(navOpts),
+		value:   func() string { return labelFor(m.NavStyle, navOpts) },
 		buildForm: func() *huh.Form {
 			return huh.NewForm(huh.NewGroup(
 				huh.NewSelect[string]().
@@ -473,7 +552,8 @@ func (m *SettingsModel) buildItems() {
 		},
 	})
 	addItem("Navigation", settingItem{
-		title: "Show Nav Numbers",
+		title:   "Show Nav Numbers",
+		choices: len(navNumbersOpts),
 		value: func() string {
 			if m.NavShowNumbers {
 				return settingValOn
@@ -491,7 +571,8 @@ func (m *SettingsModel) buildItems() {
 		},
 	})
 	addItem("Navigation", settingItem{
-		title: "Number Key Select",
+		title:   "Number Key Select",
+		choices: len(navNumbersOpts),
 		value: func() string {
 			if m.NavNumberSelect {
 				return settingValOn
@@ -510,8 +591,9 @@ func (m *SettingsModel) buildItems() {
 	})
 	addItem(
 		"Logging", settingItem{
-			title: "Log Destination",
-			value: func() string { return labelFor(m.LogOutput, logOpts) },
+			title:   "Log Destination",
+			choices: len(logOpts),
+			value:   func() string { return labelFor(m.LogOutput, logOpts) },
 			buildForm: func() *huh.Form {
 				return huh.NewForm(huh.NewGroup(
 					huh.NewSelect[string]().
@@ -538,7 +620,7 @@ func (m *SettingsModel) buildItems() {
 			if m.LogOutput != logOutputDir {
 				return nil
 			}
-			dp := NewDirPicker(m.LogPath)
+			dp := newThemedDirPicker(m.LogPath)
 			dp.Width, dp.Height = m.Width(), m.Height()
 			return dp
 		},
@@ -559,13 +641,14 @@ func (m *SettingsModel) buildItems() {
 					Picking(true).
 					Height(overlay.FormHeight(m.Height())).
 					Value(&m.LogPath),
-			).WithTheme(theme.HuhThemeFunc())).WithKeyMap(filePickerKeyMap())
+			).WithTheme(theme.HuhThemeFunc())).WithKeyMap(pickers.FilePickerKeyMap())
 		},
 	})
 	addItem(
 		"Logging", settingItem{
-			title: "Log Level",
-			value: func() string { return labelFor(m.LogLevel, levelOpts) },
+			title:   "Log Level",
+			choices: len(levelOpts),
+			value:   func() string { return labelFor(m.LogLevel, levelOpts) },
 			buildForm: func() *huh.Form {
 				return huh.NewForm(huh.NewGroup(
 					huh.NewSelect[string]().
@@ -579,8 +662,9 @@ func (m *SettingsModel) buildItems() {
 	)
 	addItem(
 		"Appearance", settingItem{
-			title: "Theme Mode",
-			value: func() string { return labelFor(m.ThemeMode, modeOpts) },
+			title:   "Theme Mode",
+			choices: len(modeOpts),
+			value:   func() string { return labelFor(m.ThemeMode, modeOpts) },
 			buildForm: func() *huh.Form {
 				return huh.NewForm(huh.NewGroup(
 					huh.NewSelect[string]().
@@ -594,8 +678,9 @@ func (m *SettingsModel) buildItems() {
 	)
 	addItem(
 		"Appearance", settingItem{
-			title: "Color Theme",
-			value: func() string { return tintDisplayName(m.ColorThemeID) },
+			title:   "Color Theme",
+			choices: len(buildThemeOptions(m.ThemeMode)),
+			value:   func() string { return tintDisplayName(m.ColorThemeID) },
 			buildForm: func() *huh.Form {
 				return huh.NewForm(huh.NewGroup(
 					huh.NewSelect[string]().
@@ -610,8 +695,9 @@ func (m *SettingsModel) buildItems() {
 	)
 	addItem(
 		"Appearance", settingItem{
-			title: "Form Style",
-			value: func() string { return labelFor(m.StylePreset, styleOpts) },
+			title:   "Form Style",
+			choices: len(styleOpts),
+			value:   func() string { return labelFor(m.StylePreset, styleOpts) },
 			buildForm: func() *huh.Form {
 				return huh.NewForm(huh.NewGroup(
 					huh.NewSelect[string]().
@@ -625,7 +711,8 @@ func (m *SettingsModel) buildItems() {
 	)
 	addItem(
 		"Appearance", settingItem{
-			title: "Accessibility Colors",
+			title:   "Accessibility Colors",
+			choices: len(accessibilityOpts),
 			value: func() string {
 				if m.AccessibilityColors {
 					return settingValOn
@@ -645,7 +732,8 @@ func (m *SettingsModel) buildItems() {
 	)
 	addItem(
 		"Notifications", settingItem{
-			title: "Bell Notifications",
+			title:   "Bell Notifications",
+			choices: 2,
 			value: func() string {
 				if m.NotificationsEnabled {
 					return "Enabled 🔔"
@@ -669,7 +757,8 @@ func (m *SettingsModel) buildItems() {
 	)
 	addItem(
 		"Notifications", settingItem{
-			title: "Notification Persistence",
+			title:   "Notification Persistence",
+			choices: 2,
 			value: func() string {
 				if m.NotificationsPersist {
 					return settingValOn
@@ -777,43 +866,38 @@ func (m *SettingsModel) buildItems() {
 
 	if runtime.GOOS == "windows" {
 		addItem("System", settingItem{
-			title: "Default Terminal",
-			value: func() string { return labelFor(m.defaultTerminal, terminalOpts) },
+			title:   "Default Terminal",
+			choices: len(terminalOpts),
+			value:   func() string { return labelFor(m.defaultTerminal, terminalOpts) },
 			buildForm: func() *huh.Form {
 				return huh.NewForm(huh.NewGroup(
 					huh.NewSelect[string]().
 						Title("Default Terminal").
-						Description("Choose the OS default terminal delegation (Windows only).").
+						Description("Choose the OS default terminal delegation (Windows only). " +
+							"Takes effect for newly opened console windows.").
 						Options(terminalOpts...).
 						Value(&m.defaultTerminal),
 				).WithTheme(theme.HuhThemeFunc()))
 			},
 			apply: func() error {
-				switch m.defaultTerminal {
-				case defTerminalLetWindows:
-					return applyTerminalSetting(blankGUID, blankGUID)
-				case "classic":
-					return applyTerminalSetting(
-						"{B23D10C0-E52E-411E-9D5B-C09FDF709C7D}",
-						"{B23D10C0-E52E-411E-9D5B-C09FDF709C7D}",
-					)
-				case "modern":
-					return applyTerminalSetting(
-						"{2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69}",
-						"{E12CFF52-A866-4C77-9A90-F570A7AA2C6B}",
-					)
-				default:
-					return nil
-				}
+				return applyTerminalSetting(m.defaultTerminal)
 			},
 		})
 	}
 
 	if m.opts.Gates != nil {
+		m.gateEditVals = make(map[string]*string, len(m.opts.Gates.Defs()))
 		for _, gateDef := range m.opts.Gates.Defs() {
 			gDef := gateDef // capture
+			// editVal outlives buildForm so the huh select's pointer binding
+			// still holds the user's choice when apply runs on completion.
+			// (Binding to a local inside buildForm silently discards the edit.)
+			editVal := new(string)
+			m.gateEditVals[gDef.Name] = editVal
 			addItem("Feature Flags", settingItem{
 				title: gDef.Name,
+				// A gate is always a real 2-way choice — never hidden (SP-9).
+				choices: 2,
 				value: func() string {
 					if m.opts.Gates.Value(gDef.Name) {
 						return "Enabled"
@@ -825,23 +909,38 @@ func (m *SettingsModel) buildItems() {
 						huh.NewOption("Disabled", boolStrFalse),
 						huh.NewOption("Enabled", boolStrTrue),
 					}
-					valStr := "false"
+					*editVal = boolStrFalse
 					if m.opts.Gates.Value(gDef.Name) {
-						valStr = boolStrTrue
+						*editVal = boolStrTrue
 					}
 					return huh.NewForm(huh.NewGroup(
 						huh.NewSelect[string]().
 							Title(gDef.Name).
 							Description(gDef.Description).
 							Options(opts...).
-							Value(&valStr),
+							Value(editVal),
 					).WithTheme(theme.HuhThemeFunc()))
 				},
-				setValue: func(val string) {
-					m.opts.Gates.Set(gDef.Name, val == boolStrTrue)
+				apply: func() error {
+					enabled := *editVal == boolStrTrue
+					if enabled != m.opts.Gates.Value(gDef.Name) {
+						m.opts.Gates.Set(gDef.Name, enabled)
+						// Flag for the StateCompleted handler, which emits one
+						// GatesChangedMsg after all commit work is done.
+						m.gatesChanged = true
+					}
+					return nil
 				},
 			})
 		}
+	}
+
+	// The cursor may point at nothing selectable after a (re)build — e.g. its
+	// item now sits in a collapsed category, or everything starts collapsed on
+	// a fresh model. Snap it to the first stop so the overview always has a
+	// keyboard-reachable selection.
+	if stops := m.overviewStops(); len(stops) > 0 && m.currentStopIndex(stops) < 0 {
+		m.applyStop(stops[0])
 	}
 }
 
@@ -893,7 +992,7 @@ func (m *SettingsModel) itemFromDef(def config.FieldDef[string]) settingItem {
 			}
 			form := huh.NewForm(huh.NewGroup(f).WithTheme(theme.HuhThemeFunc()))
 			if def.Kind == config.FieldFilePicker {
-				form = form.WithKeyMap(filePickerKeyMap())
+				form = form.WithKeyMap(pickers.FilePickerKeyMap())
 			}
 			return form
 		},
@@ -905,11 +1004,14 @@ func (m *SettingsModel) itemFromDef(def config.FieldDef[string]) settingItem {
 				if !def.DirAllowed || def.FileAllowed {
 					return nil
 				}
-				dp := NewDirPicker(*def.Value)
+				dp := newThemedDirPicker(*def.Value)
 				dp.Width, dp.Height = m.Width(), m.Height()
 				return dp
 			case config.FieldMultiFilePicker:
-				e := NewMultiFileEditor(*def.Value)
+				e := newThemedMultiFileEditor(*def.Value)
+				// A directory-only field browses with the DirPicker (folders
+				// and drives, no files) instead of the mixed file browser.
+				e.DirsOnly = def.DirAllowed && !def.FileAllowed
 				// Seed the current page size: ModelOverlayHost only sends
 				// WindowSizeMsg on later resizes, and the editor needs the
 				// height up front to size its file-picker form.
@@ -1047,27 +1149,32 @@ func (m *SettingsModel) updateOverview(msg tea.Msg) (tea.Model, tea.Cmd) {
 		keyMsg := msg
 		switch {
 		case key.Matches(keyMsg, m.keys.Up):
-			m.cursor = max(m.cursor-1, 0)
-			m.ensureCursorVisible()
+			m.moveOverviewCursor(-1)
 		case key.Matches(keyMsg, m.keys.Down):
-			m.cursor = min(m.cursor+1, max(len(m.items)-1, 0))
-			m.ensureCursorVisible()
+			m.moveOverviewCursor(1)
 		case key.Matches(keyMsg, m.keys.Select):
+			if m.headerCursor >= 0 {
+				m.toggleCategory(m.headerCursor)
+				return m, nil
+			}
 			return m, m.startEdit()
 		}
 	case tea.MouseWheelMsg:
 		if msg.Mouse().Button == tea.MouseWheelUp {
-			m.cursor = max(m.cursor-1, 0)
+			m.moveOverviewCursor(-1)
 		} else {
-			m.cursor = min(m.cursor+1, max(len(m.items)-1, 0))
+			m.moveOverviewCursor(1)
 		}
-		m.ensureCursorVisible()
 	}
 	return m, nil
 }
 
 func (m *SettingsModel) startEdit() tea.Cmd {
 	if m.cursor < 0 || m.cursor >= len(m.items) {
+		return nil
+	}
+	if m.items[m.cursor].displayOnly() {
+		// One effective option — nothing to choose (SP-9).
 		return nil
 	}
 	m.editIndex = m.cursor
@@ -1123,7 +1230,7 @@ func (m *SettingsModel) updateActiveOverlay(msg tea.Msg) (huh.FormState, tea.Cmd
 	cmd := m.modelOverlay.Update(msg)
 	mod := m.modelOverlay.Model()
 	switch v := mod.(type) {
-	case *MultiFileEditor:
+	case *pickers.MultiFileEditor:
 		if v.Done {
 			if m.editIndex >= 0 && m.items[m.editIndex].setValue != nil {
 				m.items[m.editIndex].setValue(v.Value())
@@ -1141,7 +1248,7 @@ func (m *SettingsModel) updateActiveOverlay(msg tea.Msg) (huh.FormState, tea.Cmd
 		} else if v.Aborted {
 			return huh.StateAborted, cmd
 		}
-	case *DirPicker:
+	case *pickers.DirPicker:
 		if v.Done {
 			if m.editIndex >= 0 && m.items[m.editIndex].setValue != nil {
 				m.items[m.editIndex].setValue(v.Value())
@@ -1187,9 +1294,14 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.abortEdit()
 	}
 
-	// Translate mouse wheel events to key presses for the edit overlay so
-	// users can scroll select controls with a mouse wheel even though huh
-	// lacks mouse support. Wheel up -> KeyUp, Wheel down -> KeyDown.
+	// Mouse routing while overlays are open: hosted model overlays receive
+	// mouse exclusively via View.OnMouse (translated coordinates); letting the
+	// raw page-relative event through here would double-deliver it with wrong
+	// coordinates. The huh edit overlay has no mouse support, so its wheel
+	// events become arrow keys instead.
+	if _, isMouse := msg.(tea.MouseMsg); isMouse && m.modelOverlay.IsOpen() {
+		return m, nil
+	}
 	if wm, ok := msg.(tea.MouseWheelMsg); ok {
 		if wm.Mouse().Button == tea.MouseWheelUp {
 			msg = tea.KeyPressMsg{Code: tea.KeyUp}
@@ -1290,6 +1402,14 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 			func() tea.Msg { return KeybindingsChangedMsg{CustomKeys: customKeys} },
 			m.saveCmd(),
 		)
+		// A feature-gate flip broadcasts immediately so gated UI (pages,
+		// inspector tabs) reacts without waiting for other interaction. The
+		// registry itself was already updated in the item's apply.
+		if m.gatesChanged && m.opts.Gates != nil {
+			m.gatesChanged = false
+			values := m.opts.Gates.Snapshot()
+			cmds = append(cmds, func() tea.Msg { return GatesChangedMsg{Values: values} })
+		}
 		m.loadedFromFile = true
 		if path, err := logging.InitFromSettings(m.LogOutput, m.LogPath); err == nil {
 			m.LogPath = path
@@ -1332,18 +1452,26 @@ func (m *SettingsModel) View() tea.View {
 	// its edit overlay. Coordinates here are child-relative (router translates
 	// them before calling OnMouse).
 	v.OnMouse = func(mm tea.MouseMsg) tea.Cmd {
+		// A hosted model overlay (dir picker, date/time picker, ...) gets the
+		// mouse first: outside clicks dismiss it, everything else is forwarded
+		// with coordinates translated into the hosted content's space — that
+		// is what makes snap's click/wheel hit zones line up live, not just in
+		// unit tests. Mouse reaches hosted models ONLY through this path (the
+		// Update path drops mouse while the overlay is open, mirroring the
+		// router's own OnMouse/Update modality gate).
+		if m.modelOverlay.IsOpen() {
+			if click, ok := mm.(tea.MouseClickMsg); ok &&
+				m.modelOverlay.IsOutsideClick(click.X, click.Y) {
+				return m.abortEdit()
+			}
+			return m.modelOverlay.ForwardMouse(mm)
+		}
 		click, ok := mm.(tea.MouseClickMsg)
 		if !ok {
 			return nil
 		}
 		if m.editOverlay.IsOpen() {
 			if m.editOverlay.IsOutsideClick(click.X, click.Y) {
-				return m.abortEdit()
-			}
-			return nil
-		}
-		if m.modelOverlay.IsOpen() {
-			if m.modelOverlay.IsOutsideClick(click.X, click.Y) {
 				return m.abortEdit()
 			}
 			return nil
@@ -1371,8 +1499,16 @@ func (m *SettingsModel) View() tea.View {
 		}
 		entry := layout.entries[entryIdx]
 		if entry.isHeader {
+			// Clicking a category header toggles its collapse (SP-9).
+			m.headerCursor = entry.catIndex
+			m.toggleCategory(entry.catIndex)
 			return nil
 		}
+		if entry.itemIndex >= 0 && entry.itemIndex < len(m.items) &&
+			m.items[entry.itemIndex].displayOnly() {
+			return nil
+		}
+		m.headerCursor = -1
 		m.cursor = entry.itemIndex
 		if m.cursor >= 0 && m.cursor < len(m.items) {
 			m.ensureCursorVisible()
@@ -1428,6 +1564,11 @@ func (m *SettingsModel) renderOverview() string {
 			}
 			entry := visible[i]
 			if entry.isHeader {
+				if m.headerCursor == entry.catIndex {
+					sel := c.Styles.SelectedItem.Width(layout.colWidth)
+					colLines = append(colLines, sel.Render(entry.header))
+					continue
+				}
 				colLines = append(colLines, headerStyle.Render(entry.header))
 				continue
 			}
@@ -1439,7 +1580,14 @@ func (m *SettingsModel) renderOverview() string {
 				// Keep the tail (e.g. a file path's end) when it overflows.
 				val = ansi.TruncateLeft(v, ansi.StringWidth(v)-valueW+1, "…")
 			}
-			if entry.itemIndex == m.cursor {
+			if item.displayOnly() {
+				// One effective option: show the value, no edit affordance
+				// and no cursor stop (SP-9).
+				dim := c.Styles.FilterDim.Width(valueW)
+				colLines = append(colLines, "  "+normalLabel.Render(lbl)+" "+dim.Render(val))
+				continue
+			}
+			if m.headerCursor < 0 && entry.itemIndex == m.cursor {
 				indicatorStyle := lipgloss.NewStyle().Foreground(selFg).Background(selBg)
 				spaceStyle := lipgloss.NewStyle().Background(selBg)
 				rowText := indicatorStyle.Render(
@@ -1509,6 +1657,13 @@ func (m *SettingsModel) overviewLayout() overviewLayout {
 	entries := m.flattenedOverviewEntries()
 	cursorEntry := 0
 	for i, e := range entries {
+		if m.headerCursor >= 0 {
+			if e.isHeader && e.catIndex == m.headerCursor {
+				cursorEntry = i
+				break
+			}
+			continue
+		}
 		if !e.isHeader && e.itemIndex == m.cursor {
 			cursorEntry = i
 			break
@@ -1562,16 +1717,125 @@ func (m *SettingsModel) flattenedOverviewEntries() []overviewEntry {
 		return nil
 	}
 	entries := make([]overviewEntry, 0, len(m.items)+len(m.categories))
-	for _, cat := range m.categories {
+	for ci, cat := range m.categories {
 		if len(cat.itemIdxSet) == 0 {
 			continue
 		}
-		entries = append(entries, overviewEntry{header: cat.title, isHeader: true})
+		marker := "▾ "
+		title := cat.title
+		if cat.collapsed {
+			marker = "▸ "
+			title = fmt.Sprintf("%s (%d)", title, len(cat.itemIdxSet))
+		}
+		entries = append(entries, overviewEntry{
+			header:   marker + title,
+			isHeader: true,
+			catIndex: ci,
+		})
+		if cat.collapsed {
+			continue
+		}
 		for _, idx := range cat.itemIdxSet {
 			entries = append(entries, overviewEntry{itemIndex: idx})
 		}
 	}
 	return entries
+}
+
+// overviewStop is one keyboard cursor position in the overview: a category
+// header (Enter toggles collapse) or an editable, visible item (Enter opens
+// its editor). Display-only items (SP-9) render but are not stops.
+type overviewStop struct {
+	isHeader bool
+	catIndex int
+	item     int
+}
+
+func (m *SettingsModel) overviewStops() []overviewStop {
+	stops := make([]overviewStop, 0, len(m.items)+len(m.categories))
+	for ci, cat := range m.categories {
+		if len(cat.itemIdxSet) == 0 {
+			continue
+		}
+		stops = append(stops, overviewStop{isHeader: true, catIndex: ci})
+		if cat.collapsed {
+			continue
+		}
+		for _, idx := range cat.itemIdxSet {
+			if m.items[idx].displayOnly() {
+				continue
+			}
+			stops = append(stops, overviewStop{item: idx})
+		}
+	}
+	return stops
+}
+
+// currentStopIndex locates the cursor in stops; -1 when the cursor state
+// points at nothing currently visible (e.g. its category just collapsed
+// underneath it via a rebuild).
+func (m *SettingsModel) currentStopIndex(stops []overviewStop) int {
+	for i, s := range stops {
+		if m.headerCursor >= 0 {
+			if s.isHeader && s.catIndex == m.headerCursor {
+				return i
+			}
+			continue
+		}
+		if !s.isHeader && s.item == m.cursor {
+			return i
+		}
+	}
+	return -1
+}
+
+func (m *SettingsModel) applyStop(s overviewStop) {
+	if s.isHeader {
+		m.headerCursor = s.catIndex
+		return
+	}
+	m.headerCursor = -1
+	m.cursor = s.item
+}
+
+// moveOverviewCursor steps the cursor delta stops through headers and
+// editable visible items, clamping at the ends.
+func (m *SettingsModel) moveOverviewCursor(delta int) {
+	stops := m.overviewStops()
+	if len(stops) == 0 {
+		return
+	}
+	cur := m.currentStopIndex(stops)
+	next := 0
+	if cur >= 0 {
+		next = min(max(cur+delta, 0), len(stops)-1)
+	}
+	m.applyStop(stops[next])
+	m.ensureCursorVisible()
+}
+
+// ExpandAllCategories opens every overview category. Useful for apps that
+// prefer the pre-SP-9 fully expanded overview (framework categories start
+// collapsed by default).
+func (m *SettingsModel) ExpandAllCategories() {
+	for i := range m.categories {
+		m.categories[i].collapsed = false
+	}
+}
+
+// toggleCategory flips a category's collapse state. Collapsing the category
+// that holds the item cursor moves the cursor to that category's header so
+// it never sits on a hidden row.
+func (m *SettingsModel) toggleCategory(ci int) {
+	if ci < 0 || ci >= len(m.categories) {
+		return
+	}
+	m.categories[ci].collapsed = !m.categories[ci].collapsed
+	if m.categories[ci].collapsed && m.headerCursor < 0 &&
+		slices.Contains(m.categories[ci].itemIdxSet, m.cursor) {
+		m.headerCursor = ci
+	}
+	m.ensureCursorVisible()
 }
 
 func (m *SettingsModel) preferredColumnWidth() int {

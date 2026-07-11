@@ -21,7 +21,7 @@ import (
 	huh "charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/jarvisfriends/tui-base/geom"
+	"github.com/jarvisfriends/snap/geom"
 )
 
 // Context carries the parent-supplied dimensions an overlay needs to position
@@ -149,7 +149,18 @@ func (h *FormOverlayHost) Open(f *huh.Form, termW, termH int) tea.Cmd {
 	h.termW, h.termH = termW, termH
 	h.form = f.WithWidth(FormWidth(termW))
 	h.open = true
-	return h.form.Init()
+	initCmd := h.form.Init()
+	// Deliver the current size the way tea.Program would on open. Plain
+	// input/select forms just take their natural height from this, but
+	// file-picker fields depend on it: bubbles' filepicker starts with a
+	// collapsed one-row browse window that only its WindowSizeMsg handler
+	// unconditionally expands — builder-API heights alone leave the first
+	// directory listing collapsed until a resize or directory change.
+	model, _ := h.form.Update(tea.WindowSizeMsg{Width: FormWidth(termW), Height: FormHeight(termH)})
+	if ff, ok := model.(*huh.Form); ok {
+		h.form = ff
+	}
+	return initCmd
 }
 
 // Close hides the overlay and releases the form.
@@ -286,6 +297,53 @@ func (h *ModelOverlayHost) Model() tea.Model {
 // IsOutsideClick reports whether (x, y) falls outside the overlay bounds.
 func (h *ModelOverlayHost) IsOutsideClick(x, y int) bool {
 	return h.IsOpen() && !h.bounds.Contains(x, y)
+}
+
+// Content insets applied by Composite's box: RoundedBorder (1 cell) plus
+// Padding(1, 2). ForwardMouse subtracts these so hosted models receive
+// content-relative coordinates. Keep in sync with Composite.
+const (
+	modelOverlayInsetX = 3 // border 1 + horizontal padding 2
+	modelOverlayInsetY = 2 // border 1 + vertical padding 1
+)
+
+// ForwardMouse translates a page-relative mouse event into the hosted
+// model's content coordinates (using the bounds from the last Composite) and
+// forwards it. Components like snap's date/time pickers hit-test against
+// their own rendered content, so translation is what makes their zones line
+// up. No-op when the overlay is closed.
+func (h *ModelOverlayHost) ForwardMouse(mm tea.MouseMsg) tea.Cmd {
+	if !h.IsOpen() {
+		return nil
+	}
+	me := mm.Mouse()
+	nm := tea.Mouse{
+		X:      me.X - h.bounds.X - modelOverlayInsetX,
+		Y:      me.Y - h.bounds.Y - modelOverlayInsetY,
+		Button: me.Button,
+		Mod:    me.Mod,
+	}
+	var translated tea.MouseMsg
+	switch mm.(type) {
+	case tea.MouseClickMsg:
+		translated = tea.MouseClickMsg(nm)
+	case tea.MouseReleaseMsg:
+		translated = tea.MouseReleaseMsg(nm)
+	case tea.MouseMotionMsg:
+		translated = tea.MouseMotionMsg(nm)
+	case tea.MouseWheelMsg:
+		translated = tea.MouseWheelMsg(nm)
+	default:
+		return nil
+	}
+	// Mouse goes to the hosted model's View().OnMouse, never its Update:
+	// snap components keep pointer handling out of Update entirely, and a
+	// single delivery door prevents double-processing.
+	v := h.model.View()
+	if v.OnMouse == nil {
+		return nil
+	}
+	return v.OnMouse(translated)
 }
 
 // Composite renders the overlay centered over base.

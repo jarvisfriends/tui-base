@@ -23,13 +23,15 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/table"
 	"charm.land/bubbles/v2/viewport"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/dustin/go-humanize"
-	"github.com/jarvisfriends/tui-base/notifications"
-	"github.com/jarvisfriends/tui-base/page"
+	"github.com/jarvisfriends/snap/gate"
+	"github.com/jarvisfriends/snap/notifications"
+	"github.com/jarvisfriends/snap/page"
 	"github.com/jarvisfriends/tui-base/theme"
 	tint "github.com/lrstanley/bubbletint/v2"
 	"golang.org/x/text/language"
@@ -49,6 +51,13 @@ func saturatingDuration(ns uint64) time.Duration {
 	}
 	return time.Duration(ns)
 }
+
+// AccessibilityTabGate is the feature-gate name controlling whether the
+// inspector shows its Accessibility tab. The router registers it with
+// Default:false (hidden) when the app has not defined it, so the tab is
+// opt-in: flip it at runtime on the settings page (Feature Flags section)
+// or at startup via the <APPNAME>_GATE_INSPECTOR_ACCESSIBILITY_TAB env var.
+const AccessibilityTabGate = "Inspector Accessibility Tab"
 
 const (
 	debugTabTitleAccessibility = "Accessibility"
@@ -208,30 +217,31 @@ const (
 	settingsRowShowHeap                                // 4
 	settingsRowShowGC                                  // 5
 	settingsRowShowGoroutines                          // 6
-	settingsRowPprofEnabled                            // 7
-	settingsRowPprofAddr                               // 8
-	settingsRowPprofToolAddr                           // 9
-	settingsRowPprofViewMode                           // 10
-	settingsRowCPUSecs                                 // 11
-	settingsRowOutputDir                               // 12 — read-only display
-	settingsRowWriteHeap                               // 13
-	settingsRowCaptureCPU                              // 14
-	settingsRowBuiltinHeader                           // 15 — SectionOnly
-	settingsRowPprofIndex                              // 16
-	settingsRowHeapDebug1                              // 17
-	settingsRowHeapDebug2                              // 18
-	settingsRowGoroutineDebug1                         // 19
-	settingsRowGoroutineDebug2                         // 20
-	settingsRowAllocsDebug1                            // 21
-	settingsRowBlockDebug1                             // 22
-	settingsRowMutexDebug1                             // 23
-	settingsRowCPUStream                               // 24
-	settingsRowTraceStream                             // 25
-	settingsRowGotoolHeader                            // 26 — SectionOnly
-	settingsRowGotoolLatest                            // 27
-	settingsRowGotoolLiveHeap                          // 28
-	settingsRowGotoolLiveCPU                           // 29
-	settingsRowServerState                             // 30 — read-only display
+	settingsRowShowLink                                // 7
+	settingsRowPprofEnabled                            // 8
+	settingsRowPprofAddr                               // 9
+	settingsRowPprofToolAddr                           // 10
+	settingsRowPprofViewMode                           // 11
+	settingsRowCPUSecs                                 // 12
+	settingsRowOutputDir                               // 13 — read-only display
+	settingsRowWriteHeap                               // 14
+	settingsRowCaptureCPU                              // 15
+	settingsRowBuiltinHeader                           // 16 — SectionOnly
+	settingsRowPprofIndex                              // 17
+	settingsRowHeapDebug1                              // 18
+	settingsRowHeapDebug2                              // 19
+	settingsRowGoroutineDebug1                         // 20
+	settingsRowGoroutineDebug2                         // 21
+	settingsRowAllocsDebug1                            // 22
+	settingsRowBlockDebug1                             // 23
+	settingsRowMutexDebug1                             // 24
+	settingsRowCPUStream                               // 25
+	settingsRowTraceStream                             // 26
+	settingsRowGotoolHeader                            // 27 — SectionOnly
+	settingsRowGotoolLatest                            // 28
+	settingsRowGotoolLiveHeap                          // 29
+	settingsRowGotoolLiveCPU                           // 30
+	settingsRowServerState                             // 31 — read-only display
 )
 
 type summaryFlags struct {
@@ -240,6 +250,9 @@ type summaryFlags struct {
 	ShowHeap   bool
 	ShowGC     bool
 	ShowGorout bool
+	// ShowLink includes the estimated remote-link Tx/Rx rates (the router
+	// injects the text via SetLinkRateSummary; collection follows demand).
+	ShowLink bool
 }
 
 type pprofConfig struct {
@@ -296,6 +309,10 @@ type InspectorModel struct {
 	logWarnPlus bool
 	// Accessibility panel — shown when its tab is active
 	acPanel *AccessibilityPanel
+	// gates controls visibility of gated tabs (currently the Accessibility
+	// tab via AccessibilityTabGate). Nil means "no gates": gated tabs stay
+	// hidden, matching the gate's Default:false registration.
+	gates *gate.GateRegistry
 	// highlight when stable values change, Change background color
 	ShowHighlight    bool
 	LastMouseClick   tea.Mouse
@@ -342,6 +359,7 @@ type InspectorModel struct {
 	activeTab       debugTab
 	settingsCursor  int
 	statusSummary   summaryFlags
+	linkSummary     func() string
 	pprof           pprofConfig
 	settingsMessage string
 
@@ -462,6 +480,29 @@ func (m *InspectorModel) SetNavKeys(next, prev key.Binding) {
 	)
 }
 
+// SetGates hands the inspector the app's feature-gate registry so gated tabs
+// (the Accessibility tab) can show or hide live. The router calls this once at
+// startup; the registry pointer is shared, so later gate flips are visible
+// immediately without re-wiring.
+func (m *InspectorModel) SetGates(g *gate.GateRegistry) {
+	m.gates = g
+	m.OnGatesChanged()
+}
+
+// OnGatesChanged re-derives gate-dependent state after a feature gate flips at
+// runtime (the router calls it on settings.GatesChangedMsg). If the active tab
+// just became hidden, the inspector snaps to the Runtime tab so the user is
+// never left on an invisible tab.
+func (m *InspectorModel) OnGatesChanged() {
+	if !m.tabVisible(m.activeTab) {
+		m.saveActiveTabScroll()
+		m.activeTab = debugTabRuntime
+		m.syncAcPanelVisibility()
+		m.restoreActiveTabScroll()
+	}
+	m.dirty = true
+}
+
 // activeDataTable returns the bubbles table backing the active tab, or nil
 // when the active tab is not table-based or its last render fell back to the
 // flat layout (narrow terminals), in which case keys scroll the viewport.
@@ -511,7 +552,7 @@ func (m *InspectorModel) restoreActiveTabScroll() {
 }
 
 func (m *InspectorModel) switchTab(tab debugTab) {
-	if tab < 0 || int(tab) >= m.tabCount() || tab == m.activeTab {
+	if tab < 0 || int(tab) >= m.tabCount() || tab == m.activeTab || !m.tabVisible(tab) {
 		return
 	}
 	m.saveActiveTabScroll()
@@ -627,6 +668,7 @@ func New() *InspectorModel {
 			ShowHeap:   true,
 			ShowGC:     true,
 			ShowGorout: true,
+			ShowLink:   true,
 		},
 		pprof: pprofConfig{
 			Enabled:        false,
@@ -845,17 +887,19 @@ func (m *InspectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			if km.Code == tea.KeyLeft || key.Matches(km, m.keys.PrevTab) {
-				m.switchTab(
-					debugTab((int(m.activeTab) - 1 + m.tabCount()) % m.tabCount()),
-				)
+				m.stepTab(-1)
 				return m, preCmd
 			}
 			if km.Code == tea.KeyRight || key.Matches(km, m.keys.NextTab) {
-				m.switchTab(debugTab((int(m.activeTab) + 1) % m.tabCount()))
+				m.stepTab(1)
 				return m, preCmd
 			}
 			if km.Text >= "1" && km.Text <= "9" {
-				m.switchTab(debugTab(int(km.Text[0] - '1')))
+				// Digits address the tabs as displayed (hidden tabs don't
+				// consume a number), matching the numbers on the tab bar.
+				if vis := m.visibleTabs(); int(km.Text[0]-'1') < len(vis) {
+					m.switchTab(vis[km.Text[0]-'1'])
+				}
 				return m, preCmd
 			}
 			switch {
@@ -1331,12 +1375,10 @@ func (m *InspectorModel) handleWheel(me tea.Mouse) {
 	shifted := me.Mod&tea.ModShift != 0
 	switch {
 	case me.Button == tea.MouseWheelLeft || (shifted && me.Button == tea.MouseWheelUp):
-		m.switchTab(
-			debugTab((int(m.activeTab) - 1 + m.tabCount()) % m.tabCount()),
-		)
+		m.stepTab(-1)
 		return
 	case me.Button == tea.MouseWheelRight || (shifted && me.Button == tea.MouseWheelDown):
-		m.switchTab(debugTab((int(m.activeTab) + 1) % m.tabCount()))
+		m.stepTab(1)
 		return
 	}
 	if tbl := m.activeDataTable(); tbl != nil {
@@ -1462,7 +1504,8 @@ func (m *InspectorModel) buildTermSection(c *theme.AppStyle, width int) string {
 	// downsamples 24-bit theme colors. Surface the fix when we detect the
 	// classic signature (ANSI256 + SSH + no override + COLORTERM unset).
 	if prof == colorprofile.ANSI256 && isSSH && profileOverride == "" && colorterm == "(not set)" {
-		colorRows = append(colorRows,
+		colorRows = append(
+			colorRows,
 			termRow{
 				k:    "Color hint",
 				v:    "24-bit colors quantized to ANSI256 (COLORTERM not forwarded over SSH)",
@@ -1644,7 +1687,12 @@ func (m *InspectorModel) settingsRows() []debugSettingRow {
 			Value: strconv.FormatBool(m.statusSummary.ShowGorout),
 			Help:  "Enter toggles goroutine count in the status summary",
 		},
-		// 7-12: pprof server config
+		{
+			Field: "Include link rate",
+			Value: strconv.FormatBool(m.statusSummary.ShowLink),
+			Help:  "Enter toggles estimated remote Tx/Rx rates in the status summary (keeps the link meter collecting while the inspector is closed)",
+		},
+		// 8-13: pprof server config
 		{
 			Field: "Enable profiler HTTP server",
 			Value: pprofState,
@@ -1849,6 +1897,8 @@ func (m *InspectorModel) handleSettingsKey(km tea.KeyPressMsg) tea.Cmd {
 		m.statusSummary.ShowGC = !m.statusSummary.ShowGC
 	case settingsRowShowGoroutines:
 		m.statusSummary.ShowGorout = !m.statusSummary.ShowGorout
+	case settingsRowShowLink:
+		m.statusSummary.ShowLink = !m.statusSummary.ShowLink
 	// --- pprof server config ---
 	case settingsRowPprofEnabled:
 		m.pprof.Enabled = !m.pprof.Enabled
@@ -2199,6 +2249,20 @@ func openBrowserCmd(url string) tea.Cmd {
 	}
 }
 
+// SetLinkRateSummary injects the compact link-rate text (e.g. "tx 12 B/s rx
+// 1.2 KiB/s") shown in the status summary when "Include link rate" is on.
+// The router installs this; nil removes the part.
+func (m *InspectorModel) SetLinkRateSummary(fn func() string) {
+	m.linkSummary = fn
+}
+
+// StatusSummaryLinkEnabled reports whether the status summary wants link-rate
+// text right now — the router uses it to keep the link meter collecting while
+// the inspector is closed.
+func (m *InspectorModel) StatusSummaryLinkEnabled() bool {
+	return m.statusSummary.Enabled && m.statusSummary.ShowLink
+}
+
 // SetStatusSummaryEnabled toggles whether StatusLineSummary returns a non-empty
 // compact runtime summary (shown in the status bar when the inspector is closed).
 func (m *InspectorModel) SetStatusSummaryEnabled(enabled bool) {
@@ -2227,6 +2291,11 @@ func (m *InspectorModel) StatusLineSummary() string {
 	}
 	if m.statusSummary.ShowGorout {
 		parts = append(parts, fmt.Sprintf("gor %d", st.Goroutines))
+	}
+	if m.statusSummary.ShowLink && m.linkSummary != nil {
+		if link := m.linkSummary(); link != "" {
+			parts = append(parts, link)
+		}
 	}
 	return strings.Join(parts, " • ")
 }

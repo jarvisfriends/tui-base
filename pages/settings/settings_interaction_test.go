@@ -16,7 +16,7 @@ func TestOverviewEnterStartsEditOnKeyPress(t *testing.T) {
 		t.Fatal("expected built-in settings items")
 	}
 
-	m.cursor = 1
+	selectItemForTest(m, 1)
 	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !m.editOverlay.IsOpen() {
 		t.Fatal("expected editing mode to start on Enter key press")
@@ -34,17 +34,25 @@ func TestOverviewMouseWheelMovesCursorAndScrollWindow(t *testing.T) {
 	if len(m.items) < 4 {
 		t.Fatalf("expected enough settings rows for scrolling; got %d", len(m.items))
 	}
+	// SP-9: the cursor walks stops (headers + editable items). Expand every
+	// category so the whole stop list is reachable; the cursor starts on the
+	// first header.
+	m.ExpandAllCategories()
+	stops := m.overviewStops()
+	if len(stops) < 4 {
+		t.Fatalf("expected enough stops for scrolling; got %d", len(stops))
+	}
 
 	_, _ = m.Update(tea.MouseWheelMsg(tea.Mouse{Button: tea.MouseWheelDown}))
-	if m.cursor != 1 {
-		t.Fatalf("cursor after one wheel-down = %d; want 1", m.cursor)
+	if got := m.currentStopIndex(m.overviewStops()); got != 1 {
+		t.Fatalf("stop after one wheel-down = %d; want 1", got)
 	}
 
-	for range 64 {
+	for range 128 {
 		_, _ = m.Update(tea.MouseWheelMsg(tea.Mouse{Button: tea.MouseWheelDown}))
 	}
-	if m.cursor != len(m.items)-1 {
-		t.Fatalf("cursor at bottom = %d; want %d", m.cursor, len(m.items)-1)
+	if got := m.currentStopIndex(m.overviewStops()); got != len(stops)-1 {
+		t.Fatalf("stop at bottom = %d; want %d", got, len(stops)-1)
 	}
 	if m.scrollTop <= 0 {
 		t.Fatalf(
@@ -53,10 +61,9 @@ func TestOverviewMouseWheelMovesCursorAndScrollWindow(t *testing.T) {
 		)
 	}
 
-	before := m.cursor
 	_, _ = m.Update(tea.MouseWheelMsg(tea.Mouse{Button: tea.MouseWheelUp}))
-	if m.cursor != before-1 {
-		t.Fatalf("cursor after wheel-up = %d; want %d", m.cursor, before-1)
+	if got := m.currentStopIndex(m.overviewStops()); got != len(stops)-2 {
+		t.Fatalf("stop after wheel-up = %d; want %d", got, len(stops)-2)
 	}
 }
 
@@ -107,7 +114,7 @@ func TestScrollKeepsCursorVisible(t *testing.T) {
 	m := NewWithOptions(Options{})
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 7})
 
-	m.cursor = len(m.items) - 1
+	selectItemForTest(m, len(m.items)-1)
 	m.ensureCursorVisible()
 
 	layout := m.overviewLayout()
@@ -135,7 +142,7 @@ func TestShortAndFullHelp(t *testing.T) {
 		t.Fatal("expected full help rows")
 	}
 
-	m.cursor = 1
+	selectItemForTest(m, 1)
 	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if len(m.ShortHelp()) == 0 {
 		t.Fatal("expected editing short help bindings")

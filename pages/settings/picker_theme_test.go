@@ -7,8 +7,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/jarvisfriends/snap/timepicker"
 	"github.com/jarvisfriends/tui-base/theme"
-	"github.com/jarvisfriends/tui-base/timepicker"
 )
 
 // TestThemedDatePickerStylesUseSelectionColors verifies the datepicker's
@@ -49,7 +49,7 @@ const hardcodedPink = "38;5;212"
 func TestEditorOverlaysUseThemeNotHardcodedColors(t *testing.T) {
 	t.Parallel()
 
-	dp := NewDirPicker("")
+	dp := newThemedDirPicker("")
 	dp.Width, dp.Height = 80, 24
 	if cmd := dp.Init(); cmd != nil {
 		_, _ = dp.Update(cmd())
@@ -58,7 +58,7 @@ func TestEditorOverlaysUseThemeNotHardcodedColors(t *testing.T) {
 		t.Error("DirPicker still renders the hardcoded 212 selection color")
 	}
 
-	mf := NewMultiFileEditor("a; b")
+	mf := newThemedMultiFileEditor("a; b")
 	_, _ = mf.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	if strings.Contains(mf.View().Content, hardcodedPink) {
 		t.Error("MultiFileEditor still renders the hardcoded 212 selection color")

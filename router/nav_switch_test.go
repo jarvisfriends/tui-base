@@ -5,7 +5,7 @@ import (
 
 	"github.com/jarvisfriends/tui-base/pages/settings"
 
-	"github.com/jarvisfriends/tui-base/navigation"
+	"github.com/jarvisfriends/snap/navigation"
 
 	tea "charm.land/bubbletea/v2"
 )

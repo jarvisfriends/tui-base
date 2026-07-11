@@ -1,7 +1,7 @@
 package home
 
 import (
-	"github.com/jarvisfriends/tui-base/page"
+	"github.com/jarvisfriends/snap/page"
 
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"

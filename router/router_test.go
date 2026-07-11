@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jarvisfriends/tui-base/keys"
+	"github.com/jarvisfriends/snap/keys"
+	"github.com/jarvisfriends/snap/navigation"
+	"github.com/jarvisfriends/snap/notifications"
+	"github.com/jarvisfriends/snap/status"
 	log "github.com/jarvisfriends/tui-base/logging"
-	"github.com/jarvisfriends/tui-base/navigation"
-	"github.com/jarvisfriends/tui-base/notifications"
-	"github.com/jarvisfriends/tui-base/status"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"

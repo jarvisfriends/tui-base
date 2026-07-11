@@ -3,8 +3,8 @@ package home_test
 import (
 	"testing"
 
+	"github.com/jarvisfriends/snap/rendercheck"
 	home "github.com/jarvisfriends/tui-base/pages/home"
-	"github.com/jarvisfriends/tui-base/testutil"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -24,11 +24,11 @@ func TestHomeResizeAndView(t *testing.T) {
 // TestHomeNeverOverflows asserts that the home page View never produces a line
 // wider than the terminal width, at a range of terminal sizes.
 func TestHomeNeverOverflows(t *testing.T) {
-	testutil.CheckNoLineOverflow(t, home.New(), testutil.StandardWidths)
+	rendercheck.CheckNoLineOverflow(t, home.New(), rendercheck.StandardWidths)
 }
 
 // TestHomeNarrowWidths asserts the home page does not crash or overflow at very
 // narrow terminal widths where the bordered box might be wider than the screen.
 func TestHomeNarrowWidths(t *testing.T) {
-	testutil.CheckNoBorderOverflow(t, home.New(), 20, 24)
+	rendercheck.CheckNoBorderOverflow(t, home.New(), 20, 24)
 }

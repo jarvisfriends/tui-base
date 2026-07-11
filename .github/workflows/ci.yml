@@ -30,7 +30,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.x'
+          go-version: '1.26.5'
       - name: Cache Go modules
         uses: actions/cache@v6
         with:
@@ -75,7 +75,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.x'
+          go-version: '1.26.5'
       - name: Install stringer
         # Pinned (CI-1): bump alongside the golang.org/x/tools dependency.
         run: go install golang.org/x/tools/cmd/stringer@v0.47.0
@@ -95,7 +95,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.x'
+          go-version: '1.26.5'
       - name: Check for go fix drift
         run: |
           if ! go fix -diff ./...; then
@@ -118,7 +118,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.x'
+          go-version: '1.26.5'
       - name: Lint
         uses: golangci/golangci-lint-action@v9
         with:
@@ -147,8 +147,7 @@ jobs:
       - name: Link check
         uses: lycheeverse/lychee-action@v2
         env:
-          # Authenticated GitHub requests avoid the anonymous rate limit that
-          # made github.com links flake (CI-6).
+          # Authenticated GitHub requests avoid the anonymous rate limit.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           fail: true
@@ -184,10 +183,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.x'
+          go-version: '1.26.5'
       - name: Install govulncheck
-        # Pinned (CI-1). Bump deliberately; a floating @latest made the
-        # vulnerability gate irreproducible.
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.5.0
       - name: Run govulncheck
         run: govulncheck ./...
@@ -200,10 +197,9 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.x'
+          go-version: '1.26.5'
       - name: Run fuzz targets (30s each)
         # Short timed runs per target catch shallow regressions on every PR
-        # (CI-3); long exploratory fuzzing stays a local/scheduled activity.
         env:
           FUZZTIME: 30s
         run: bash tools/fuzz.sh
@@ -216,9 +212,9 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.x'
+          go-version: '1.26.5'
       - name: Run benchmarks
-        # Informational (CI-4): results are uploaded for trend comparison
+        # results are uploaded for trend comparison
         # (e.g. benchstat old.txt new.txt locally); no thresholds enforced —
         # shared runners are too noisy for hard gates.
         run: go test ./... -run '^$' -bench=. -benchmem -count=1 | tee bench.txt
@@ -238,17 +234,18 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.x'
+          go-version: '1.26.5'
       - name: Install stringer
-        # Pinned (CI-1): needed by the goreleaser before-hook (go generate).
+        # needed by the goreleaser before-hook (go generate).
         run: go install golang.org/x/tools/cmd/stringer@v0.47.0
       - name: GoReleaser snapshot build
         # Catches packaging failures (bad main path, ldflags, matrix) on every
-        # PR instead of on release day (CI-8). Nothing is published.
+        # PR. Nothing is published.
         uses: goreleaser/goreleaser-action@v7
         with:
           version: v2.16.0
-          args: release --snapshot --clean --skip=publish
+          # sign/sbom skipped: cosign+syft only install in the release workflow (I-8)
+          args: release --snapshot --clean --skip=publish,sign,sbom
 
   coverage:
     name: Coverage (ubuntu)
@@ -261,7 +258,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.x'
+          go-version: '1.26.5'
       - name: Cache Go modules
         uses: actions/cache@v6
         with:

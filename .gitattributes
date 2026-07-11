@@ -20,3 +20,6 @@
 *.gif binary
 *.exe binary
 *.wasm binary
+*.ico binary
+*.syso binary
+*.svg text eol=lf

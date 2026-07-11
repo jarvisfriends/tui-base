@@ -3,7 +3,7 @@ package inspector
 import (
 	"testing"
 
-	"github.com/jarvisfriends/tui-base/testutil"
+	"github.com/jarvisfriends/snap/rendercheck"
 )
 
 // TestInspectorBorderIntegrity asserts the CF-3 invariant on the inspector's
@@ -12,5 +12,5 @@ import (
 // inside the border.
 func TestInspectorBorderIntegrity(t *testing.T) {
 	t.Parallel()
-	testutil.CheckBorderIntegrity(t, New(), "│")
+	rendercheck.CheckBorderIntegrity(t, New(), "│")
 }

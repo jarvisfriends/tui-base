@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jarvisfriends/tui-base/navigation"
+	"github.com/jarvisfriends/snap/navigation"
 	"github.com/jarvisfriends/tui-base/theme"
 
 	tea "charm.land/bubbletea/v2"

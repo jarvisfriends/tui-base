@@ -10,16 +10,18 @@ import (
 	"time"
 
 	"github.com/charmbracelet/colorprofile"
+	"github.com/jarvisfriends/snap/gate"
+	"github.com/jarvisfriends/snap/keys"
+	"github.com/jarvisfriends/snap/navigation"
+	"github.com/jarvisfriends/snap/notifications"
+	"github.com/jarvisfriends/snap/status"
+	"github.com/jarvisfriends/tui-base/common"
 	cfg "github.com/jarvisfriends/tui-base/config"
-	"github.com/jarvisfriends/tui-base/gate"
-	"github.com/jarvisfriends/tui-base/keys"
+	"github.com/jarvisfriends/tui-base/filewatch"
 	log "github.com/jarvisfriends/tui-base/logging"
-	"github.com/jarvisfriends/tui-base/navigation"
-	"github.com/jarvisfriends/tui-base/notifications"
 	"github.com/jarvisfriends/tui-base/pages/home"
 	"github.com/jarvisfriends/tui-base/pages/inspector"
 	"github.com/jarvisfriends/tui-base/pages/settings"
-	"github.com/jarvisfriends/tui-base/status"
 	"github.com/jarvisfriends/tui-base/theme"
 
 	"charm.land/bubbles/v2/help"
@@ -98,6 +100,28 @@ type Options struct {
 	SettingsSections []cfg.Section[string]
 	KeyMap           *keys.AppKeyMap
 	Gates            *gate.GateRegistry
+	// WatchSettingsFile enables live reload of tui_settings.json: external
+	// edits are re-applied at runtime and surfaced as a notification (FW-1).
+	// The app's own saves are detected and stay silent. Call
+	// (*RouterModel).Close after Program.Run to release the OS watch
+	// (tuibase.Run/RunContext do this automatically).
+	WatchSettingsFile bool
+	// DebugOverlay, when non-nil, replaces the built-in inspector as the
+	// Ctrl+D debug pop-up: tui-base owns the Ctrl+D toggle and presents this
+	// model in the inspector's overlay box (set via tuibase.WithDebugOverlay).
+	// The model receives WindowSizeMsg with the overlay's inner dimensions,
+	// forwarded keys while visible, and mouse events when its View sets
+	// OnMouse.
+	DebugOverlay tea.Model
+	// DisableTerminalRelaunch turns off the automatic relaunch into Windows
+	// Terminal when the app is started under the legacy Windows console
+	// (conhost). By default tuibase.Run/RunContext relaunch there — on Windows,
+	// in an interactive session, when wt.exe is present and no modern terminal
+	// is already in use — because conhost drops the truecolor/mouse/styling
+	// features the Charm v2 stack depends on. Set this (or the
+	// TUI_BASE_NO_WT_RELAUNCH env var) to opt out. See
+	// [MaybeRelaunchInWindowsTerminal].
+	DisableTerminalRelaunch bool
 }
 
 // pageIDFromTitle derives a stable navigation ID from a human-readable title
@@ -146,6 +170,10 @@ type RouterModel struct {
 	// inspector is a dedicated debug model that receives all messages for
 	// logging/stats and is rendered as an overlay (Ctrl+D).
 	inspector *inspector.InspectorModel
+	// debugOverlay, when non-nil, is the app-injected Ctrl+D debug model
+	// (Options.DebugOverlay); it replaces the built-in inspector pop-up.
+	debugOverlay        tea.Model
+	debugOverlayVisible bool
 	// settingsPage is kept as a stable pointer so app-page replacement can
 	// preserve the settings model and its internal state.
 	settingsPage *settings.SettingsModel
@@ -174,6 +202,15 @@ type RouterModel struct {
 
 	notifMgr         *notifications.Manager
 	notifPersistPath string // default persist path; empty when config dir unavailable
+
+	// settingsWatcher live-reloads tui_settings.json when it changes on disk
+	// (Options.WatchSettingsFile, FW-1). Nil when watching is disabled.
+	settingsWatcher *filewatch.Watcher
+
+	// linkMeter backs the built-in "Link" inspector tab: estimated remote
+	// data rates (Tx = input wire bytes, Rx = frame-diff bytes). Collection
+	// runs only while that tab's provider is started.
+	linkMeter *linkRateMeter
 
 	navigationVisible bool
 
@@ -235,6 +272,23 @@ func NewWithOptions(opts Options) *RouterModel {
 	if configDirName == "" {
 		configDirName = strings.ToLower(appName)
 	}
+
+	// Feature gates: always have a registry (so built-in gated features appear
+	// in the settings Feature Flags section even when the app passes none),
+	// register the framework's own gates the app hasn't defined, then apply
+	// startup env overrides (<APPNAME>_GATE_<NAME>). Gate values are
+	// runtime-only — never persisted to the settings file.
+	if opts.Gates == nil {
+		opts.Gates = gate.NewGateRegistry()
+	}
+	if !opts.Gates.Has(inspector.AccessibilityTabGate) {
+		opts.Gates.Register(gate.FeatureGate{
+			Name:        inspector.AccessibilityTabGate,
+			Default:     false,
+			Description: "Show the Accessibility tab in the Ctrl+D inspector",
+		})
+	}
+	opts.Gates.LoadFromEnv(appName)
 
 	// Set the logging prefix so log files are named after the embedding app.
 	log.SetAppName(configDirName)
@@ -350,8 +404,17 @@ func NewWithOptions(opts Options) *RouterModel {
 	// create a single inspector instance and keep a pointer to it so we can
 	// forward messages to it even when it's not the active page.
 	m.inspector = inspector.New()
+	m.debugOverlay = opts.DebugOverlay
+	// Built-in "Link" tab: estimated remote-link data rates (Tx/Rx). The
+	// meter collects while the inspector's Link tab is open OR while the
+	// status summary's "Include link rate" is enabled (works closed).
+	m.linkMeter = newLinkRateMeter()
+	m.inspector.RegisterTab(&linkRateProvider{meter: m.linkMeter})
+	m.inspector.SetLinkRateSummary(m.linkMeter.statusLine)
 	// Inspector tabs cycle with the same next/previous keys as page navigation.
 	m.inspector.SetNavKeys(m.keys.NextPage, m.keys.PreviousPage)
+	// Gated inspector tabs (Accessibility) follow the shared gate registry.
+	m.inspector.SetGates(opts.Gates)
 
 	// Derive env-var names from the app name so consumers get branded vars
 	// (e.g. "My App", MY_APP_COLOR_PROFILE, MY_APP_DEBUG) instead of the
@@ -397,6 +460,9 @@ func NewWithOptions(opts Options) *RouterModel {
 		}
 	}
 	m.status.SetNotifManager(m.notifMgr)
+	if opts.WatchSettingsFile {
+		m.startSettingsWatch()
+	}
 	m.infoModal = status.NewInfoModal()
 	m.infoModal.SetKeys(m.keys)
 	m.infoModal.SetAppName(m.appName)
@@ -483,19 +549,43 @@ func (m *RouterModel) activeWindowTitle() string {
 	return m.appName
 }
 
-func (m *RouterModel) activatePageByID(id string) bool {
+func (m *RouterModel) activatePageByID(id string) (tea.Cmd, bool) {
 	if m.nav == nil {
-		return false
+		return nil, false
 	}
 	for i, p := range m.nav.GetPages() {
 		if p.ID != id {
 			continue
 		}
-		m.nav.SetActiveIndex(i)
+		cmd := m.switchActivePage(i)
 		m.updatePageKeys()
-		return true
+		return cmd, true
 	}
-	return false
+	return nil, false
+}
+
+// switchActivePage makes index the active page and fires the I-1 lifecycle
+// hooks: OnLeave on the outgoing page, then OnEnter on the incoming one.
+// Selecting the already-active page is a no-op for the hooks — re-selecting
+// a nav item is not a page change.
+func (m *RouterModel) switchActivePage(index int) tea.Cmd {
+	if m.nav == nil || index < 0 || index >= len(m.pages) {
+		return nil
+	}
+	old := m.activePageIndex()
+	if old == index {
+		m.nav.SetActiveIndex(index)
+		return nil
+	}
+	var cmds []tea.Cmd
+	if lv, ok := m.pages[old].(common.PageLeaver); ok {
+		cmds = append(cmds, lv.OnLeave())
+	}
+	m.nav.SetActiveIndex(index)
+	if en, ok := m.pages[index].(common.PageEnterer); ok {
+		cmds = append(cmds, en.OnEnter())
+	}
+	return tea.Batch(cmds...)
 }
 
 // replaceAppPages rebuilds the router page list from app-provided pages while
@@ -568,14 +658,25 @@ func (m *RouterModel) Init() tea.Cmd {
 	for i, p := range m.pages {
 		pgInits[i] = p.Init()
 	}
+	// The initial page "enters" at startup too (I-1), after its Init so the
+	// hook observes an initialized model.
+	if en, ok := m.GetActivePage().(common.PageEnterer); ok {
+		pgInits = append(pgInits, en.OnEnter())
+	}
 	var inspectorInit tea.Cmd
 	if m.inspector != nil {
 		inspectorInit = m.inspector.Init()
+	}
+	var debugOverlayInit tea.Cmd
+	if m.debugOverlay != nil {
+		debugOverlayInit = m.debugOverlay.Init()
 	}
 	return tea.Batch(
 		m.nav.Init(),
 		m.status.Init(),
 		inspectorInit,
+		debugOverlayInit,
+		m.settingsWatchInit(),
 		tea.Batch(pgInits...),
 		// Request an explicit initial size so the first full-frame render is
 		// deterministic across terminals/SSH transports.
@@ -682,6 +783,12 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Price input for the link-rate estimate (no-op unless the inspector's
+	// Link tab has started collection).
+	if m.linkMeter != nil {
+		m.linkMeter.ObserveMsg(msg)
+	}
+
 	// Forward to active components
 	var cmds []tea.Cmd
 	// The inspector receives non-key messages for its message log and runtime
@@ -777,6 +884,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case notifications.AddMsg,
+		notifications.ProgressMsg,
 		notifications.DismissMsg,
 		notifications.DismissKeyMsg,
 		notifications.DismissAllMsg,
@@ -786,6 +894,15 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmds = append(cmds, m.handleResizeCmd())
 		return m, tea.Batch(cmds...)
+
+	case filewatch.Event:
+		// tui_settings.json changed on disk (FW-1): reload, notify when it was
+		// an external edit, and re-arm the watcher.
+		return m, m.handleSettingsFileEvent()
+
+	case filewatch.ErrorMsg:
+		m.handleSettingsFileError(msg)
+		return m, nil
 
 	case settings.NotificationsSettingsMsg:
 		// Apply notification enabled/persist settings to the shared manager.
@@ -803,6 +920,16 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.infoModal.SetKeys(m.keys)
 		m.inspector.SetNavKeys(m.keys.NextPage, m.keys.PreviousPage)
 		m.updatePageKeys()
+		return m, m.handleResizeCmd()
+
+	case settings.GatesChangedMsg:
+		// A feature gate flipped at runtime. The shared registry is already
+		// updated; re-derive gate-dependent UI immediately so the change is
+		// visible without further interaction. Pages read the registry live,
+		// and the resize pass forces a fresh render everywhere.
+		if m.inspector != nil {
+			m.inspector.OnGatesChanged()
+		}
 		return m, m.handleResizeCmd()
 
 	case tea.BackgroundColorMsg:
@@ -921,17 +1048,30 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status.ToggleFullHelpVisible()
 			return m, m.handleResizeCmd()
 		case key.Matches(keyMsg, m.keys.OpenSettings):
-			if m.activatePageByID("settings") {
-				return m, m.handleResizeCmd()
+			if cmd, ok := m.activatePageByID("settings"); ok {
+				return m, tea.Batch(cmd, m.handleResizeCmd())
 			}
 			return m, nil
 		case key.Matches(keyMsg, m.keys.ToggleStatus):
 			m.status.ToggleVisible()
 			return m, m.handleResizeCmd()
+		case key.Matches(keyMsg, m.keys.ToggleHistory):
+			// Keyboard route to the notification history panel (I-12) —
+			// same path as clicking the status bar's notifications region.
+			// Only reached while the panel is closed (open, it consumes keys
+			// via overlayHandleKey and closes itself on this binding).
+			return m, tea.Batch(m.status.ToggleNotifications(), m.handleResizeCmd())
 		case key.Matches(keyMsg, m.keys.Debug):
-			// Only reached when the inspector is not already visible (a visible
-			// inspector consumes keys via overlayHandleKey above), so this opens it.
-			m.inspector.ToggleVisible()
+			// Only reached when no debug overlay is already visible (a visible
+			// one consumes keys via overlayHandleKey above), so this opens it.
+			// An app-injected debug model (Options.DebugOverlay /
+			// tuibase.WithDebugOverlay) takes over Ctrl+D from the built-in
+			// inspector whenever it is non-nil.
+			if m.debugOverlay != nil {
+				m.debugOverlayVisible = true
+			} else {
+				m.inspector.ToggleVisible()
+			}
 			m.updatePageKeys()
 			return m, m.handleResizeCmd()
 		}
@@ -968,7 +1108,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Defensive: SelectedMsg with invalid index still triggers a resize
 			return m, m.handleResizeCmd()
 		}
-		m.nav.SetActiveIndex(msg.PageIndex)
+		cmds = append(cmds, m.switchActivePage(msg.PageIndex))
 		// Keyboard focus is NOT changed here: navigating the sidebar with Up/Down
 		// keeps focus on the sidebar (live page switch). Focus moves to the page
 		// content only on an explicit Right/Enter/Tab (see the key handler). A
@@ -1017,8 +1157,8 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.handleResizeCmd()
 		}
 		if m.nav != nil {
-			if m.activatePageByID(name) {
-				return m, m.handleResizeCmd()
+			if cmd, ok := m.activatePageByID(name); ok {
+				return m, tea.Batch(cmd, m.handleResizeCmd())
 			}
 		}
 		return m, nil
@@ -1052,8 +1192,18 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ow, oh := m.inspectorOverlayInnerSize()
 		cmds = append(cmds, m.updateInspector(tea.WindowSizeMsg{Width: ow, Height: oh}))
 	}
+	// sidebarUsesKey gates which keys a focused sidebar may claim: only its
+	// own navigation keys (arrows, tab, enter, esc). Anything else — page
+	// action letters like `m`, `r`, `/` — falls through to the active page,
+	// so a page action never silently dies just because Esc/← previously
+	// moved focus to the sidebar.
+	sidebarUsesKey := false
+	if kp, ok := msg.(tea.KeyPressMsg); ok {
+		sidebarUsesKey = sidebarNavConsumesKey(kp)
+	}
 	if m.navigationVisible && m.nav != nil {
-		navGetsKeys := isKey && !modalVisible && m.sidebarFocused && !activeCapturesKeys
+		navGetsKeys := isKey && !modalVisible && m.sidebarFocused && !activeCapturesKeys &&
+			sidebarUsesKey
 		if (!isKey && !mouseModal) || navGetsKeys {
 			cmds = append(cmds, m.updateNav(msg))
 		}
@@ -1078,11 +1228,13 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Active page: receives all messages EXCEPT key events that were claimed
-	// by the sidebar (i.e. sidebar focused and page not capturing keys) or
-	// intercepted by a modal overlay, mouse events while a mouse-modal overlay
-	// is open (those belong to the overlay via the OnMouse path), and targeted
-	// messages addressed to a different page.
-	pageGetsKeys := isKey && !modalVisible && (!m.sidebarFocused || activeCapturesKeys)
+	// by the sidebar (i.e. sidebar focused, page not capturing keys, and the
+	// key is one the sidebar actually uses) or intercepted by a modal
+	// overlay, mouse events while a mouse-modal overlay is open (those
+	// belong to the overlay via the OnMouse path), and targeted messages
+	// addressed to a different page.
+	pageGetsKeys := isKey && !modalVisible &&
+		(!m.sidebarFocused || activeCapturesKeys || !sidebarUsesKey)
 	activeGetsTargeted := !isTargeted || m.pageMatchesTarget(idx, targeted.TargetPage())
 	if (!isKey && !mouseModal && activeGetsTargeted) || pageGetsKeys {
 		cmds = append(cmds, m.updatePage(idx, msg))
@@ -1138,11 +1290,11 @@ func (m *RouterModel) cyclePage(delta int) tea.Cmd {
 	}
 	cur := m.nav.GetActiveIndex()
 	next := ((cur+delta)%len(pages) + len(pages)) % len(pages)
-	m.nav.SetActiveIndex(next)
+	switchCmd := m.switchActivePage(next)
 	m.sidebarFocused = false
 	m.setNavFocused(false)
 	m.updatePageKeys()
-	return m.handleResizeCmd()
+	return tea.Batch(switchCmd, m.handleResizeCmd())
 }
 
 // cyclePageTo switches directly to an absolute page index, moving keyboard focus
@@ -1151,11 +1303,11 @@ func (m *RouterModel) cyclePageTo(index int) tea.Cmd {
 	if m.nav == nil || index < 0 || index >= len(m.nav.GetPages()) {
 		return nil
 	}
-	m.nav.SetActiveIndex(index)
+	switchCmd := m.switchActivePage(index)
 	m.sidebarFocused = false
 	m.setNavFocused(false)
 	m.updatePageKeys()
-	return m.handleResizeCmd()
+	return tea.Batch(switchCmd, m.handleResizeCmd())
 }
 
 // navDigitIndex maps a "1".."9" key press to a zero-based page index.
@@ -1169,9 +1321,9 @@ func navDigitIndex(keyMsg tea.KeyPressMsg) (int, bool) {
 
 // StatusBarContent reports the status bar's currently rendered text and whether
 // it is visible. Exposed as an introspection seam so conformance tests
-// (testutil.CheckStatusBarVisible) can assert the status bar is present in every
+// (rendercheck.CheckStatusBarVisible) can assert the status bar is present in every
 // rendered frame — on every page and with overlays open. Satisfies
-// testutil.StatusProvider structurally.
+// rendercheck.StatusProvider structurally.
 func (m *RouterModel) StatusBarContent() (string, bool) {
 	return m.status.View().Content, m.status.IsVisible()
 }
@@ -1380,6 +1532,15 @@ func (m *RouterModel) View() tea.View {
 	// the overlay are never blanked.
 	contentStr = m.renderOverlays(contentStr, statusHeight)
 
+	// Sync status-bar demand, then price the finished frame for the
+	// link-rate estimate (no-op while nothing demands collection).
+	if m.linkMeter != nil {
+		if m.inspector != nil {
+			m.linkMeter.setDemand(demandStatusBar, m.inspector.StatusSummaryLinkEnabled())
+		}
+		m.linkMeter.ObserveFrame(contentStr)
+	}
+
 	// Bubble Tea emits BackgroundColor/ForegroundColor as OSC sequences that the
 	// color-profile writer passes through UNCHANGED (it only downsamples SGR).
 	// Convert them through the active profile ourselves so the terminal-default
@@ -1517,6 +1678,13 @@ func (m *RouterModel) routeMouseWithNavVisible(
 		return route(navView, 0, 0, "tabs")
 	}
 	if mmPos.Y < mainHeight {
+		// Content area click: release nav keyboard focus (parity with the
+		// DockLeft branch) so page keys work right after clicking into the
+		// content.
+		if m.sidebarFocused {
+			m.sidebarFocused = false
+			m.setNavFocused(false)
+		}
 		return route(activePageView, 0, navH, "content")
 	}
 	return nil
@@ -1547,6 +1715,20 @@ func (m *RouterModel) handleNavKeys(keyMsg tea.KeyPressMsg) (tea.Cmd, bool) {
 
 // handleSidebarNavKey handles key events when the active nav is a sidebar
 // (implements navigation.Focusable). It manages focus transitions between the
+// sidebarNavConsumesKey reports whether a focused sidebar claims this key.
+// It must cover exactly the keys navigation.DefaultKeyMap and
+// handleSidebarNavKey react to: arrows, tab/shift+tab, enter, and esc.
+// Every other key falls through to the active page even while the sidebar
+// is focused, so page action keys (`m`, `r`, `/`) always work.
+func sidebarNavConsumesKey(k tea.KeyPressMsg) bool {
+	switch k.Code {
+	case tea.KeyUp, tea.KeyDown, tea.KeyLeft, tea.KeyRight,
+		tea.KeyTab, tea.KeyEnter, tea.KeyEscape:
+		return true
+	}
+	return false
+}
+
 // sidebar region and the page region without cycling pages via Tab/Shift+Tab.
 func (m *RouterModel) handleSidebarNavKey(keyMsg tea.KeyPressMsg) (tea.Cmd, bool) {
 	// Region focus model for the sidebar (the recommended UX):

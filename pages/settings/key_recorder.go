@@ -9,8 +9,6 @@ import (
 	"github.com/jarvisfriends/tui-base/theme"
 )
 
-const keyCtrlS = "ctrl+s"
-
 type KeyRecorder struct {
 	keys      []string
 	cursor    int
