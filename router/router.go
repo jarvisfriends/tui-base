@@ -884,6 +884,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case notifications.AddMsg,
+		notifications.ProgressMsg,
 		notifications.DismissMsg,
 		notifications.DismissKeyMsg,
 		notifications.DismissAllMsg,

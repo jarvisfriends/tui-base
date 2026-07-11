@@ -8,6 +8,12 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
 
 ### Added
 
+- Progress notifications (snap v0.1.6): the toast overlay draws a
+  severity-tinted `charts.HBar` + percent under the message when a
+  notification carries `Percent`, and the router forwards
+  `notifications.ProgressMsg` so hosts can stream progress updates by ID
+  or key.
+
 - Page lifecycle hooks (I-1): page models may implement
   `common.PageEnterer` (`OnEnter() tea.Cmd`) and/or `common.PageLeaver`
   (`OnLeave() tea.Cmd`); the router calls them on every page switch (and
