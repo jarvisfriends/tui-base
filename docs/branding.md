@@ -78,12 +78,11 @@ Flags:
 | `-name` / `-desc` / `-version` | `TUI Base` / `-name` / `0.0.0.0` | Product metadata recorded in the Windows resource. |
 | `-manifest` | *(empty)* | Optional application manifest (`.xml`) to embed. |
 
-The rasterizer ([resvg](https://github.com/linebender/resvg) compiled to
-WebAssembly, run in-process via
-[resvg-go](https://github.com/kanrichan/resvg-go)/wazero — no CGO) covers
-static SVG very completely: fills, strokes, paths, gradients, patterns,
-filters, and `<text>`. Scripting and animation are out of scope. Start from
-`assets/icon.svg` and restyle it.
+The rasterizer ([Cogent Core](https://github.com/cogentcore/core)'s pure-Go
+`svg` package — the maintained in-tree successor of the archived
+oksvg/rasterx lineage) covers static SVG well: fills, strokes, paths,
+linear/radial gradients, and `<text>`. Avoid CSS stylesheets, filters, and
+scripting. Start from `assets/icon.svg` and restyle it.
 
 Each size is rendered at `-supersample`× (default 4×) and downscaled with a
 Catmull-Rom filter. This matters: rasterizing thin strokes directly at 16–48 px

@@ -20,7 +20,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"flag"
 	"fmt"
@@ -32,8 +31,17 @@ import (
 	"strconv"
 	"strings"
 
+	"cogentcore.org/core/math32"
+	"cogentcore.org/core/svg"
+
+	// Cogent Core resolves its image renderer and text shaper through
+	// registration variables; the implementations register themselves via
+	// these blank imports (without them, RenderImage nil-panics even for
+	// text-free artwork).
+	_ "cogentcore.org/core/paint/renderers"
+	_ "cogentcore.org/core/text/shaped/shapers"
+
 	"github.com/josephspurrier/goversioninfo"
-	resvg "github.com/kanrichan/resvg-go"
 	xdraw "golang.org/x/image/draw"
 )
 
@@ -106,15 +114,9 @@ func main() {
 	if *ss < 1 {
 		*ss = 1
 	}
-	r, err := newSVGRenderer(*svgPath)
-	if err != nil {
-		log.Fatalf("genicon: open renderer for %s: %v", *svgPath, err)
-	}
-	defer r.Close()
-
 	imgs := make([]*image.RGBA, len(sizes))
 	for i, s := range sizes {
-		img, err := r.render(s, *ss)
+		img, err := renderSVG(*svgPath, s, *ss)
 		if err != nil {
 			log.Fatalf("genicon: render %s at %dpx: %v", *svgPath, s, err)
 		}
@@ -127,7 +129,7 @@ func main() {
 	log.Printf("genicon: wrote %s (%d sizes: %s)", *icoPath, len(sizes), *sizesCSV)
 
 	if *pngPath != "" {
-		img, err := r.render(*pngSize, *ss)
+		img, err := renderSVG(*svgPath, *pngSize, *ss)
 		if err != nil {
 			log.Fatalf("genicon: render %s at %dpx: %v", *svgPath, *pngSize, err)
 		}
@@ -146,95 +148,32 @@ func main() {
 	}
 }
 
-// svgRenderer rasterizes one SVG at multiple sizes through resvg-go — the
-// resvg renderer compiled to WebAssembly, run in-process by wazero. It
-// replaces the archived srwiley oksvg/rasterx pair; the wasm worker is
-// reused across renders because instantiating it dominates a single render.
-type svgRenderer struct {
-	wk     *resvg.Worker
-	fontdb *resvg.FontDB
-	data   []byte
-	path   string
-}
-
-func newSVGRenderer(path string) (*svgRenderer, error) {
+// renderSVG rasterizes an SVG file into a size x size RGBA image using
+// Cogent Core's pure-Go SVG renderer (the maintained successor lineage of
+// the archived srwiley oksvg/rasterx pair — absorbed and maintained
+// in-tree, so no srwiley modules appear in the graph). It renders at ss×
+// the target size and then downsamples with a Catmull-Rom filter, because
+// rasterizing thin strokes directly at 16–48 px aliases badly (the icon
+// Windows actually shows in Explorer and the taskbar). Supersampling gives
+// the tiny sizes clean, legible edges. Non-square artwork aspect-fits per
+// standard SVG preserveAspectRatio semantics.
+func renderSVG(path string, size, ss int) (*image.RGBA, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	wk, err := resvg.NewDefaultWorker(context.Background())
-	if err != nil {
-		return nil, err
-	}
-	// A font database makes <text> elements render instead of silently
-	// dropping; the icon SVGs mostly don't use text, but branded artwork can.
-	fontdb, err := wk.NewFontDBDefault()
-	if err != nil {
-		_ = wk.Close()
-		return nil, err
-	}
-	return &svgRenderer{wk: wk, fontdb: fontdb, data: data, path: path}, nil
-}
-
-func (r *svgRenderer) Close() {
-	if r.fontdb != nil {
-		_ = r.fontdb.Close()
-	}
-	_ = r.wk.Close()
-}
-
-// render rasterizes the SVG into a size x size RGBA image. It renders at ss×
-// the target size and then downsamples with a Catmull-Rom filter, because
-// rasterizing thin strokes directly at 16–48 px aliases badly (the icon
-// Windows actually shows in Explorer and the taskbar). Supersampling gives
-// the tiny sizes clean, legible edges. Non-square artwork is aspect-fit and
-// centered on the transparent square via the render transform.
-func (r *svgRenderer) render(size, ss int) (*image.RGBA, error) {
-	tree, err := r.wk.NewTreeFromData(r.data, &resvg.Options{Dpi: 96})
-	if err != nil {
-		return nil, err
-	}
-	defer tree.Close() //nolint:errcheck // wasm-side handle
-	if err := tree.ConvertText(r.fontdb); err != nil {
-		return nil, err
-	}
-	w, h, err := tree.GetSize()
-	if err != nil {
-		return nil, err
-	}
-	if w <= 0 || h <= 0 {
-		return nil, fmt.Errorf("%s: SVG has no intrinsic size", r.path)
-	}
-
-	// Map the artwork's larger dimension onto the supersampled square,
-	// centering the shorter one.
 	hi := size * ss
-	scale := float32(hi) / max(w, h)
-	tx := (float32(hi) - w*scale) / 2
-	ty := (float32(hi) - h*scale) / 2
-	pm, err := r.wk.NewPixmap(uint32(hi), uint32(hi))
-	if err != nil {
-		return nil, err
-	}
-	defer pm.Close() //nolint:errcheck // wasm-side handle
-	if err := tree.Render(resvg.TransformFromRow(scale, 0, 0, scale, tx, ty), pm); err != nil {
-		return nil, err
-	}
-	pngBytes, err := pm.EncodePNG()
-	if err != nil {
-		return nil, err
-	}
-	decoded, err := png.Decode(bytes.NewReader(pngBytes))
+	img, err := svg.SVGToImage(data, math32.Vec2(float32(hi), float32(hi)))
 	if err != nil {
 		return nil, err
 	}
 
 	out := image.NewRGBA(image.Rect(0, 0, size, size))
 	if ss == 1 {
-		xdraw.Draw(out, out.Bounds(), decoded, decoded.Bounds().Min, xdraw.Src)
+		xdraw.Draw(out, out.Bounds(), img, img.Bounds().Min, xdraw.Src)
 		return out, nil
 	}
-	xdraw.CatmullRom.Scale(out, out.Bounds(), decoded, decoded.Bounds(), xdraw.Over, nil)
+	xdraw.CatmullRom.Scale(out, out.Bounds(), img, img.Bounds(), xdraw.Over, nil)
 	return out, nil
 }
 

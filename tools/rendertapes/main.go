@@ -152,7 +152,7 @@ func findTapes(root string) ([]string, error) {
 
 // ensureImage pulls the VHS image when it is not already present.
 func ensureImage(ctx context.Context, cli *client.Client, ref string) error {
-	if _, _, err := cli.ImageInspectWithRaw(ctx, ref); err == nil {
+	if _, err := cli.ImageInspect(ctx, ref); err == nil {
 		return nil
 	}
 	rc, err := cli.ImagePull(ctx, ref, image.PullOptions{})

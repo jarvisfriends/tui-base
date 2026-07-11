@@ -10,11 +10,14 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
 
 - `tools/genicon` swapped its SVG rasterizer from the archived
   `srwiley/oksvg` + `rasterx` pair (unmaintained 4+ years, flagged by the
-  dependency scanner) to resvg via `kanrichan/resvg-go` — the resvg
-  renderer compiled to WebAssembly, run in-process by wazero, no CGO.
-  Output is visually identical; SVG coverage actually improves (filters,
-  patterns, `<text>`). Assets regenerated. tdewolff/canvas was evaluated
-  first but its rasterizer imports `srwiley/rasterx` itself.
+  dependency scanner) to Cogent Core's pure-Go `svg` package
+  (`cogentcore.org/core`, OpenSSF Scorecard 4.8) — the actively maintained
+  in-tree successor of that same rasterx lineage, so no `srwiley` modules
+  remain anywhere in the graph. Output is visually identical; assets
+  regenerated. Rejected on the way: `tdewolff/canvas` (3.3, but its
+  rasterizer imports `srwiley/rasterx` itself) and `kanrichan/resvg-go`
+  (best fidelity, but scored 2.9 — below the 3.0 threshold — and GPL-3.0
+  licensed).
 
 ### Added
 
