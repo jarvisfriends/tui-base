@@ -315,7 +315,12 @@ if command -v govulncheck >/dev/null 2>&1; then
     echo "--- $moddir: govulncheck -scan module"
     # Module-level scan flags vulnerable dependency versions regardless of
     # reachability — the same bar the CI dependency review applies.
-    (cd "$moddir" && run_go_tool "govulncheck" \
+    # govulncheck loads the current-directory package even for module scans,
+    # so run from the module's first package dir (module roots without .go
+    # files error out otherwise).
+    pkgdir=$( (cd "$moddir" && go list -f '{{.Dir}}' ./... 2>/dev/null | head -1) || true)
+    [[ -z "$pkgdir" ]] && pkgdir="$moddir"
+    (cd "$pkgdir" && run_go_tool "govulncheck" \
       "go install golang.org/x/vuln/cmd/govulncheck@latest" \
       -scan module)
 

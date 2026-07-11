@@ -80,7 +80,8 @@ func run() error {
 	defer cleanDemoBinaries(root)
 
 	ctx := context.Background()
-	cli, err := client.New(client.FromEnv, client.WithAPIVersionNegotiation())
+	// API-version negotiation is on by default in the moby client.
+	cli, err := client.New(client.FromEnv)
 	if err != nil {
 		return fmt.Errorf("docker/podman client: %w", err)
 	}

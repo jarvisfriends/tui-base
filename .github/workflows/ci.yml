@@ -147,8 +147,7 @@ jobs:
       - name: Link check
         uses: lycheeverse/lychee-action@v2
         env:
-          # Authenticated GitHub requests avoid the anonymous rate limit that
-          # made github.com links flake (CI-6).
+          # Authenticated GitHub requests avoid the anonymous rate limit.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           fail: true
@@ -241,7 +240,7 @@ jobs:
         run: go install golang.org/x/tools/cmd/stringer@v0.47.0
       - name: GoReleaser snapshot build
         # Catches packaging failures (bad main path, ldflags, matrix) on every
-        # PR instead of on release day (CI-8). Nothing is published.
+        # PR. Nothing is published.
         uses: goreleaser/goreleaser-action@v7
         with:
           version: v2.16.0
