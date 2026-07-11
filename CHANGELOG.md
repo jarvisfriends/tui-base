@@ -6,6 +6,16 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
 
 ## [Unreleased]
 
+### Changed
+
+- `tools/genicon` swapped its SVG rasterizer from the archived
+  `srwiley/oksvg` + `rasterx` pair (unmaintained 4+ years, flagged by the
+  dependency scanner) to resvg via `kanrichan/resvg-go` — the resvg
+  renderer compiled to WebAssembly, run in-process by wazero, no CGO.
+  Output is visually identical; SVG coverage actually improves (filters,
+  patterns, `<text>`). Assets regenerated. tdewolff/canvas was evaluated
+  first but its rasterizer imports `srwiley/rasterx` itself.
+
 ### Added
 
 - Settings overview declutter (SP-9): framework categories start

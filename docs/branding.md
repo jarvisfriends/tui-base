@@ -78,9 +78,11 @@ Flags:
 | `-name` / `-desc` / `-version` | `TUI Base` / `-name` / `0.0.0.0` | Product metadata recorded in the Windows resource. |
 | `-manifest` | *(empty)* | Optional application manifest (`.xml`) to embed. |
 
-The rasterizer ([oksvg](https://github.com/srwiley/oksvg)) implements a
-practical subset of SVG: solid fills, rounded rectangles, simple paths, and
-linear/radial gradients. Avoid CSS, filters, and patterns. Start from
+The rasterizer ([resvg](https://github.com/linebender/resvg) compiled to
+WebAssembly, run in-process via
+[resvg-go](https://github.com/kanrichan/resvg-go)/wazero — no CGO) covers
+static SVG very completely: fills, strokes, paths, gradients, patterns,
+filters, and `<text>`. Scripting and animation are out of scope. Start from
 `assets/icon.svg` and restyle it.
 
 Each size is rendered at `-supersample`× (default 4×) and downscaled with a
