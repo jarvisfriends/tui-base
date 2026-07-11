@@ -8,6 +8,17 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
 
 ### Changed
 
+- `tools/rendertapes` migrated from `github.com/docker/docker` (five open
+  advisories — three high — with the `+incompatible` line frozen at the
+  vulnerable v28.5.2 forever) to the successor modules
+  `github.com/moby/moby/client` + `api`, where the v29.3.1 fixes live.
+- `tools/local_verify.sh` gained CI parity for the dependency-review
+  checks that kept surprising us in PRs: nested tool modules are now
+  built and vetted, every module gets a module-level `govulncheck`
+  scan (reachability-independent, like CI), and each module's direct
+  deps are checked against the OpenSSF Scorecard threshold (vanity
+  import paths resolved via their go-import meta tags).
+
 - `tools/genicon` swapped its SVG rasterizer from the archived
   `srwiley/oksvg` + `rasterx` pair (unmaintained 4+ years, flagged by the
   dependency scanner) to Cogent Core's pure-Go `svg` package

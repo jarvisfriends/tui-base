@@ -30,10 +30,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/moby/moby/api/pkg/stdcopy"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/client"
 )
 
 func main() {
@@ -81,7 +80,7 @@ func run() error {
 	defer cleanDemoBinaries(root)
 
 	ctx := context.Background()
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := client.New(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return fmt.Errorf("docker/podman client: %w", err)
 	}
@@ -155,7 +154,7 @@ func ensureImage(ctx context.Context, cli *client.Client, ref string) error {
 	if _, err := cli.ImageInspect(ctx, ref); err == nil {
 		return nil
 	}
-	rc, err := cli.ImagePull(ctx, ref, image.PullOptions{})
+	rc, err := cli.ImagePull(ctx, ref, client.ImagePullOptions{})
 	if err != nil {
 		return err
 	}
@@ -168,33 +167,36 @@ func ensureImage(ctx context.Context, cli *client.Client, ref string) error {
 // /vhs (the image's working directory), mirroring
 // `docker run --rm -v <root>:/vhs ghcr.io/charmbracelet/vhs <tape>`.
 func renderTape(ctx context.Context, cli *client.Client, imageRef, root, relTape string) error {
-	created, err := cli.ContainerCreate(ctx,
-		&container.Config{
+	created, err := cli.ContainerCreate(ctx, client.ContainerCreateOptions{
+		Config: &container.Config{
 			Image: imageRef,
 			Cmd:   []string{relTape},
 		},
-		&container.HostConfig{
+		HostConfig: &container.HostConfig{
 			Binds:      []string{root + ":/vhs"},
 			AutoRemove: false, // removed explicitly after logs are collected
 		},
-		nil, nil, "")
+	})
 	if err != nil {
 		return err
 	}
 	id := created.ID
 	defer func() {
-		_ = cli.ContainerRemove(context.WithoutCancel(ctx), id, container.RemoveOptions{Force: true})
+		_, _ = cli.ContainerRemove(
+			context.WithoutCancel(ctx), id, client.ContainerRemoveOptions{Force: true})
 	}()
 
-	if err := cli.ContainerStart(ctx, id, container.StartOptions{}); err != nil {
+	if _, err := cli.ContainerStart(ctx, id, client.ContainerStartOptions{}); err != nil {
 		return err
 	}
 
-	waitC, errC := cli.ContainerWait(ctx, id, container.WaitConditionNotRunning)
+	wait := cli.ContainerWait(ctx, id, client.ContainerWaitOptions{
+		Condition: container.WaitConditionNotRunning,
+	})
 	select {
-	case err := <-errC:
+	case err := <-wait.Error:
 		return err
-	case status := <-waitC:
+	case status := <-wait.Result:
 		if status.StatusCode != 0 {
 			return fmt.Errorf("vhs exited %d:\n%s", status.StatusCode, containerLogs(ctx, cli, id))
 		}
@@ -204,7 +206,7 @@ func renderTape(ctx context.Context, cli *client.Client, imageRef, root, relTape
 
 // containerLogs collects a failed container's output for the error message.
 func containerLogs(ctx context.Context, cli *client.Client, id string) string {
-	rc, err := cli.ContainerLogs(ctx, id, container.LogsOptions{ShowStdout: true, ShowStderr: true})
+	rc, err := cli.ContainerLogs(ctx, id, client.ContainerLogsOptions{ShowStdout: true, ShowStderr: true})
 	if err != nil {
 		return "(logs unavailable: " + err.Error() + ")"
 	}
