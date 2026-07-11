@@ -1,0 +1,129 @@
+<svg viewBox="0 0 1200 420" xmlns="http://www.w3.org/2000/svg" font-family="Verdana, Geneva, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5B3DF5"/>
+      <stop offset="1" stop-color="#9D6BFF"/>
+    </linearGradient>
+    <linearGradient id="amp" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2E2150"/>
+      <stop offset="1" stop-color="#201640"/>
+    </linearGradient>
+    <g id="spark4">
+      <path d="M0,-12 L3,-3 L12,0 L3,3 L0,12 L-3,3 L-12,0 L-3,-3 Z" fill="#FFE9A8"/>
+    </g>
+  </defs>
+
+  <rect x="8" y="8" width="1184" height="404" rx="28" fill="url(#bg)"/>
+
+  <!-- sparkles / stage dust -->
+  <use href="#spark4" x="140" y="80" opacity="0.85"/>
+  <use href="#spark4" x="1060" y="70" opacity="0.7"/>
+  <use href="#spark4" x="1105" y="300" opacity="0.6"/>
+  <use href="#spark4" x="95" y="320" opacity="0.6"/>
+  <use href="#spark4" x="620" y="52" opacity="0.7"/>
+
+  <!-- terminal amp -->
+  <g transform="translate(600,205)">
+    <rect x="-130" y="-95" width="260" height="200" rx="18" fill="url(#amp)" stroke="#150E2E" stroke-width="6"/>
+    <circle cx="-105" cy="-72" r="7" fill="#FF6B8B"/>
+    <circle cx="-83" cy="-72" r="7" fill="#FFD93D"/>
+    <circle cx="-61" cy="-72" r="7" fill="#6BFFB8"/>
+    <!-- kawaii face -->
+    <circle cx="40" cy="-72" r="5" fill="#FFE9A8"/>
+    <circle cx="80" cy="-72" r="5" fill="#FFE9A8"/>
+    <path d="M50,-64 Q60,-56 70,-64" fill="none" stroke="#FFE9A8" stroke-width="4" stroke-linecap="round"/>
+    <!-- speaker grill -->
+    <g fill="#4A3A78">
+      <circle cx="-90" cy="-30" r="6"/><circle cx="-60" cy="-30" r="6"/><circle cx="-30" cy="-30" r="6"/><circle cx="0" cy="-30" r="6"/><circle cx="30" cy="-30" r="6"/><circle cx="60" cy="-30" r="6"/><circle cx="90" cy="-30" r="6"/>
+      <circle cx="-90" cy="0" r="6"/><circle cx="-60" cy="0" r="6"/><circle cx="-30" cy="0" r="6"/><circle cx="0" cy="0" r="6"/><circle cx="30" cy="0" r="6"/><circle cx="60" cy="0" r="6"/><circle cx="90" cy="0" r="6"/>
+      <circle cx="-90" cy="30" r="6"/><circle cx="-60" cy="30" r="6"/><circle cx="-30" cy="30" r="6"/><circle cx="0" cy="30" r="6"/><circle cx="30" cy="30" r="6"/><circle cx="60" cy="30" r="6"/><circle cx="90" cy="30" r="6"/>
+    </g>
+    <!-- knobs -->
+    <g>
+      <circle cx="-45" cy="72" r="14" fill="#FFD93D" stroke="#150E2E" stroke-width="4"/>
+      <rect x="-47" y="60" width="4" height="10" rx="2" fill="#150E2E"/>
+      <circle cx="45" cy="72" r="14" fill="#FFD93D" stroke="#150E2E" stroke-width="4"/>
+      <rect x="43" y="60" width="4" height="10" rx="2" fill="#150E2E" transform="rotate(45 45 72)"/>
+    </g>
+  </g>
+
+  <!-- upright double bass (acoustic), leaning left of the amp -->
+  <g transform="translate(330,215) rotate(-6)">
+    <!-- neck + scroll -->
+    <rect x="-7" y="-190" width="14" height="130" rx="6" fill="#7A4A22" stroke="#3C2410" stroke-width="5"/>
+    <path d="M-6,-190 q-14,-16 2,-26 q18,-10 16,10 q-2,12 -12,12" fill="#7A4A22" stroke="#3C2410" stroke-width="5"/>
+    <!-- tuning pegs -->
+    <circle cx="-16" cy="-196" r="6" fill="#FFD93D" stroke="#3C2410" stroke-width="3"/>
+    <circle cx="16" cy="-188" r="6" fill="#FFD93D" stroke="#3C2410" stroke-width="3"/>
+    <!-- body: violin-ish silhouette from two blended lobes -->
+    <path d="M0,-70
+             C 52,-70 62,-38 50,-16
+             C 42,-2 42,6 52,20
+             C 68,44 58,96 0,96
+             C -58,96 -68,44 -52,20
+             C -42,6 -42,-2 -50,-16
+             C -62,-38 -52,-70 0,-70 Z"
+          fill="#C97B3D" stroke="#3C2410" stroke-width="6"/>
+    <path d="M0,-58
+             C 42,-58 50,-34 40,-14
+             C 33,-2 33,6 42,20
+             C 55,42 46,84 0,84
+             C -46,84 -55,42 -42,20
+             C -33,6 -33,-2 -40,-14
+             C -50,-34 -42,-58 0,-58 Z"
+          fill="#E8A76A"/>
+    <!-- f-holes -->
+    <path d="M-24,-6 q-6,18 2,34" fill="none" stroke="#3C2410" stroke-width="5" stroke-linecap="round"/>
+    <path d="M24,-6 q6,18 -2,34" fill="none" stroke="#3C2410" stroke-width="5" stroke-linecap="round"/>
+    <!-- bridge + strings -->
+    <rect x="-16" y="34" width="32" height="8" rx="3" fill="#3C2410"/>
+    <g stroke="#FFF2D9" stroke-width="2.4">
+      <line x1="-6" y1="-186" x2="-6" y2="60"/>
+      <line x1="-2" y1="-186" x2="-2" y2="60"/>
+      <line x1="2" y1="-186" x2="2" y2="60"/>
+      <line x1="6" y1="-186" x2="6" y2="60"/>
+    </g>
+    <!-- tailpiece -->
+    <path d="M-10,58 L10,58 L6,84 L-6,84 Z" fill="#3C2410"/>
+  </g>
+
+  <!-- electric bass leaning right of the amp -->
+  <g transform="translate(872,225) rotate(14)">
+    <!-- neck -->
+    <rect x="-6" y="-200" width="12" height="150" rx="5" fill="#8A5A2B" stroke="#2B1B0C" stroke-width="5"/>
+    <!-- headstock with 4 tuners -->
+    <path d="M-6,-200 L-6,-238 Q-6,-248 6,-246 L14,-244 Q20,-230 14,-200 Z" fill="#8A5A2B" stroke="#2B1B0C" stroke-width="5"/>
+    <circle cx="-14" cy="-236" r="6" fill="#FFD93D" stroke="#2B1B0C" stroke-width="3"/>
+    <circle cx="-14" cy="-220" r="6" fill="#FFD93D" stroke="#2B1B0C" stroke-width="3"/>
+    <circle cx="22" cy="-232" r="6" fill="#FFD93D" stroke="#2B1B0C" stroke-width="3"/>
+    <circle cx="22" cy="-216" r="6" fill="#FFD93D" stroke="#2B1B0C" stroke-width="3"/>
+    <!-- offset solid body -->
+    <path d="M0,-56
+             C 40,-64 66,-40 60,-8
+             C 56,14 66,26 58,48
+             C 46,80 8,88 -16,72
+             C -44,56 -52,30 -42,6
+             C -34,-12 -46,-28 -30,-44
+             C -20,-54 -10,-54 0,-56 Z"
+          fill="#35D0BA" stroke="#0F3D36" stroke-width="6"/>
+    <!-- pickguard swoosh -->
+    <path d="M-26,-30 C 10,-44 40,-24 36,4 C 32,26 8,34 -10,26 C -30,16 -38,-14 -26,-30 Z" fill="#6BFFD9" opacity="0.7"/>
+    <!-- pickups -->
+    <rect x="-16" y="-18" width="34" height="12" rx="5" fill="#0F3D36"/>
+    <rect x="-16" y="6" width="34" height="12" rx="5" fill="#0F3D36"/>
+    <!-- knobs -->
+    <circle cx="30" cy="40" r="7" fill="#FFD93D" stroke="#0F3D36" stroke-width="3"/>
+    <circle cx="46" cy="30" r="7" fill="#FFD93D" stroke="#0F3D36" stroke-width="3"/>
+    <!-- strings -->
+    <g stroke="#FFF2D9" stroke-width="2.2">
+      <line x1="-4.5" y1="-238" x2="-4.5" y2="20"/>
+      <line x1="-1.5" y1="-238" x2="-1.5" y2="20"/>
+      <line x1="1.5" y1="-238" x2="1.5" y2="20"/>
+      <line x1="4.5" y1="-238" x2="4.5" y2="20"/>
+    </g>
+  </g>
+
+  <!-- wordmark -->
+  <text x="600" y="372" text-anchor="middle" font-size="64" font-weight="bold" fill="#FFFFFF" letter-spacing="5">tui-base</text>
+  <text x="600" y="400" text-anchor="middle" font-size="19" fill="#241A47" opacity="0.9">the bass-line for your charm apps</text>
+</svg>

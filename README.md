@@ -1,5 +1,7 @@
 # tui-base
 
+![tui-base — the bass-line for your charm apps](assets/banner.svg)
+
 A structured, production-minded foundation for building large Charm v2 terminal applications in Go.
 
 This project is designed for engineers who want more than a demo app: predictable architecture,
