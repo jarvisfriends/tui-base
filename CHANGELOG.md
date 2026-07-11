@@ -8,6 +8,10 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
 
 ### Added
 
+- The notification history panel is keyboard-reachable (I-12, snap
+  v0.1.7): `ctrl+n` (rebindable `ToggleHistory`) toggles it open and
+  closed; previously it opened only by clicking the status bar's bell.
+
 - Progress notifications (snap v0.1.6): the toast overlay draws a
   severity-tinted `charts.HBar` + percent under the message when a
   notification carries `Percent`, and the router forwards

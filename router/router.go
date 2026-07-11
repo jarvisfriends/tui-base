@@ -1055,6 +1055,12 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(keyMsg, m.keys.ToggleStatus):
 			m.status.ToggleVisible()
 			return m, m.handleResizeCmd()
+		case key.Matches(keyMsg, m.keys.ToggleHistory):
+			// Keyboard route to the notification history panel (I-12) —
+			// same path as clicking the status bar's notifications region.
+			// Only reached while the panel is closed (open, it consumes keys
+			// via overlayHandleKey and closes itself on this binding).
+			return m, tea.Batch(m.status.ToggleNotifications(), m.handleResizeCmd())
 		case key.Matches(keyMsg, m.keys.Debug):
 			// Only reached when no debug overlay is already visible (a visible
 			// one consumes keys via overlayHandleKey above), so this opens it.

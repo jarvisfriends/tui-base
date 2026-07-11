@@ -281,7 +281,7 @@ func (o *historyOverlay) OverlayKey(k tea.KeyPressMsg) tea.Cmd {
 		notifCount = len(m.notifMgr.Active())
 	}
 	switch {
-	case key.Matches(k, m.keys.Quit):
+	case key.Matches(k, m.keys.Quit), key.Matches(k, m.keys.ToggleHistory):
 		m.status.CloseHistory()
 	case key.Matches(k, m.keys.Up):
 		m.status.NotifHistoryCursorUp()

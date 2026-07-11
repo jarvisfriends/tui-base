@@ -33,6 +33,17 @@ Sleep 1s
 Sleep 4s
 Sleep 5s
 
+# Ctrl+N opens the notification history panel (I-12); arrows move the
+# cursor, d dismisses everything, Ctrl+N closes it again.
+Ctrl+N
+Sleep 2s
+Down
+Sleep 1s
+Type "d"
+Sleep 1.5s
+Ctrl+N
+Sleep 1s
+
 # Status bar: Ctrl+H expands the full key help, Ctrl+J hides/shows the bar.
 Ctrl+H
 Sleep 2s
