@@ -8,6 +8,13 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
 
 ### Added
 
+- Settings overview declutter (SP-9): framework categories start
+  collapsed (`▸ Title (n)`) while app-provided sections stay expanded;
+  Enter or a click on a header toggles it, and
+  `SettingsModel.ExpandAllCategories()` restores the fully expanded
+  view. Selects with a single effective option (e.g. one registered
+  theme) become display-only rows — value shown, no edit affordance.
+
 - The notification history panel is keyboard-reachable (I-12, snap
   v0.1.7): `ctrl+n` (rebindable `ToggleHistory`) toggles it open and
   closed; previously it opened only by clicking the status bar's bell.

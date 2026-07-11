@@ -154,17 +154,35 @@ type settingItem struct {
 	buildForm  func() *huh.Form
 	buildModel func() tea.Model
 	apply      func() error
+	// choices is the effective option count for select-backed items; 0 means
+	// unrestricted (text fields, pickers, key recorder — the set can always
+	// change). A count of exactly 1 makes the row display-only (SP-9): the
+	// value shows but there is nothing to choose, so the edit affordance and
+	// cursor stop are hidden.
+	choices int
 }
+
+// displayOnly reports whether the item shows a value without offering an
+// edit: a select whose effective option count is one (SP-9).
+func (it settingItem) displayOnly() bool { return it.choices == 1 }
 
 type settingsCategory struct {
 	title      string
 	itemIdxSet []int
+	// appOwned marks categories from Options.ExtraSections — the app's own
+	// settings stay expanded by default while the framework's categories
+	// start collapsed (SP-9).
+	appOwned  bool
+	collapsed bool
 }
 
 type overviewEntry struct {
 	header    string
 	itemIndex int
 	isHeader  bool
+	// catIndex is the m.categories index behind a header entry, so clicks
+	// and the header cursor can toggle the right category (SP-9).
+	catIndex int
 }
 
 type overviewLayout struct {
@@ -278,6 +296,10 @@ type SettingsModel struct {
 
 	// Overview state.
 	cursor int
+	// headerCursor puts the overview cursor on a category header instead of
+	// an item: >= 0 selects m.categories[headerCursor] (Enter toggles its
+	// collapse, SP-9); -1 means the cursor is on m.items[m.cursor].
+	headerCursor int
 	// scrollTop is the first visible overview entry in the flattened
 	// category + item list used by the responsive overview layout.
 	scrollTop int
@@ -336,6 +358,7 @@ func NewWithOptions(opts Options) *SettingsModel {
 		extraSections:        opts.ExtraSections,
 		keys:                 DefaultKeys(),
 		opts:                 opts,
+		headerCursor:         -1,
 	}
 	if err := m.LoadFromFile(settingsFilePath()); err == nil {
 		m.loadedFromFile = true
@@ -392,9 +415,18 @@ func NewWithOptions(opts Options) *SettingsModel {
 // buildItems constructs the settingItem slice. Call this once in New() and
 // again after LoadFromFile (pointer addresses stay stable; only values change).
 func (m *SettingsModel) buildItems() {
+	// Collapse state is runtime-only but must survive the rebuilds that
+	// follow every save/abort — snapshot it before resetting (SP-9).
+	prevCollapsed := make(map[string]bool, len(m.categories))
+	for _, cat := range m.categories {
+		prevCollapsed[cat.title] = cat.collapsed
+	}
 	m.categories = nil
 	m.items = nil
 
+	// The extraSections loop below runs first; buildItems flips this off
+	// before adding the framework's own categories.
+	appOwnedPhase := true
 	addItem := func(category string, item settingItem) {
 		item.category = category
 		idx := len(m.items)
@@ -405,9 +437,18 @@ func (m *SettingsModel) buildItems() {
 				return
 			}
 		}
+		collapsed := !appOwnedPhase
+		if prev, seen := prevCollapsed[category]; seen {
+			collapsed = prev
+		}
 		m.categories = append(
 			m.categories,
-			settingsCategory{title: category, itemIdxSet: []int{idx}},
+			settingsCategory{
+				title:      category,
+				itemIdxSet: []int{idx},
+				appOwned:   appOwnedPhase,
+				collapsed:  collapsed,
+			},
 		)
 	}
 
@@ -493,10 +534,13 @@ func (m *SettingsModel) buildItems() {
 			addItem(cat, m.itemFromDef(def))
 		}
 	}
+	// Everything from here down is framework-owned: collapsed by default.
+	appOwnedPhase = false
 
 	addItem("Navigation", settingItem{
-		title: "Navigation Style",
-		value: func() string { return labelFor(m.NavStyle, navOpts) },
+		title:   "Navigation Style",
+		choices: len(navOpts),
+		value:   func() string { return labelFor(m.NavStyle, navOpts) },
 		buildForm: func() *huh.Form {
 			return huh.NewForm(huh.NewGroup(
 				huh.NewSelect[string]().
@@ -508,7 +552,8 @@ func (m *SettingsModel) buildItems() {
 		},
 	})
 	addItem("Navigation", settingItem{
-		title: "Show Nav Numbers",
+		title:   "Show Nav Numbers",
+		choices: len(navNumbersOpts),
 		value: func() string {
 			if m.NavShowNumbers {
 				return settingValOn
@@ -526,7 +571,8 @@ func (m *SettingsModel) buildItems() {
 		},
 	})
 	addItem("Navigation", settingItem{
-		title: "Number Key Select",
+		title:   "Number Key Select",
+		choices: len(navNumbersOpts),
 		value: func() string {
 			if m.NavNumberSelect {
 				return settingValOn
@@ -545,8 +591,9 @@ func (m *SettingsModel) buildItems() {
 	})
 	addItem(
 		"Logging", settingItem{
-			title: "Log Destination",
-			value: func() string { return labelFor(m.LogOutput, logOpts) },
+			title:   "Log Destination",
+			choices: len(logOpts),
+			value:   func() string { return labelFor(m.LogOutput, logOpts) },
 			buildForm: func() *huh.Form {
 				return huh.NewForm(huh.NewGroup(
 					huh.NewSelect[string]().
@@ -599,8 +646,9 @@ func (m *SettingsModel) buildItems() {
 	})
 	addItem(
 		"Logging", settingItem{
-			title: "Log Level",
-			value: func() string { return labelFor(m.LogLevel, levelOpts) },
+			title:   "Log Level",
+			choices: len(levelOpts),
+			value:   func() string { return labelFor(m.LogLevel, levelOpts) },
 			buildForm: func() *huh.Form {
 				return huh.NewForm(huh.NewGroup(
 					huh.NewSelect[string]().
@@ -614,8 +662,9 @@ func (m *SettingsModel) buildItems() {
 	)
 	addItem(
 		"Appearance", settingItem{
-			title: "Theme Mode",
-			value: func() string { return labelFor(m.ThemeMode, modeOpts) },
+			title:   "Theme Mode",
+			choices: len(modeOpts),
+			value:   func() string { return labelFor(m.ThemeMode, modeOpts) },
 			buildForm: func() *huh.Form {
 				return huh.NewForm(huh.NewGroup(
 					huh.NewSelect[string]().
@@ -629,8 +678,9 @@ func (m *SettingsModel) buildItems() {
 	)
 	addItem(
 		"Appearance", settingItem{
-			title: "Color Theme",
-			value: func() string { return tintDisplayName(m.ColorThemeID) },
+			title:   "Color Theme",
+			choices: len(buildThemeOptions(m.ThemeMode)),
+			value:   func() string { return tintDisplayName(m.ColorThemeID) },
 			buildForm: func() *huh.Form {
 				return huh.NewForm(huh.NewGroup(
 					huh.NewSelect[string]().
@@ -645,8 +695,9 @@ func (m *SettingsModel) buildItems() {
 	)
 	addItem(
 		"Appearance", settingItem{
-			title: "Form Style",
-			value: func() string { return labelFor(m.StylePreset, styleOpts) },
+			title:   "Form Style",
+			choices: len(styleOpts),
+			value:   func() string { return labelFor(m.StylePreset, styleOpts) },
 			buildForm: func() *huh.Form {
 				return huh.NewForm(huh.NewGroup(
 					huh.NewSelect[string]().
@@ -660,7 +711,8 @@ func (m *SettingsModel) buildItems() {
 	)
 	addItem(
 		"Appearance", settingItem{
-			title: "Accessibility Colors",
+			title:   "Accessibility Colors",
+			choices: len(accessibilityOpts),
 			value: func() string {
 				if m.AccessibilityColors {
 					return settingValOn
@@ -680,7 +732,8 @@ func (m *SettingsModel) buildItems() {
 	)
 	addItem(
 		"Notifications", settingItem{
-			title: "Bell Notifications",
+			title:   "Bell Notifications",
+			choices: 2,
 			value: func() string {
 				if m.NotificationsEnabled {
 					return "Enabled 🔔"
@@ -704,7 +757,8 @@ func (m *SettingsModel) buildItems() {
 	)
 	addItem(
 		"Notifications", settingItem{
-			title: "Notification Persistence",
+			title:   "Notification Persistence",
+			choices: 2,
 			value: func() string {
 				if m.NotificationsPersist {
 					return settingValOn
@@ -812,8 +866,9 @@ func (m *SettingsModel) buildItems() {
 
 	if runtime.GOOS == "windows" {
 		addItem("System", settingItem{
-			title: "Default Terminal",
-			value: func() string { return labelFor(m.defaultTerminal, terminalOpts) },
+			title:   "Default Terminal",
+			choices: len(terminalOpts),
+			value:   func() string { return labelFor(m.defaultTerminal, terminalOpts) },
 			buildForm: func() *huh.Form {
 				return huh.NewForm(huh.NewGroup(
 					huh.NewSelect[string]().
@@ -841,6 +896,8 @@ func (m *SettingsModel) buildItems() {
 			m.gateEditVals[gDef.Name] = editVal
 			addItem("Feature Flags", settingItem{
 				title: gDef.Name,
+				// A gate is always a real 2-way choice — never hidden (SP-9).
+				choices: 2,
 				value: func() string {
 					if m.opts.Gates.Value(gDef.Name) {
 						return "Enabled"
@@ -876,6 +933,14 @@ func (m *SettingsModel) buildItems() {
 				},
 			})
 		}
+	}
+
+	// The cursor may point at nothing selectable after a (re)build — e.g. its
+	// item now sits in a collapsed category, or everything starts collapsed on
+	// a fresh model. Snap it to the first stop so the overview always has a
+	// keyboard-reachable selection.
+	if stops := m.overviewStops(); len(stops) > 0 && m.currentStopIndex(stops) < 0 {
+		m.applyStop(stops[0])
 	}
 }
 
@@ -1084,27 +1149,32 @@ func (m *SettingsModel) updateOverview(msg tea.Msg) (tea.Model, tea.Cmd) {
 		keyMsg := msg
 		switch {
 		case key.Matches(keyMsg, m.keys.Up):
-			m.cursor = max(m.cursor-1, 0)
-			m.ensureCursorVisible()
+			m.moveOverviewCursor(-1)
 		case key.Matches(keyMsg, m.keys.Down):
-			m.cursor = min(m.cursor+1, max(len(m.items)-1, 0))
-			m.ensureCursorVisible()
+			m.moveOverviewCursor(1)
 		case key.Matches(keyMsg, m.keys.Select):
+			if m.headerCursor >= 0 {
+				m.toggleCategory(m.headerCursor)
+				return m, nil
+			}
 			return m, m.startEdit()
 		}
 	case tea.MouseWheelMsg:
 		if msg.Mouse().Button == tea.MouseWheelUp {
-			m.cursor = max(m.cursor-1, 0)
+			m.moveOverviewCursor(-1)
 		} else {
-			m.cursor = min(m.cursor+1, max(len(m.items)-1, 0))
+			m.moveOverviewCursor(1)
 		}
-		m.ensureCursorVisible()
 	}
 	return m, nil
 }
 
 func (m *SettingsModel) startEdit() tea.Cmd {
 	if m.cursor < 0 || m.cursor >= len(m.items) {
+		return nil
+	}
+	if m.items[m.cursor].displayOnly() {
+		// One effective option — nothing to choose (SP-9).
 		return nil
 	}
 	m.editIndex = m.cursor
@@ -1429,8 +1499,16 @@ func (m *SettingsModel) View() tea.View {
 		}
 		entry := layout.entries[entryIdx]
 		if entry.isHeader {
+			// Clicking a category header toggles its collapse (SP-9).
+			m.headerCursor = entry.catIndex
+			m.toggleCategory(entry.catIndex)
 			return nil
 		}
+		if entry.itemIndex >= 0 && entry.itemIndex < len(m.items) &&
+			m.items[entry.itemIndex].displayOnly() {
+			return nil
+		}
+		m.headerCursor = -1
 		m.cursor = entry.itemIndex
 		if m.cursor >= 0 && m.cursor < len(m.items) {
 			m.ensureCursorVisible()
@@ -1486,6 +1564,11 @@ func (m *SettingsModel) renderOverview() string {
 			}
 			entry := visible[i]
 			if entry.isHeader {
+				if m.headerCursor == entry.catIndex {
+					sel := c.Styles.SelectedItem.Width(layout.colWidth)
+					colLines = append(colLines, sel.Render(entry.header))
+					continue
+				}
 				colLines = append(colLines, headerStyle.Render(entry.header))
 				continue
 			}
@@ -1497,7 +1580,14 @@ func (m *SettingsModel) renderOverview() string {
 				// Keep the tail (e.g. a file path's end) when it overflows.
 				val = ansi.TruncateLeft(v, ansi.StringWidth(v)-valueW+1, "…")
 			}
-			if entry.itemIndex == m.cursor {
+			if item.displayOnly() {
+				// One effective option: show the value, no edit affordance
+				// and no cursor stop (SP-9).
+				dim := c.Styles.FilterDim.Width(valueW)
+				colLines = append(colLines, "  "+normalLabel.Render(lbl)+" "+dim.Render(val))
+				continue
+			}
+			if m.headerCursor < 0 && entry.itemIndex == m.cursor {
 				indicatorStyle := lipgloss.NewStyle().Foreground(selFg).Background(selBg)
 				spaceStyle := lipgloss.NewStyle().Background(selBg)
 				rowText := indicatorStyle.Render(
@@ -1567,6 +1657,13 @@ func (m *SettingsModel) overviewLayout() overviewLayout {
 	entries := m.flattenedOverviewEntries()
 	cursorEntry := 0
 	for i, e := range entries {
+		if m.headerCursor >= 0 {
+			if e.isHeader && e.catIndex == m.headerCursor {
+				cursorEntry = i
+				break
+			}
+			continue
+		}
 		if !e.isHeader && e.itemIndex == m.cursor {
 			cursorEntry = i
 			break
@@ -1620,16 +1717,125 @@ func (m *SettingsModel) flattenedOverviewEntries() []overviewEntry {
 		return nil
 	}
 	entries := make([]overviewEntry, 0, len(m.items)+len(m.categories))
-	for _, cat := range m.categories {
+	for ci, cat := range m.categories {
 		if len(cat.itemIdxSet) == 0 {
 			continue
 		}
-		entries = append(entries, overviewEntry{header: cat.title, isHeader: true})
+		marker := "▾ "
+		title := cat.title
+		if cat.collapsed {
+			marker = "▸ "
+			title = fmt.Sprintf("%s (%d)", title, len(cat.itemIdxSet))
+		}
+		entries = append(entries, overviewEntry{
+			header:   marker + title,
+			isHeader: true,
+			catIndex: ci,
+		})
+		if cat.collapsed {
+			continue
+		}
 		for _, idx := range cat.itemIdxSet {
 			entries = append(entries, overviewEntry{itemIndex: idx})
 		}
 	}
 	return entries
+}
+
+// overviewStop is one keyboard cursor position in the overview: a category
+// header (Enter toggles collapse) or an editable, visible item (Enter opens
+// its editor). Display-only items (SP-9) render but are not stops.
+type overviewStop struct {
+	isHeader bool
+	catIndex int
+	item     int
+}
+
+func (m *SettingsModel) overviewStops() []overviewStop {
+	stops := make([]overviewStop, 0, len(m.items)+len(m.categories))
+	for ci, cat := range m.categories {
+		if len(cat.itemIdxSet) == 0 {
+			continue
+		}
+		stops = append(stops, overviewStop{isHeader: true, catIndex: ci})
+		if cat.collapsed {
+			continue
+		}
+		for _, idx := range cat.itemIdxSet {
+			if m.items[idx].displayOnly() {
+				continue
+			}
+			stops = append(stops, overviewStop{item: idx})
+		}
+	}
+	return stops
+}
+
+// currentStopIndex locates the cursor in stops; -1 when the cursor state
+// points at nothing currently visible (e.g. its category just collapsed
+// underneath it via a rebuild).
+func (m *SettingsModel) currentStopIndex(stops []overviewStop) int {
+	for i, s := range stops {
+		if m.headerCursor >= 0 {
+			if s.isHeader && s.catIndex == m.headerCursor {
+				return i
+			}
+			continue
+		}
+		if !s.isHeader && s.item == m.cursor {
+			return i
+		}
+	}
+	return -1
+}
+
+func (m *SettingsModel) applyStop(s overviewStop) {
+	if s.isHeader {
+		m.headerCursor = s.catIndex
+		return
+	}
+	m.headerCursor = -1
+	m.cursor = s.item
+}
+
+// moveOverviewCursor steps the cursor delta stops through headers and
+// editable visible items, clamping at the ends.
+func (m *SettingsModel) moveOverviewCursor(delta int) {
+	stops := m.overviewStops()
+	if len(stops) == 0 {
+		return
+	}
+	cur := m.currentStopIndex(stops)
+	next := 0
+	if cur >= 0 {
+		next = min(max(cur+delta, 0), len(stops)-1)
+	}
+	m.applyStop(stops[next])
+	m.ensureCursorVisible()
+}
+
+// ExpandAllCategories opens every overview category. Useful for apps that
+// prefer the pre-SP-9 fully expanded overview (framework categories start
+// collapsed by default).
+func (m *SettingsModel) ExpandAllCategories() {
+	for i := range m.categories {
+		m.categories[i].collapsed = false
+	}
+}
+
+// toggleCategory flips a category's collapse state. Collapsing the category
+// that holds the item cursor moves the cursor to that category's header so
+// it never sits on a hidden row.
+func (m *SettingsModel) toggleCategory(ci int) {
+	if ci < 0 || ci >= len(m.categories) {
+		return
+	}
+	m.categories[ci].collapsed = !m.categories[ci].collapsed
+	if m.categories[ci].collapsed && m.headerCursor < 0 &&
+		slices.Contains(m.categories[ci].itemIdxSet, m.cursor) {
+		m.headerCursor = ci
+	}
+	m.ensureCursorVisible()
 }
 
 func (m *SettingsModel) preferredColumnWidth() int {

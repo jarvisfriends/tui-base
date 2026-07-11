@@ -30,7 +30,7 @@ func TestLogPathEditBlockedForTempDestination(t *testing.T) {
 	m := NewWithOptions(Options{})
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m.LogOutput = logOutputTemp
-	m.cursor = findItemIndex(t, m, itemTitleLogPath)
+	selectItemForTest(m, findItemIndex(t, m, itemTitleLogPath))
 
 	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.editOverlay.IsOpen() || m.modelOverlay.IsOpen() {
@@ -44,7 +44,7 @@ func TestLogPathDirDestinationOpensDirPicker(t *testing.T) {
 	m := NewWithOptions(Options{})
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m.LogOutput = logOutputDir
-	m.cursor = findItemIndex(t, m, itemTitleLogPath)
+	selectItemForTest(m, findItemIndex(t, m, itemTitleLogPath))
 
 	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.editOverlay.IsOpen() {
@@ -64,7 +64,7 @@ func TestLogPathFileDestinationOpensFilePickerForm(t *testing.T) {
 	m := NewWithOptions(Options{})
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m.LogOutput = logOutputFile
-	m.cursor = findItemIndex(t, m, itemTitleLogPath)
+	selectItemForTest(m, findItemIndex(t, m, itemTitleLogPath))
 
 	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !m.editOverlay.IsOpen() {
@@ -103,7 +103,7 @@ func TestLogPathDirOverlayFitsNarrowTallTerminal(t *testing.T) {
 	m := NewWithOptions(Options{})
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 90, Height: 76})
 	m.LogOutput = logOutputDir
-	m.cursor = findItemIndex(t, m, itemTitleLogPath)
+	selectItemForTest(m, findItemIndex(t, m, itemTitleLogPath))
 
 	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !m.modelOverlay.IsOpen() {
@@ -133,7 +133,7 @@ func TestDirOnlyConsumerFieldUsesDirPicker(t *testing.T) {
 		}},
 	}}})
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
-	m.cursor = findItemIndex(t, m, "Data Dir")
+	selectItemForTest(m, findItemIndex(t, m, "Data Dir"))
 
 	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !m.modelOverlay.IsOpen() {
