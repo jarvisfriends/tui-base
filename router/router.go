@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/colorprofile"
+	"github.com/jarvisfriends/inspector"
 	"github.com/jarvisfriends/snap/gate"
 	"github.com/jarvisfriends/snap/keys"
 	"github.com/jarvisfriends/snap/navigation"
@@ -20,7 +21,6 @@ import (
 	"github.com/jarvisfriends/tui-base/filewatch"
 	log "github.com/jarvisfriends/tui-base/logging"
 	"github.com/jarvisfriends/tui-base/pages/home"
-	"github.com/jarvisfriends/tui-base/pages/inspector"
 	"github.com/jarvisfriends/tui-base/pages/settings"
 	"github.com/jarvisfriends/tui-base/theme"
 
@@ -972,6 +972,12 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.startupColorSync = true
 		return m, tea.Batch(m.handleResizeCmd(), m.syncTerminalColorsAfterCmd())
+
+	case inspector.ApplyThemeMsg:
+		// The extracted inspector is host-agnostic: its accessibility tab
+		// emits ApplyThemeMsg and each host translates. Ours speaks the
+		// settings dialect below.
+		return m.Update(settings.ThemeMsg{ID: msg.ID})
 
 	case settings.ThemeMsg:
 		// Apply the selected tint globally and refresh the shared colors pointer.

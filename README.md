@@ -52,7 +52,9 @@ The following milestone capabilities are already implemented:
 - `tuibase.go`: root consumer package — `tuibase.Run(tuibase.Options{...})` bootstraps a full app.
 - `cmd/tui-base/`: runnable reference application.
 - `router/`: root model and message routing.
-- `pages/`: page models (`home`, `settings`, `inspector`).
+- `pages/`: page models (`home`, `settings`); the Ctrl+D inspector now
+  lives in [inspector](https://github.com/jarvisfriends/inspector) and is
+  imported back.
 - `theme/`: compatibility alias shim over `snap/styles` (kept until downstream
   apps migrate their imports).
 - `logging/`: runtime logger + subscriber fanout.

@@ -3,7 +3,7 @@ package router
 import (
 	"testing"
 
-	"github.com/jarvisfriends/tui-base/pages/inspector"
+	"github.com/jarvisfriends/inspector"
 
 	tea "charm.land/bubbletea/v2"
 )

@@ -8,6 +8,12 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
 
 ### Changed
 
+- **BREAKING (X-2/SP-12):** the Ctrl+D inspector moved to its own repo,
+  `github.com/jarvisfriends/inspector`; `pages/inspector` is gone and
+  tui-base imports the module back. The extracted inspector is
+  host-agnostic — its accessibility tab emits `inspector.ApplyThemeMsg`
+  and the router translates it onto `settings.ThemeMsg`.
+
 - `tools/rendertapes` migrated from `github.com/docker/docker` (five open
   advisories — three high — with the `+incompatible` line frozen at the
   vulnerable v28.5.2 forever) to the successor modules

@@ -12,7 +12,7 @@
 CI builds and race-tests every commit on Linux (ubuntu-24.04), Windows
 (windows-2022), and macOS (macos-14); releases ship linux/darwin/windows for
 amd64 and arm64. Platform-specific code is limited to disk statistics
-(`pages/inspector/disk_*.go`) and the Windows default-terminal setting.
+(the inspector repo's `disk_*.go`) and the Windows default-terminal setting.
 
 ## Terminals
 
