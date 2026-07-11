@@ -8,6 +8,17 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
 
 ### Changed
 
+- The Home page grew from a static welcome box into a small snap
+  showcase with first-class mouse support: a live sparkline + load bar
+  fed by ID-routed chart messages (the stream starts on the page's
+  OnEnter and stops on OnLeave — the I-1 hooks in action; clicking the
+  charts pauses it), a segmented status pill whose PillShape cycles on
+  click, and a snap scrollbar with click/drag-to-jump on small
+  terminals. All pointer input flows through View().OnMouse via
+  uifx.MouseHandlers with uifx.Zones hit-testing; Update drops
+  tea.MouseMsg entirely (previously the wheel was forwarded through
+  Update to the viewport, against the input contract).
+
 - **BREAKING (X-2/SP-12):** the Ctrl+D inspector moved to its own repo,
   `github.com/jarvisfriends/inspector`; `pages/inspector` is gone and
   tui-base imports the module back. The extracted inspector is

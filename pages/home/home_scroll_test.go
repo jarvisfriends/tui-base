@@ -23,9 +23,10 @@ func TestHomeScrollsOnSmallTerminal(t *testing.T) {
 		t.Fatal("precondition: viewport should start at the top")
 	}
 
-	// Mouse wheel down scrolls.
+	// Mouse wheel down scrolls — delivered through View().OnMouse, the only
+	// door pointer input uses (Update drops tea.MouseMsg entirely).
 	before := m.vp.YOffset()
-	_, _ = m.Update(tea.MouseWheelMsg(tea.Mouse{Button: tea.MouseWheelDown}))
+	_ = m.View().OnMouse(tea.MouseWheelMsg(tea.Mouse{Button: tea.MouseWheelDown}))
 	if m.vp.YOffset() <= before {
 		t.Fatalf("mouse wheel did not scroll: YOffset stayed at %d", m.vp.YOffset())
 	}
