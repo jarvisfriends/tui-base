@@ -21,19 +21,7 @@ func CheckDescriptiveStructNames(t *testing.T, patterns ...string) {
 		Tests: false,
 	}
 
-	pkgs, err := packages.Load(cfg, patterns...)
-	if err != nil {
-		t.Fatalf("Failed to load packages: %v", err)
-	}
-
-	for _, pkg := range pkgs {
-		if len(pkg.Errors) > 0 {
-			for _, e := range pkg.Errors {
-				t.Logf("skipping package %s due to load error: %v", pkg.PkgPath, e)
-			}
-			continue
-		}
-
+	for _, pkg := range loadConformancePackages(t, cfg, patterns) {
 		for _, file := range pkg.Syntax {
 			filename := pkg.Fset.Position(file.Pos()).Filename
 			ast.Inspect(file, func(n ast.Node) bool {

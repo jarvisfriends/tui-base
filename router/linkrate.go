@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/jarvisfriends/inspector"
 	"github.com/jarvisfriends/tui-base/theme"
@@ -305,9 +306,16 @@ func (p *linkRateProvider) BuildRows(c *theme.AppStyle) []string {
 	label := c.Styles.TextOnBg.Bold(true)
 	value := c.Styles.TextOnBg
 
+	// Columns pad by terminal cells via lipgloss, not printf byte widths.
+	nameCol := func(name string) string {
+		return lipgloss.PlaceHorizontal(12, lipgloss.Left, name)
+	}
+	rateCol := func(r string) string {
+		return lipgloss.PlaceHorizontal(12, lipgloss.Right, r)
+	}
 	row := func(name string, tx, rx uint64) string {
-		return label.Render(fmt.Sprintf("%-12s", name)) +
-			value.Render(fmt.Sprintf("Tx %12s   Rx %12s", rate(tx), rate(rx)))
+		return label.Render(nameCol(name)) +
+			value.Render("Tx "+rateCol(rate(tx))+"   Rx "+rateCol(rate(rx)))
 	}
 	// The link needs to sustain the peak of Tx+Rx (half-duplex worst case).
 	required := s.txPeak + s.rxPeak
@@ -320,7 +328,7 @@ func (p *linkRateProvider) BuildRows(c *theme.AppStyle) []string {
 		row("60s average", s.tx60, s.rx60),
 		row("peak", s.txPeak, s.rxPeak),
 		"",
-		label.Render(fmt.Sprintf("%-12s", "required")) +
+		label.Render(nameCol("required")) +
 			value.Render(
 				fmt.Sprintf(
 					"≈ %s (%s) to keep up with the observed peak",

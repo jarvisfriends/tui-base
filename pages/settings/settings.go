@@ -1958,7 +1958,9 @@ func themeOptionKey(t *tint.Tint, baseSwatch lipgloss.Style) string {
 		sBgColor = t.SelectionBg
 	}
 
-	name := fmt.Sprintf("%-30s", t.DisplayName)
+	// Pad by terminal cells (not printf bytes) so non-ASCII theme names
+	// don't shift the swatch column.
+	name := lipgloss.PlaceHorizontal(30, lipgloss.Left, t.DisplayName)
 	currentTheme := baseSwatch.Foreground(t.Fg).Background(t.Bg)
 	idName := currentTheme.Render(name, " ")
 

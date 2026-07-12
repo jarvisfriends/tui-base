@@ -18,14 +18,7 @@ import (
 func CheckNoImports(t *testing.T, pkgPattern string, forbidden ...string) {
 	t.Helper()
 	cfg := &packages.Config{Mode: packages.NeedName | packages.NeedImports}
-	pkgs, err := packages.Load(cfg, pkgPattern)
-	if err != nil {
-		t.Fatalf("loading %s: %v", pkgPattern, err)
-	}
-	if len(pkgs) == 0 {
-		t.Fatalf("pattern %s matched no packages", pkgPattern)
-	}
-	for _, p := range pkgs {
+	for _, p := range loadConformancePackages(t, cfg, []string{pkgPattern}) {
 		for imp := range p.Imports {
 			for _, f := range forbidden {
 				if imp == f || strings.HasPrefix(imp, f+"/") {
