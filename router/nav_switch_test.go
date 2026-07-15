@@ -6,6 +6,7 @@ import (
 	"github.com/jarvisfriends/tui-base/pages/settings"
 
 	"github.com/jarvisfriends/snap/navigation"
+	"github.com/jarvisfriends/snap/styles"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -74,5 +75,22 @@ func TestSettingsNavToggleViaMsg(t *testing.T) {
 	_, _ = m.Update(settings.NavStyleMsg{Style: "sidebar"})
 	if _, ok := m.nav.(*navigation.Sidebar); !ok {
 		t.Fatalf("expected router nav to be sidebar after NavStyleMsg; got %T", m.nav)
+	}
+}
+
+// TestNavToggleTopNav switches to the minimal top-nav style via NavStyleMsg,
+// exercising newTopNav (which sets the Powerline slant) and the topnav branch
+// of the NavStyleMsg handler.
+func TestNavToggleTopNav(t *testing.T) {
+	m := NewWithOptions(Options{ConfigDir: t.TempDir()})
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	_, _ = m.Update(settings.NavStyleMsg{Style: navStyleTopnav})
+	top, ok := m.nav.(*navigation.MinimalTopNav)
+	if !ok {
+		t.Fatalf("expected nav to be MinimalTopNav after NavStyleMsg; got %T", m.nav)
+	}
+	if top.PillShape != styles.PillSlant {
+		t.Errorf("newTopNav should set the slant shape; got %q", top.PillShape)
 	}
 }
