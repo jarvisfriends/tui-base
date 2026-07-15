@@ -2,24 +2,27 @@ module github.com/jarvisfriends/tui-base
 
 go 1.26.5 // Need to use 1.26.5 because of crypto/tls vulnerability in 1.26.4 and earlier
 
-require github.com/jarvisfriends/snap v0.1.8
-
 require (
 	charm.land/bubbles/v2 v2.1.1
 	charm.land/bubbletea/v2 v2.0.8
 	charm.land/huh/v2 v2.0.3
 	charm.land/lipgloss/v2 v2.0.5
+	github.com/dustin/go-humanize v1.0.1
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/jarvisfriends/inspector v0.0.0-20260711032457-8da3ee600457
+	github.com/jarvisfriends/inspector v0.0.1
+	github.com/jarvisfriends/snap v0.1.12
 	golang.org/x/tools v0.48.0
 )
 
 require (
+	github.com/NimbleMarkets/ntcharts/v2 v2.2.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/catppuccin/go v0.3.0 // indirect
+	github.com/charmbracelet/harmonica v0.2.0 // indirect
 	github.com/charmbracelet/x/exp/ordered v0.1.0 // indirect
 	github.com/charmbracelet/x/exp/strings v0.1.0 // indirect
-	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/evertras/bubble-table v0.22.3 // indirect
+	github.com/lrstanley/bubblezone/v2 v2.0.0 // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
 	github.com/sahilm/fuzzy v0.1.3 // indirect
 	golang.org/x/mod v0.38.0 // indirect
@@ -28,7 +31,7 @@ require (
 
 require (
 	github.com/charmbracelet/colorprofile v0.4.3
-	github.com/charmbracelet/ultraviolet v0.0.0-20260703014108-f5a850f9c2b7 // indirect
+	github.com/charmbracelet/ultraviolet v0.0.0-20260713092251-4bee1914c0cf // indirect
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
