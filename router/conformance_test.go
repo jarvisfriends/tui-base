@@ -41,8 +41,8 @@ func TestConformanceSuite(t *testing.T) {
 	t.Run("ThemeResponsive", func(t *testing.T) {
 		rendercheck.CheckThemeResponsive(
 			t, New(),
-			settings.ThemeMsg{ID: "dracula", Mode: "dark", ApplyPreferences: true},
-			settings.ThemeMsg{ID: "dracula", Mode: "light", ApplyPreferences: true},
+			settings.ThemeMsg{ID: testThemeDracula, Mode: testModeDark, ApplyPreferences: true},
+			settings.ThemeMsg{ID: testThemeDracula, Mode: "light", ApplyPreferences: true},
 		)
 	})
 

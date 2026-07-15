@@ -69,4 +69,16 @@ var (
 	RegisterYAMLTints = styles.RegisterYAMLTints
 	// LoadYAMLTints re-exports [styles.LoadYAMLTints].
 	LoadYAMLTints = styles.LoadYAMLTints
+	// EnsureRegistry re-exports [styles.EnsureRegistry]: initialize the tint
+	// registry (defaults + built-ins) without wiping already-registered tints.
+	EnsureRegistry = styles.VerifyRegistry
+	// ThemeTints re-exports [styles.ThemeTints]: all tints with snap's built-ins
+	// first (display order), then the rest alphabetically.
+	ThemeTints = styles.ThemeTints
+	// ThemeTintIDs re-exports [styles.ThemeTintIDs].
+	ThemeTintIDs = styles.ThemeTintIDs
+	// BuiltinTints re-exports [styles.BuiltinTints].
+	BuiltinTints = styles.BuiltinTints
+	// BuiltinTintIDs re-exports [styles.BuiltinTintIDs].
+	BuiltinTintIDs = styles.BuiltinTintIDs
 )
