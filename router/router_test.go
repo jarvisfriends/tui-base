@@ -10,7 +10,9 @@ import (
 	"github.com/jarvisfriends/snap/navigation"
 	"github.com/jarvisfriends/snap/notifications"
 	"github.com/jarvisfriends/snap/status"
+	"github.com/jarvisfriends/snap/uifx"
 	log "github.com/jarvisfriends/tui-base/logging"
+	"github.com/jarvisfriends/tui-base/pages/home"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -21,6 +23,8 @@ const (
 	testKeyOpenSettings = "ctrl+g"
 	testKeyInspector    = "ctrl+d"
 	testPageTitle       = "aSettings"
+	testModeDark        = "dark"
+	testThemeDracula    = "dracula"
 )
 
 func TestTabCyclesPages(t *testing.T) {
@@ -288,6 +292,29 @@ func TestViewContainsHomeAndMouseMode(t *testing.T) {
 	}
 	if v.Content == "" {
 		t.Fatal("expected non-empty view content")
+	}
+}
+
+// TestViewForwardsAllMotionFromActivePage asserts the router forwards
+// AllMotion when the active page's own View asks for it (e.g. the home
+// page's Effects at uifx.LevelHigh, which needs the motion firehose for
+// hover highlighting) — everything else stays on the default CellMotion
+// (see TestViewContainsHomeAndMouseMode).
+func TestViewForwardsAllMotionFromActivePage(t *testing.T) {
+	t.Parallel()
+	m := New()
+	m.width = 80
+	m.height = 24
+
+	hp, ok := m.homePage.(*home.HomePageModel)
+	if !ok {
+		t.Fatalf("homePage is %T; want *home.HomePageModel", m.homePage)
+	}
+	hp.Effects = uifx.LevelHigh
+
+	v := m.View()
+	if v.MouseMode != tea.MouseModeAllMotion {
+		t.Fatalf("expected MouseModeAllMotion when the active page requests it; got %v", v.MouseMode)
 	}
 }
 
@@ -700,13 +727,18 @@ func TestInspectorOverlayStillShowsStatusBar(t *testing.T) {
 		t.Fatal("router nav is nil")
 	}
 	m.inspector.ToggleVisible() // make inspector visible
+	m.updatePageKeys()          // mirror the real Ctrl+D path: refresh status-bar hints
 	_ = m.handleResizeCmd()
 
 	content := stripANSI(m.View().Content)
 	if !strings.Contains(content, "(Inspector)") {
 		t.Fatal("inspector overlay missing expected inspector title with (Inspector) marker")
 	}
-	if !strings.Contains(strings.ToLower(content), "ctrl") {
+	// With the inspector overlay visible the status bar shows the inspector's
+	// own key hints (every tab lists ↑/↓ scroll); "scroll" is a stable marker
+	// that the hints render. (The active page's hints, home's included, are
+	// suppressed while the modal overlay owns the bar.)
+	if !strings.Contains(strings.ToLower(content), "scroll") {
 		t.Fatal("status bar key hints are missing with inspector overlay")
 	}
 }

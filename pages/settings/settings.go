@@ -133,8 +133,10 @@ type KeybindingsChangedMsg struct {
 	CustomKeys map[string]string
 }
 
-// GatesChangedMsg is emitted when the user flips a feature gate on the
-// settings page (Feature Flags section). The shared *gate.GateRegistry is
+// GatesChangedMsg is emitted when a feature gate flips at runtime — either
+// from an app-defined settings item that mutates *gate.GateRegistry directly,
+// or re-broadcast by the router when the built-in Inspector's Settings tab
+// (Ctrl+D) flips one (see inspector.GatesChangedMsg). The shared registry is
 // already updated when this fires — the message is the "re-derive your
 // gate-dependent UI now" signal so changes show immediately; Values is a
 // snapshot for convenience. Gate values are runtime-only and are never
@@ -201,13 +203,20 @@ type Keys struct {
 	Down    key.Binding
 	Select  key.Binding
 	Dismiss key.Binding
+	// nav is a display-only binding for ShortHelp: it combines Up and Down
+	// into one compact "↑↓ nav" entry (FullHelp lists them separately with
+	// their full descriptions). It is never passed to key.Matches — Up/Down
+	// still do the actual matching in Update — so building it once here
+	// (rather than inline in ShortHelp on every render) is the pattern to
+	// copy whenever two related bindings should share one short-help slot.
+	nav key.Binding
 }
 
 func (k *Keys) ShortHelp() []key.Binding {
 	if k == nil {
 		return nil
 	}
-	return []key.Binding{k.Up, k.Down, k.Select}
+	return []key.Binding{k.nav, k.Select}
 }
 
 func (k *Keys) FullHelp() [][]key.Binding {
@@ -230,6 +239,10 @@ func DefaultKeys() *Keys {
 		Select: key.NewBinding(
 			key.WithKeys("enter"),
 			key.WithHelp("enter", "select"),
+		),
+		nav: key.NewBinding(
+			key.WithKeys("up", "down"),
+			key.WithHelp("↑↓", "nav"),
 		),
 		Dismiss: key.NewBinding(
 			key.WithKeys("esc"),
@@ -267,16 +280,6 @@ type SettingsModel struct {
 	// JSON settings file; the value is always read from / written to the
 	// registry directly.
 	defaultTerminal string
-
-	// gatesChanged records that a feature-gate apply mutated the registry
-	// during the current edit; the StateCompleted handler consumes it to emit
-	// a single GatesChangedMsg. Gates are runtime-only and never persisted.
-	gatesChanged bool
-	// gateEditVals holds each Feature Flags item's live edit binding (the
-	// string the huh select writes into). Keyed by gate name; rebuilt with the
-	// items. Kept on the model so tests can drive the commit path the same way
-	// the form does.
-	gateEditVals map[string]*string
 
 	// intermediate string forms for huh selects (not persisted directly)
 	notifEnabledStr    string
@@ -373,10 +376,12 @@ func NewWithOptions(opts Options) *SettingsModel {
 		m.NavStyle = "tabs"
 	}
 
-	// Initialize the bubbletint global registry exactly once. The library is not
-	// goroutine-safe; calling NewDefaultRegistry from concurrent goroutines races
-	// on the module-level registry pointer.
-	initRegistryOnce.Do(tint.NewDefaultRegistry)
+	// Initialize the bubbletint global registry exactly once. EnsureRegistry adds
+	// the library defaults plus snap's built-in themes without wiping anything
+	// already registered — unlike a bare tint.NewDefaultRegistry, which resets the
+	// module-level registry and would drop the built-ins (and any user themes).
+	// The library is not goroutine-safe, hence the sync.Once.
+	initRegistryOnce.Do(theme.EnsureRegistry)
 	// T-4: user-authored YAML themes load from <config-dir>/themes into the
 	// registry, appearing in the Theme selector next to the built-ins. One bad
 	// file never hides the rest; problems land in the log.
@@ -885,55 +890,9 @@ func (m *SettingsModel) buildItems() {
 		})
 	}
 
-	if m.opts.Gates != nil {
-		m.gateEditVals = make(map[string]*string, len(m.opts.Gates.Defs()))
-		for _, gateDef := range m.opts.Gates.Defs() {
-			gDef := gateDef // capture
-			// editVal outlives buildForm so the huh select's pointer binding
-			// still holds the user's choice when apply runs on completion.
-			// (Binding to a local inside buildForm silently discards the edit.)
-			editVal := new(string)
-			m.gateEditVals[gDef.Name] = editVal
-			addItem("Feature Flags", settingItem{
-				title: gDef.Name,
-				// A gate is always a real 2-way choice — never hidden (SP-9).
-				choices: 2,
-				value: func() string {
-					if m.opts.Gates.Value(gDef.Name) {
-						return "Enabled"
-					}
-					return "Disabled"
-				},
-				buildForm: func() *huh.Form {
-					opts := []huh.Option[string]{
-						huh.NewOption("Disabled", boolStrFalse),
-						huh.NewOption("Enabled", boolStrTrue),
-					}
-					*editVal = boolStrFalse
-					if m.opts.Gates.Value(gDef.Name) {
-						*editVal = boolStrTrue
-					}
-					return huh.NewForm(huh.NewGroup(
-						huh.NewSelect[string]().
-							Title(gDef.Name).
-							Description(gDef.Description).
-							Options(opts...).
-							Value(editVal),
-					).WithTheme(theme.HuhThemeFunc()))
-				},
-				apply: func() error {
-					enabled := *editVal == boolStrTrue
-					if enabled != m.opts.Gates.Value(gDef.Name) {
-						m.opts.Gates.Set(gDef.Name, enabled)
-						// Flag for the StateCompleted handler, which emits one
-						// GatesChangedMsg after all commit work is done.
-						m.gatesChanged = true
-					}
-					return nil
-				},
-			})
-		}
-	}
+	// Feature Flags are a developer-only surface for testing capabilities that
+	// aren't ready for end users, so they live in the Inspector's own Settings
+	// tab (Ctrl+D), not here — see inspector.InspectorModel.settingsRows.
 
 	// The cursor may point at nothing selectable after a (re)build — e.g. its
 	// item now sits in a collapsed category, or everything starts collapsed on
@@ -1402,14 +1361,6 @@ func (m *SettingsModel) updateEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 			func() tea.Msg { return KeybindingsChangedMsg{CustomKeys: customKeys} },
 			m.saveCmd(),
 		)
-		// A feature-gate flip broadcasts immediately so gated UI (pages,
-		// inspector tabs) reacts without waiting for other interaction. The
-		// registry itself was already updated in the item's apply.
-		if m.gatesChanged && m.opts.Gates != nil {
-			m.gatesChanged = false
-			values := m.opts.Gates.Snapshot()
-			cmds = append(cmds, func() tea.Msg { return GatesChangedMsg{Values: values} })
-		}
 		m.loadedFromFile = true
 		if path, err := logging.InitFromSettings(m.LogOutput, m.LogPath); err == nil {
 			m.LogPath = path
@@ -1928,9 +1879,11 @@ func tintDisplayName(id string) string {
 	return id
 }
 
-// buildThemeOptions generates one huh.Option per registered tint.
+// buildThemeOptions generates one huh.Option per registered tint. It uses
+// theme.ThemeTints so snap's built-in themes lead the list (in display order)
+// ahead of the alphabetical bubbletint library themes.
 func buildThemeOptions(mode string) []huh.Option[string] {
-	tints := tint.Tints()
+	tints := theme.ThemeTints()
 	wantDark := theme.NormalizeMode(mode) == theme.ThemeModeDark
 	opts := make([]huh.Option[string], 0, len(tints))
 	baseSwatch := theme.Active().Styles.SwatchDot
@@ -1945,47 +1898,37 @@ func buildThemeOptions(mode string) []huh.Option[string] {
 
 // themeOptionKey builds the display string for one tint entry showing the
 // theme name followed by color swatches for at-a-glance palette preview.
+//
+// Performance: huh's Select re-renders option rows on every keypress (see
+// Select.optionsView / cursorLineOffset), and each render re-parses the row's
+// ANSI with lipgloss/ansi wrap+stringWidth. With ~300 themes that dominated
+// scrolling, so the row is kept ANSI-light: foreground-only dots (no per-dot
+// background) and one swatch per palette slot rather than the full 18 bright/
+// normal pairs.
 func themeOptionKey(t *tint.Tint, baseSwatch lipgloss.Style) string {
-	swatch := func(dotStyle lipgloss.Style, fg *tint.Color) string {
-		hex := "#444444"
+	swatch := func(fg *tint.Color) string {
 		if fg == nil {
-			return dotStyle.Foreground(lipgloss.Color(hex)).Render("  ")
+			return "  "
 		}
-		return dotStyle.Foreground(fg).Render("● ")
-	}
-	sBgColor := t.Bg
-	if t.SelectionBg != nil {
-		sBgColor = t.SelectionBg
+		return baseSwatch.Foreground(fg).Render("● ")
 	}
 
 	// Pad by terminal cells (not printf bytes) so non-ASCII theme names
 	// don't shift the swatch column.
 	name := lipgloss.PlaceHorizontal(30, lipgloss.Left, t.DisplayName)
-	currentTheme := baseSwatch.Foreground(t.Fg).Background(t.Bg)
-	idName := currentTheme.Render(name, " ")
+	idName := baseSwatch.Foreground(t.Fg).Background(t.Bg).Render(name, " ")
 
-	dotsStyle := baseSwatch.Background(sBgColor)
-	idDots := lipgloss.JoinHorizontal(lipgloss.Right,
-		swatch(dotsStyle, t.Cursor),
-		" ",
-		swatch(dotsStyle, t.BrightBlack),
-		swatch(dotsStyle, t.Black),
-		swatch(dotsStyle, t.BrightBlue),
-		swatch(dotsStyle, t.Blue),
-		swatch(dotsStyle, t.BrightCyan),
-		swatch(dotsStyle, t.Cyan),
-		swatch(dotsStyle, t.BrightGreen),
-		" ",
-		swatch(dotsStyle, t.Green),
-		swatch(dotsStyle, t.BrightPurple),
-		swatch(dotsStyle, t.Purple),
-		swatch(dotsStyle, t.BrightRed),
-		swatch(dotsStyle, t.Red),
-		swatch(dotsStyle, t.BrightWhite),
-		swatch(dotsStyle, t.White),
-		swatch(dotsStyle, t.Yellow),
-		swatch(dotsStyle, t.BrightYellow),
-		" ")
+	// One representative dot per palette slot keeps the preview readable while
+	// halving the escape sequences the picker re-wraps each frame.
+	var dots strings.Builder
+	dots.WriteString(swatch(t.Cursor))
+	dots.WriteByte(' ')
+	for _, c := range []*tint.Color{
+		t.BrightBlack, t.Red, t.Green, t.Yellow,
+		t.Blue, t.Purple, t.Cyan, t.White,
+	} {
+		dots.WriteString(swatch(c))
+	}
 
-	return lipgloss.JoinHorizontal(lipgloss.Left, idName, idDots)
+	return lipgloss.JoinHorizontal(lipgloss.Left, idName, " ", dots.String())
 }

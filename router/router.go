@@ -16,6 +16,7 @@ import (
 	"github.com/jarvisfriends/snap/navigation"
 	"github.com/jarvisfriends/snap/notifications"
 	"github.com/jarvisfriends/snap/status"
+	"github.com/jarvisfriends/snap/styles"
 	"github.com/jarvisfriends/tui-base/common"
 	cfg "github.com/jarvisfriends/tui-base/config"
 	"github.com/jarvisfriends/tui-base/filewatch"
@@ -33,6 +34,15 @@ import (
 
 // DefaultAppName is the fallback application name used when Options.AppName is empty.
 const DefaultAppName = "TUI Base"
+
+// newTopNav builds the minimal top nav using the seamless Powerline slant caps
+// (styles.PillSlant) instead of snap's plain-Unicode triangle default: this app
+// ships a Nerd Font, and the slant reads noticeably cleaner than the ◢◤ shape.
+func newTopNav() *navigation.MinimalTopNav {
+	nav := navigation.NewMinimalTopNav()
+	nav.PillShape = styles.PillSlant
+	return nav
+}
 
 const (
 	navStyleTabs   = "tabs"
@@ -246,9 +256,29 @@ type RouterModel struct {
 	// startup synchronization flags to keep terminal default colors deterministic.
 	startupBgSeen    bool
 	startupColorSync bool
+
+	// themePreviewGen counts theme changes so the debounced post-theme settle
+	// (themeSettleMsg) only runs for the most recent one; rapid Color Theme
+	// scrolling thus coalesces into a single relayout + terminal color sync.
+	themePreviewGen uint64
 }
 
 type syncTerminalColorsMsg struct{}
+
+// themePreviewSettleDelay is how long the router waits after the last theme
+// change before running the expensive post-theme work (a full page relayout and
+// the terminal background/foreground OSC sync). Short enough to feel immediate
+// when tapping the Color Theme picker item-to-item, long enough to collapse a
+// held-key fast scroll into a single settle.
+const themePreviewSettleDelay = 60 * time.Millisecond
+
+// themeSettleMsg fires themePreviewSettleDelay after a theme change. It carries
+// the generation it was scheduled for; the handler drops it if a newer change
+// has since bumped themePreviewGen. This coalesces the expensive relayout +
+// terminal sync so scrolling through the Color Theme list does it once on
+// settle instead of once per intermediate selection (which backed up and
+// drained visibly after the user stopped scrolling).
+type themeSettleMsg struct{ gen uint64 }
 
 func New() *RouterModel {
 	return NewWithOptions(Options{})
@@ -358,7 +388,7 @@ func NewWithOptions(opts Options) *RouterModel {
 	case navStyleTabs:
 		nav = navigation.NewTabs()
 	case navStyleTopnav:
-		nav = navigation.NewMinimalTopNav()
+		nav = newTopNav()
 	default:
 		nav = navigation.New()
 	}
@@ -845,7 +875,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "tabs":
 			m.nav = navigation.NewTabs()
 		case "topnav":
-			m.nav = navigation.NewMinimalTopNav()
+			m.nav = newTopNav()
 		default:
 			m.nav = navigation.New()
 		}
@@ -932,6 +962,17 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.handleResizeCmd()
 
+	case inspector.GatesChangedMsg:
+		// The flip happened inside the Inspector's own Settings tab (Ctrl+D);
+		// the inspector already re-derived its own gate-dependent state. This
+		// re-broadcasts the app-facing settings.GatesChangedMsg contract so
+		// any of the host app's own pages that react to gate flips
+		// structurally still see them, regardless of where the toggle happened.
+		return m, tea.Batch(
+			func() tea.Msg { return settings.GatesChangedMsg{Values: msg.Values} },
+			m.handleResizeCmd(),
+		)
+
 	case tea.BackgroundColorMsg:
 		// T-3: terminal reported its background color on startup (or when the
 		// user changes their terminal theme). Auto-switch dark/light mode so the
@@ -1009,10 +1050,27 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.debugEnabled() {
 			log.Debugf("Router.Update: applied theme id=%s", msg.ID)
 		}
-		// Force a resize pass so children receive the correct content dimensions
-		// immediately after a theme change. This avoids temporary re-renders
-		// using an out-of-date width (which can make center vs left-aligned
-		// rendering appear briefly).
+		// Colors are applied immediately above (cheap: swap the shared palette
+		// pointer and refresh component styles), so the theme previews on the
+		// very next render. The expensive follow-up — a full page relayout and
+		// the terminal background/foreground OSC sync — is debounced: scrolling
+		// the Color Theme picker fires one ThemeMsg per intermediate selection,
+		// and doing that work for every one backed up and drained visibly after
+		// the user stopped. A color-only change never alters content dimensions,
+		// so deferring the relayout is safe; themeSettleMsg runs it once the
+		// selection settles.
+		m.themePreviewGen++
+		gen := m.themePreviewGen
+		return m, tea.Tick(themePreviewSettleDelay, func(time.Time) tea.Msg {
+			return themeSettleMsg{gen: gen}
+		})
+
+	case themeSettleMsg:
+		// Ignore settles superseded by a newer theme change; only the latest
+		// generation does the relayout + terminal color sync.
+		if msg.gen != m.themePreviewGen {
+			return m, nil
+		}
 		return m, tea.Batch(m.handleResizeCmd(), m.syncTerminalColorsAfterCmd())
 	case tea.KeyPressMsg:
 		keyMsg := msg
@@ -1482,6 +1540,13 @@ func (m *RouterModel) View() tea.View {
 	}
 	activePage := m.GetActivePage()
 	activePageView := activePage.View()
+	// A page opts into the pricier AllMotion protocol (hover feedback, e.g.
+	// the home page's uifx.Level-gated fanciness) by setting it on its own
+	// View; everything else stays on the default CellMotion.
+	mouseMode := tea.MouseModeCellMotion
+	if activePageView.MouseMode == tea.MouseModeAllMotion {
+		mouseMode = tea.MouseModeAllMotion
+	}
 	statusView := m.status.View()
 	statusContent := statusView.Content
 	statusHeight := 0
@@ -1556,7 +1621,7 @@ func (m *RouterModel) View() tea.View {
 	v := tea.View{
 		Content:         contentStr,
 		AltScreen:       true,
-		MouseMode:       tea.MouseModeCellMotion,
+		MouseMode:       mouseMode,
 		BackgroundColor: m.colorProfile.Convert(m.colors.Styles.TextOnBg.GetBackground()),
 		ForegroundColor: m.colorProfile.Convert(m.colors.Styles.TextOnBg.GetForeground()),
 		WindowTitle:     m.activeWindowTitle(),

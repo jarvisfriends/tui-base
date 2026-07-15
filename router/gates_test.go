@@ -63,3 +63,42 @@ func TestGatesChangedMsgReachesInspector(t *testing.T) {
 		t.Fatal("router returned nil model on GatesChangedMsg")
 	}
 }
+
+// TestInspectorGatesChangedMsgRebroadcasts asserts a gate flip made inside the
+// Inspector's own Settings tab (Ctrl+D) — which emits inspector.GatesChangedMsg,
+// not settings.GatesChangedMsg — still reaches the app-facing contract: the
+// router must re-broadcast it as settings.GatesChangedMsg so a host app's own
+// pages that listen for that documented message see gate flips regardless of
+// where the toggle happened.
+func TestInspectorGatesChangedMsgRebroadcasts(t *testing.T) {
+	g := gate.NewGateRegistry()
+	m := NewWithOptions(Options{AppName: "Gate Rebroadcast App", Gates: g})
+	defer m.Close()
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+
+	values := map[string]bool{"Some Gate": true}
+	_, cmd := m.Update(inspector.GatesChangedMsg{Values: values})
+	if cmd == nil {
+		t.Fatal("router returned nil cmd for inspector.GatesChangedMsg")
+	}
+
+	// tea.Batch collapses to the single command directly when the other one
+	// (the resize cmd) is nil, so accept either a bare settings.GatesChangedMsg
+	// or a BatchMsg containing one.
+	cmds := []tea.Cmd{cmd}
+	if batch, ok := cmd().(tea.BatchMsg); ok {
+		cmds = batch
+	}
+	var found bool
+	for _, c := range cmds {
+		if sc, ok := c().(settings.GatesChangedMsg); ok {
+			found = true
+			if !sc.Values["Some Gate"] {
+				t.Fatalf("re-broadcast Values = %v; want Some Gate=true", sc.Values)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("router did not re-broadcast settings.GatesChangedMsg")
+	}
+}
