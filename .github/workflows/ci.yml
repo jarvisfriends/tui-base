@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: '1.26.5'
       - name: Cache Go modules
@@ -73,7 +73,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: '1.26.5'
       - name: Install stringer
@@ -93,7 +93,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: '1.26.5'
       - name: Check for go fix drift
@@ -116,7 +116,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: '1.26.5'
       - name: Lint
@@ -181,7 +181,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: '1.26.5'
       - name: Install govulncheck
@@ -195,7 +195,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: '1.26.5'
       - name: Run fuzz targets (30s each)
@@ -210,7 +210,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: '1.26.5'
       - name: Run benchmarks
@@ -232,7 +232,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: '1.26.5'
       - name: Install stringer
@@ -256,7 +256,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: '1.26.5'
       - name: Cache Go modules
