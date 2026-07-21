@@ -42,7 +42,7 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 | Q-1 | Public release goal? | Already public at **v0.2.1**. v1.0 = "no more changes wanted"; until then breaking improvements are fine. Library-readiness items stay a priority band. |
 | Q-2 | Module import path? | `github.com/jarvisfriends/tui-base` is final. Consider a top-level wrapper around `router`, or moving router to the root under a new name (see LR-1). |
 | Q-3 | `testutil` export? | **Keep exported** — consumers run `CheckCodeStandards`; the `golang.org/x/tools` dep is accepted. LR-2 resolved. |
-| Q-4 | `go.mod` directive? | **`go 1.26.4` (or above) is required** — 1.26.3 has a CVE. Never suggest downgrading to bare `go 1.26`. LR-3 resolved. |
+| Q-4 | `go.mod` directive? | **`go 1.26.5` (or above) is required** — 1.26.4 has a CVE. Never suggest downgrading to bare `go 1.26`. LR-3 resolved. |
 | Q-5 | Page registry pattern? | **No `init()` functions anywhere in the library.** Keep globals as small as possible; prefer passing values. Shared pointers must be thread-safe before being handed out. See A-7. |
 | Q-6 | Component interface shape? | **Stay monolithic.** Goal is ease of getting a full app running — excitement over terminal UIs, not minimal interfaces. Closed. |
 | Q-7 | Coverage strategy? | Keep the 55% floor **and** add Codecov/Coveralls trend tracking (CI-7; needs the human to create the account/token — reminder lives there). |
@@ -65,7 +65,7 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 |---|---|---|---|
 | ✅ Done | LR-1 | Move `main.go` to `cmd/tui-base/` | Done 2026-07-03: entry point moved to `cmd/tui-base/`; new root `tuibase` package (per Q-2) exposes `Run(Options)`, `New`, `NewWithOptions`, and the `Options`/`RegisteredPage` aliases so consumers need one import. goreleaser/CI/tasks/docs updated. |
 | ✅ Done | LR-2 | Resolve `testutil` export vs `internal/` | Per Q-3: stays exported; `x/tools` dep accepted. |
-| ✅ Done | LR-3 | Settle `go.mod` version directive | Per Q-4: `go 1.26.4`+ is mandatory (CVE in 1.26.3). Guard against downgrades. |
+| ✅ Done | LR-3 | Settle `go.mod` version directive | Per Q-4: `go 1.26.5`+ is mandatory (CVE in 1.26.4). Guard against downgrades. |
 | ✅ Done | LR-4 | `doc.go` for every public package | Done 2026-07-03: doc.go added for router, navigation, status, logging, keys, gate, common, envpath, timepicker, pages/{home,inspector,settings}; the rest (theme, notifications, page, testutil, overlay, geom, config, table, datepicker, tuibase) already carried package comments on their main file. |
 | ✅ Done | LR-5 | `Example*` test functions | Done 2026-07-03: `ExampleRun`, `ExampleNewWithOptions`, `ExampleRouterModel_RegisterPage` (compile-checked — running needs a TTY), `ExampleBase_Colors`, `ExampleActive`, `ExampleManager_Add` (executed with Output). |
 | 🔄 In Progress | LR-6 | Godoc comments on exported symbols | Package docs now exist everywhere (LR-4) and new APIs ship documented; the backlog is older exported symbols. Plan: enable revive's `exported` rule per-package and burn down, starting with `navigation`, `router`, `theme`, `page`, `keys`; flip the global rule on (`.golangci.yml` note) when clean. |
@@ -86,7 +86,7 @@ Answers here unblock the tagged tasks below. Recommendations included where one 
 | 🔄 In Progress | CI-7 | Coverage: reduce job redundancy + add trend/badge | Wired 2026-07-03: Coveralls + Codecov upload steps in the coverage job, Coveralls badge in the README, redundant test run + lint dropped (`SKIP_LINT=1` for the script). 55% floor kept. **🔔 Human action required:** add the `COVERALLS_REPO_TOKEN` repo secret (value provided out-of-band; consider rotating it) and a `CODECOV_TOKEN` secret if Codecov should authenticate. |
 | ✅ Done | CI-8 | `goreleaser release --snapshot` on PRs/CI | Done 2026-07-03: `release-snapshot` job builds the full matrix with `--snapshot --skip=publish` on every push/PR. |
 | ✅ Done | CI-9 | Add Windows-GOOS lint to `tools/local_verify.sh` | Done 2026-07-03: the script lints GOOS=windows and GOOS=linux in subshells, matching CI. |
-| ✅ Done | CI-10 | One-time local `govulncheck ./...` clean-pass verification | Verified 2026-07-03: "No vulnerabilities found." (govulncheck v1.5.0, go 1.26.4). |
+| ✅ Done | CI-10 | One-time local `govulncheck ./...` clean-pass verification | Verified 2026-07-03: "No vulnerabilities found." (govulncheck v1.5.0, go 1.26.5). |
 | 💡 Idea | CI-11 | PR size labels (XS–XL); conventional-commit title enforcement | Nice-to-haves for review flow / changelog. |
 
 ## Architecture & code quality

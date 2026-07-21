@@ -1,6 +1,6 @@
 
 
-We are using Go 1.26.4+ (never lower the `go.mod` directive below 1.26.4 — 1.26.3 has a known CVE) with all the latest language features. Ensure that any code you suggest is compatible with this version. We are also using the latest versions of all Charm v2 libraries (`charm.land/…/v2` vanity imports). Verify any new dependency uses v2 vanity paths and does not pull in `github.com/charmbracelet/bubbletea` (the v1 path) as a transitive dependency.
+We are using Go 1.26.5+ (never lower the `go.mod` directive below 1.26.5 — 1.26.4 has a known CVE) with all the latest language features. Ensure that any code you suggest is compatible with this version. We are also using the latest versions of all Charm v2 libraries (`charm.land/…/v2` vanity imports). Verify any new dependency uses v2 vanity paths and does not pull in `github.com/charmbracelet/bubbletea` (the v1 path) as a transitive dependency.
 
 **Any time a new library could replace a homegrown solution, say so first** — describe what the library provides and why it is better before touching code. The human is new to Charm v2; always prefer the simplest, most idiomatic Charm solution.
 

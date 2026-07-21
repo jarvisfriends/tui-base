@@ -1,100 +1,100 @@
 {
-  // ─── Go Language Server ───────────────────────────────────────────────
-  "go.useLanguageServer": true,
-  "go.toolsManagement.autoUpdate": true,
-
-  // ─── Go Formatting (gofumpt via gopls) ────────────────────────────────
-  // gofumpt is a stricter gofmt superset: sorts imports, enforces
-  // consistent block formatting, removes unnecessary empty lines.
-  // All gofmt-compatible code passes; gofumpt just tightens the rules.
-  "gopls": {
-    "formatting.gofumpt": true,
-    "ui.vulncheck": "Imports",
-    "analyses": {
-      "nilness": true,
-      "unusedwrite": true,
-      "shadow": true,
-      "copylocks": true
-    }
+  "[go]": {
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "always"
+    },
+    "editor.defaultFormatter": "golang.go",
+    "editor.formatOnSave": true
   },
-
-  // ─── Go Linting ──────────────────────────────────────────────────────
-  // --new-from-rev=HEAD reports issues only in lines changed since the last
-  // commit, keeping the editor fast on slower machines. local_verify.sh still
-  // checks everything; this flag is editor-only.
-  "go.lintTool": "golangci-lint",
-  "go.lintFlags": ["--new-from-rev=HEAD"],
-  "go.vetOnSave": "workspace",
+  "[json]": {
+    "editor.defaultFormatter": "vscode.json-language-features",
+    "editor.formatOnSave": true,
+    "editor.tabSize": 2
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "vscode.json-language-features",
+    "editor.formatOnSave": true,
+    "editor.tabSize": 2
+  },
+  "[markdown]": {
+    "editor.formatOnSave": false,
+    "editor.rulers": [
+      120
+    ],
+    "editor.wordWrap": "on"
+  },
+  "[shellscript]": {
+    "editor.defaultFormatter": "foxundermoon.shell-format",
+    "editor.formatOnSave": true,
+    "editor.insertSpaces": true,
+    "editor.tabSize": 2
+  },
+  "[toml]": {
+    "editor.defaultFormatter": "tamasfe.even-better-toml",
+    "editor.formatOnSave": true
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "redhat.vscode-yaml",
+    "editor.formatOnSave": true,
+    "editor.tabSize": 2
+  },
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+  "files.trimTrailingWhitespace": true,
+  "go.buildFlags": [
+    "-race"
+  ],
   "go.buildOnSave": "workspace",
-
-  // ─── Go Testing ──────────────────────────────────────────────────────
-  // Race detector on all editor test runs to catch data races early.
-  // Requires CGO_ENABLED=1 and gcc on PATH (see tools/setup_race_*.sh).
-  "go.testFlags": ["-v", "-race", "-count=1"],
-  "go.buildFlags": ["-race"],
-  "go.testTimeout": "60s",
   "go.coverOnSave": true,
   "go.coverageDecorator": {
-    "type": "gutter",
     "coveredGutterStyle": "blockgreen",
-    "uncoveredGutterStyle": "blockred",
     "coveredHighlightColor": "rgba(64, 128, 64, 0.12)",
+    "type": "gutter",
+    "uncoveredGutterStyle": "blockred",
     "uncoveredHighlightColor": "rgba(128, 64, 64, 0.12)"
   },
+  "go.lintFlags": [
+    "--new-from-rev=HEAD"
+  ],
+  "go.lintTool": "golangci-lint",
   "go.testEnvVars": {
     "TERM": "xterm-256color"
   },
-
-  // ─── Language-specific formatting on save ─────────────────────────────
-  "[go]": {
-    "editor.formatOnSave": true,
-    "editor.defaultFormatter": "golang.go",
-    "editor.codeActionsOnSave": {
-      "source.organizeImports": "always"
-    }
+  "go.testFlags": [
+    "-v",
+    "-race",
+    "-count=1"
+  ],
+  "go.testTimeout": "60s",
+  "go.toolsManagement.autoUpdate": true,
+  "go.useLanguageServer": true,
+  "go.vetOnSave": "workspace",
+  "gopls": {
+    "analyses": {
+      "copylocks": true,
+      "nilness": true,
+      "shadow": true,
+      "unusedwrite": true
+    },
+    "formatting": {
+      "gofumpt": true
+    },
+    "formatting.gofumpt": true,
+    "ui.vulncheck": "Imports"
   },
-  "[json]": {
-    "editor.formatOnSave": true,
-    "editor.tabSize": 2,
-    "editor.defaultFormatter": "vscode.json-language-features"
-  },
-  "[jsonc]": {
-    "editor.formatOnSave": true,
-    "editor.tabSize": 2,
-    "editor.defaultFormatter": "vscode.json-language-features"
-  },
-  "[yaml]": {
-    "editor.formatOnSave": true,
-    "editor.tabSize": 2,
-    "editor.defaultFormatter": "redhat.vscode-yaml"
-  },
-  "[markdown]": {
-    "editor.wordWrap": "on",
-    "editor.rulers": [120],
-    "editor.formatOnSave": false
-  },
-  "[shellscript]": {
-    "editor.tabSize": 2,
-    "editor.insertSpaces": true
-  },
-
-  // ─── File handling ────────────────────────────────────────────────────
-  "files.eol": "\n",
-  "files.trimTrailingWhitespace": true,
-  "files.insertFinalNewline": true,
-  "files.trimFinalNewlines": true,
-
-  // ─── Search / Problems exclusions ─────────────────────────────────────
   "search.exclude": {
-    "**/vendor/**": true,
-    "**/tmp/**": true,
+    "**/*.exe": true,
     "**/dist/**": true,
-    "**/*.exe": true
+    "**/tmp/**": true,
+    "**/vendor/**": true
   },
-
-  // ─── Terminal (Windows → Git Bash) ────────────────────────────────────
-  // "source": "Git Bash" uses VS Code's built-in registry auto-detection,
-  // avoiding a hardcoded path that breaks on non-default Git installs.
+  "shellformat.flag": [
+    "-i",
+    "2",
+    "-ci"
+  ],
+  "shellformat.path": "shfmt",
   "terminal.integrated.defaultProfile.windows": "Git Bash",
   "terminal.integrated.profiles.windows": {
     "Git Bash": {

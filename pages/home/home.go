@@ -38,7 +38,7 @@ const wideBreakpoint = 84
 // names, hints) drop to keep every line on one row.
 const compactBreakpoint = 60
 
-const welcomeText = "Welcome to the V2 Terminal Hub\n\nUse Tab to switch pages.\nCtrl+B to toggle sidebar.\nCtrl+H to toggle full help."
+const welcomeText = "Welcome to the V2 Terminal Hub\n\nUse Tab to switch pages.\nCtrl+B to toggle sidebar.\nCtrl+H to toggle full help.\nHome showcase: t=theme, o=shape, p=bar, r=spark, f=fx."
 
 // Interactive zone IDs — registered from the same layers the View renders.
 const (
@@ -329,6 +329,21 @@ func (m *HomePageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if chosen, _ := m.contextMenu.HandleKey(msg); chosen != nil {
 				return m, m.applyContextChoice(chosen.ID)
 			}
+			return m, nil
+		}
+		switch msg.String() {
+		case "t":
+			return m, m.cycleThemeCmd()
+		case "o":
+			m.shape = (m.shape + 1) % len(styles.PillShapes())
+			return m, nil
+		case "p":
+			return m, m.cycleProgressStyle()
+		case "r":
+			m.sparkStyle = charts.SparklineStyle((int(m.sparkStyle) + 1) % sparklineStyleCount)
+			return m, nil
+		case "f":
+			m.cycleEffects()
 			return m, nil
 		}
 		// The Disks table claims its navigation/sort/filter/open keys; anything

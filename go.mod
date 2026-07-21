@@ -10,7 +10,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/jarvisfriends/inspector v0.0.1
-	github.com/jarvisfriends/snap v0.1.12
+	github.com/jarvisfriends/snap v0.1.14
 	golang.org/x/tools v0.48.0
 )
 

@@ -5,7 +5,7 @@ observability, and maintainability from day one.
 
 ## 1. Prerequisites
 
-- Go 1.26.4+ (1.26.3 and below contain a known CVE)
+- Go 1.26.5+ (1.26.4 and below contain a known CVE)
 - A terminal that supports Bubble Tea interaction
 - Optional: VS Code tasks from this workspace
 

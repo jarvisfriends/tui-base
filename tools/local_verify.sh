@@ -1,6 +1,35 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+MODE="${VERIFY_MODE:-full}"
+if [[ "${1:-}" == "--mode" ]]; then
+  MODE="${2:-}"
+  shift 2
+fi
+if [[ "$MODE" != "fast" && "$MODE" != "full" ]]; then
+  echo "ERROR: invalid mode '$MODE' (expected: fast|full)"
+  exit 1
+fi
+
+echo "==> local verify mode: $MODE"
+
+echo "==> gofumpt (check only)"
+if ! command -v gofumpt >/dev/null 2>&1; then
+  echo "ERROR: 'gofumpt' not found. Install with:"
+  echo "  go install mvdan.cc/gofumpt@latest"
+  echo "Ensure \$GOBIN or \$GOPATH/bin is on your PATH."
+  exit 1
+fi
+mapfile -t GO_FILES < <(git ls-files '*.go')
+if [[ ${#GO_FILES[@]} -gt 0 ]]; then
+  UNFORMATTED=$(gofumpt -l "${GO_FILES[@]}" 2>/dev/null || true)
+  if [[ -n "${UNFORMATTED}" ]]; then
+    echo "ERROR: gofumpt required for:"
+    echo "${UNFORMATTED}"
+    exit 1
+  fi
+fi
+
 # ─── helper: detect Go version mismatch (preflight) ──────────────────────────
 # Some Go tools (govulncheck, golangci-lint, gorelease, …) load packages using
 # the Go version they were compiled with. If that version differs from the Go
@@ -140,26 +169,38 @@ check_golangci_lint() {
 }
 
 check_golangci_lint
-# Lint both GOOS targets like CI does, so platform-specific files
-# (disk_windows.go vs disk_unix.go, terminal_win.go, …) surface issues before
-# push regardless of the developer's OS (CI-9). Subshells keep the GOOS/GOARCH
-# exports from leaking into the rest of the script.
-echo "==> golangci-lint (GOOS=windows)"
-# shellcheck disable=SC2030,SC2031  # subshell-local GOOS/GOARCH is the point
-(
-  export GOOS=windows GOARCH=amd64
-  run_go_tool "golangci-lint" \
-    "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest" \
-    run ./...
-)
-echo "==> golangci-lint (GOOS=linux)"
-# shellcheck disable=SC2030,SC2031  # subshell-local GOOS/GOARCH is the point
-(
-  export GOOS=linux GOARCH=amd64
-  run_go_tool "golangci-lint" \
-    "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest" \
-    run ./...
-)
+if [[ "$MODE" == "full" ]]; then
+  # Lint both GOOS targets like CI does, so platform-specific files
+  # (disk_windows.go vs disk_unix.go, terminal_win.go, …) surface issues before
+  # push regardless of the developer's OS (CI-9). Subshells keep the GOOS/GOARCH
+  # exports from leaking into the rest of the script.
+  echo "==> golangci-lint (GOOS=windows)"
+  # shellcheck disable=SC2030,SC2031  # subshell-local GOOS/GOARCH is the point
+  (
+    export GOOS=windows GOARCH=amd64
+    run_go_tool "golangci-lint" \
+      "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest" \
+      run ./...
+  )
+  echo "==> golangci-lint (GOOS=linux)"
+  # shellcheck disable=SC2030,SC2031  # subshell-local GOOS/GOARCH is the point
+  (
+    export GOOS=linux GOARCH=amd64
+    run_go_tool "golangci-lint" \
+      "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest" \
+      run ./...
+  )
+else
+  current_goos=$(go env GOOS)
+  echo "==> golangci-lint (GOOS=${current_goos})"
+  # shellcheck disable=SC2030,SC2031  # subshell-local GOOS/GOARCH is intentional
+  (
+    export GOOS="$current_goos" GOARCH=amd64
+    run_go_tool "golangci-lint" \
+      "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest" \
+      run ./...
+  )
+fi
 
 if command -v shellcheck >/dev/null 2>&1; then
   echo "==> shellcheck"
@@ -213,49 +254,64 @@ fi
 echo "==> go mod verify"
 go mod verify
 
-echo "==> go mod tidy (drift check)"
-go mod tidy
-if ! git diff --exit-code go.mod go.sum; then
-  echo "ERROR: go mod tidy changed files — commit the result before pushing"
-  exit 1
-fi
+if [[ "$MODE" == "full" ]]; then
+  echo "==> go mod tidy (drift check)"
+  go mod tidy
+  if ! git diff --exit-code go.mod go.sum; then
+    echo "ERROR: go mod tidy changed files — commit the result before pushing"
+    exit 1
+  fi
 
-echo "==> go fix (drift check)"
-if ! go fix -diff ./...; then
-  echo ""
-  echo "ERROR: go fix found suggestions. Run: go fix ./..."
-  echo "Then review the changes with 'git diff' and commit them."
-  exit 1
+  echo "==> go fix (drift check)"
+  if ! go fix -diff ./...; then
+    echo ""
+    echo "ERROR: go fix found suggestions. Run: go fix ./..."
+    echo "Then review the changes with 'git diff' and commit them."
+    exit 1
+  fi
 fi
 
 # ─── go generate drift check ────────────────────────────────────────────────
 # Skipped when stringer is not installed; the preflight section above already
 # warned the developer. CI enforces this check unconditionally.
 echo "==> go generate (drift check)"
-if ! command -v stringer >/dev/null 2>&1; then
-  echo "WARN: 'stringer' not found; skipping go generate drift check."
-  echo "      Install with: go install golang.org/x/tools/cmd/stringer@latest"
-else
-  go generate ./...
-  if ! git diff --exit-code; then
-    echo ""
-    echo "ERROR: go generate produced changes — run 'go generate ./...' and commit the result."
-    exit 1
+if [[ "$MODE" == "full" ]]; then
+  if ! command -v stringer >/dev/null 2>&1; then
+    echo "WARN: 'stringer' not found; skipping go generate drift check."
+    echo "      Install with: go install golang.org/x/tools/cmd/stringer@latest"
+  else
+    go generate ./...
+    if ! git diff --exit-code; then
+      echo ""
+      echo "ERROR: go generate produced changes — run 'go generate ./...' and commit the result."
+      exit 1
+    fi
   fi
+else
+  echo "==> go generate (fast mode): skipped"
 fi
 
 echo "==> go vet"
 go vet ./...
 
-echo "==> go test (with race detector)"
-CGO_ENABLED=1 go test -race ./... -v
+if [[ "$MODE" == "full" ]]; then
+  echo "==> go test (with race detector)"
+  CGO_ENABLED=1 go test -race ./... -v
+else
+  echo "==> go test"
+  go test ./... -v
+fi
 
 # ─── govulncheck (security scan) ─────────────────────────────────────────────
 if command -v govulncheck >/dev/null 2>&1; then
-  echo "==> govulncheck"
-  run_go_tool "govulncheck" \
-    "go install golang.org/x/vuln/cmd/govulncheck@latest" \
-    ./...
+  if [[ "$MODE" == "full" ]]; then
+    echo "==> govulncheck"
+    run_go_tool "govulncheck" \
+      "go install golang.org/x/vuln/cmd/govulncheck@latest" \
+      ./...
+  else
+    echo "==> govulncheck (fast mode): skipped"
+  fi
 else
   echo "WARN: 'govulncheck' not found; skipping vulnerability scan (CI still enforces this)."
   echo "      Install with:"

@@ -4,7 +4,7 @@
 
 | Requirement | Version |
 |---|---|
-| Go toolchain | **1.26.4+** (1.26.3 and below contain a known CVE) |
+| Go toolchain | **1.26.5+** (1.26.4 and below contain a known CVE) |
 | Charm stack | v2 vanity imports only (`charm.land/bubbletea/v2`, `bubbles/v2`, `lipgloss/v2`, `huh/v2`) — the v1 `github.com/charmbracelet/bubbletea` path must never appear in the module graph |
 
 ## Operating systems

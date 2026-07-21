@@ -62,6 +62,8 @@ github.com/jarvisfriends/inspector v0.0.1 h1:YUCcliTL+mfKIjRcViap3B5pFp22r+AEeH7
 github.com/jarvisfriends/inspector v0.0.1/go.mod h1:4LYtgNZIuvvvo4oEAxnU7ta1DdEPKeifoOWGjH7rgbo=
 github.com/jarvisfriends/snap v0.1.12 h1:nGne5cZwcSy/wFN3pOeO9N8/rEGrAAXipbAulDYyb9o=
 github.com/jarvisfriends/snap v0.1.12/go.mod h1:W3IKyqu7HDLYEGiO4MRYEZpZL+8ryDFzp0dGZrNQxLA=
+github.com/jarvisfriends/snap v0.1.14 h1:mWhZqeZZD8QXii3xBwRwp4MTgCSXhy9J7jUSp+JFX7M=
+github.com/jarvisfriends/snap v0.1.14/go.mod h1:W3IKyqu7HDLYEGiO4MRYEZpZL+8ryDFzp0dGZrNQxLA=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/lrstanley/bubbletint/v2 v2.0.2 h1:JvLHMf7qI/UE47AyNsD9jVI7h2VQvq+4AYcHNe8DwSQ=

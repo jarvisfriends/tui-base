@@ -227,7 +227,7 @@ func (m *RouterModel) View() tea.View {
 
 ---
 
-## Huh v2 — Known Behaviours and Constraints
+## Huh v2 — Known Behaviors and Constraints
 
 ### `Select` Never Collapses When Blurred
 

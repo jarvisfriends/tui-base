@@ -1,11 +1,15 @@
 {
   "recommendations": [
     "golang.go",
+    "golangci-lint.vscode-golangci-lint",
+    "foxundermoon.shell-format",
     "timonwong.shellcheck",
     "redhat.vscode-yaml",
+    "esbenp.prettier-vscode",
     "editorconfig.editorconfig",
     "davidanson.vscode-markdownlint",
     "tamasfe.even-better-toml",
+    "griimick.vhs",
     "github.vscode-github-actions",
     "usernamehw.errorlens",
     "mhutchie.git-graph",
