@@ -8,7 +8,7 @@ import (
 )
 
 // varsToCollapse defines the environment variables we try to collapse in paths.
-// We prioritize longer values (e.g. USERPROFILE before HOMEDRIVE) to verify
+// We prioritize longer values (e.g. USERPROFILE before HOMEDRIVE) so
 // the most specific match is replaced first.
 var varsToCollapse = []string{
 	"APPDATA",

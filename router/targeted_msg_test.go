@@ -32,7 +32,7 @@ func (alphaTickMsg) TargetPage() string { return "Alpha" }
 // plainTickMsg is an ordinary broadcast background message.
 type plainTickMsg struct{}
 
-// TestTargetedMsgWakesOnlyItsPage verifies the  fast path: a background
+// TestTargetedMsgWakesOnlyItsPage verifies the fast path: a background
 // message implementing TargetedMsg is delivered only to the page it names,
 // while ordinary messages keep the broadcast behavior.
 func TestTargetedMsgWakesOnlyItsPage(t *testing.T) {

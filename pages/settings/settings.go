@@ -56,7 +56,7 @@ const (
 	logOutputFile = "file"
 )
 
-// initRegistryOnce verifies tint.NewDefaultRegistry is called exactly once
+// initRegistryOnce ensures tint.NewDefaultRegistry is called exactly once
 // across the process lifetime. NewDefaultRegistry writes to a module-level
 // global inside bubbletint; calling it from concurrent goroutines (e.g.
 // parallel tests that each call settings.NewWithOptions) produces a data race.

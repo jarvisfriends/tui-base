@@ -193,11 +193,15 @@ if [[ "$MODE" == "full" ]]; then
       run ./...
   )
 else
+  # Fast mode lints the developer's native platform, so use the host's real
+  # GOARCH rather than forcing amd64 — on arm64 machines a cross-arch lint can
+  # analyze the wrong build constraints or fail on tag/cgo differences.
   current_goos=$(go env GOOS)
-  echo "==> golangci-lint (GOOS=${current_goos})"
+  current_goarch=$(go env GOARCH)
+  echo "==> golangci-lint (GOOS=${current_goos} GOARCH=${current_goarch})"
   # shellcheck disable=SC2030,SC2031  # subshell-local GOOS/GOARCH is intentional
   (
-    export GOOS="$current_goos" GOARCH=amd64
+    export GOOS="$current_goos" GOARCH="$current_goarch"
     run_go_tool "golangci-lint" \
       "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest" \
       run ./...
