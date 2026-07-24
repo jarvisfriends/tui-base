@@ -596,12 +596,13 @@ func TestHistoryPanelDismissAllKey(t *testing.T) {
 		t.Fatal("history panel should be visible after ToggleNotifications()")
 	}
 
-	// Press 'd' — the panel footer advertises this as "dismiss all".
-	m = updateRouter(m, tea.KeyPressMsg{Text: "d"})
+	// Press 'D' — snap v0.2's DefaultKeyMap binds Dismiss All to 'D' (lowercase
+	// 'd' is now Open Detail); the panel footer advertises 'D' as "dismiss all".
+	m = updateRouter(m, tea.KeyPressMsg{Text: "D"})
 
 	if got := m.notifMgr.Count(); got != 0 {
 		t.Errorf(
-			"dismiss-all key 'd': expected 0 active after pressing 'd', got %d — 'd' key is not wired in the history panel handler",
+			"dismiss-all key 'D': expected 0 active after pressing 'D', got %d — 'D' key is not wired in the history panel handler",
 			got,
 		)
 	}
@@ -735,10 +736,11 @@ func TestInspectorOverlayStillShowsStatusBar(t *testing.T) {
 		t.Fatal("inspector overlay missing expected inspector title with (Inspector) marker")
 	}
 	// With the inspector overlay visible the status bar shows the inspector's
-	// own key hints (every tab lists ↑/↓ scroll); "scroll" is a stable marker
-	// that the hints render. (The active page's hints, home's included, are
-	// suppressed while the modal overlay owns the bar.)
-	if !strings.Contains(strings.ToLower(content), "scroll") {
+	// own key hints (every tab lists its ↑↓ move binding); "move" is a stable
+	// marker that the hints render (inspector v0.0.4 renames the scroll help to
+	// "move"). (The active page's hints, home's included, are suppressed while
+	// the modal overlay owns the bar.)
+	if !strings.Contains(strings.ToLower(content), "move") {
 		t.Fatal("status bar key hints are missing with inspector overlay")
 	}
 }
