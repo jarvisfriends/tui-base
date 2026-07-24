@@ -70,3 +70,29 @@ func TestWriteFileAtomicMissingDirFails(t *testing.T) {
 		t.Fatal("expected error for missing parent directory, got nil")
 	}
 }
+
+// TestWriteFileAtomicRenameFails covers the os.Rename error branch: when the
+// destination path is an existing directory the final rename cannot succeed,
+// and the temp file must be cleaned up rather than left behind.
+func TestWriteFileAtomicRenameFails(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	// Target a path that is itself a directory; renaming a file onto it fails.
+	target := filepath.Join(dir, "iam-a-dir")
+	if err := os.Mkdir(target, 0o750); err != nil {
+		t.Fatalf("setup mkdir: %v", err)
+	}
+	if err := WriteFileAtomic(target, []byte("data"), 0o600); err == nil {
+		t.Fatal("expected error renaming onto an existing directory, got nil")
+	}
+	// The temp file (<base>.tmp-*) must not be left behind in the directory.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("readdir: %v", err)
+	}
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".tmp-") {
+			t.Errorf("temp file left behind after failed rename: %s", e.Name())
+		}
+	}
+}
