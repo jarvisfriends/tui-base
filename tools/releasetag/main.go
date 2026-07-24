@@ -78,7 +78,7 @@ func run(mode string) error {
 		return nil
 	case "apply":
 		if a.bump == bumpUnknown {
-			return fmt.Errorf("gorelease did not yield a version to release (err=%v):\n%s", gorErr, report)
+			return fmt.Errorf("gorelease did not yield a version to release (err=%w):\n%s", gorErr, report)
 		}
 		return a.apply()
 	default:
@@ -317,13 +317,14 @@ func writeSummary(md string) {
 		fmt.Println(md)
 		return
 	}
+	//nolint:gosec // GITHUB_STEP_SUMMARY is a GitHub Actions-provided output path.
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)
 	if err != nil {
 		fmt.Println(md)
 		return
 	}
 	defer func() { _ = f.Close() }()
-	fmt.Fprintln(f, md)
+	_, _ = fmt.Fprintln(f, md)
 }
 
 // upsertPRComment posts (or updates) the report as a single PR comment. It is
@@ -355,6 +356,7 @@ func prNumber() int {
 	if p == "" {
 		return 0
 	}
+	//nolint:gosec // GITHUB_EVENT_PATH is a GitHub Actions-provided JSON payload path.
 	data, err := os.ReadFile(p)
 	if err != nil {
 		return 0
@@ -396,11 +398,12 @@ func findComment(listURL, token string) int64 {
 
 // ghDo performs a GitHub REST call and returns the body and status code. Any
 // transport error yields status 0, which callers treat as "skip".
-func ghDo(method, url, token string, body []byte) ([]byte, int) {
+func ghDo(method, url, token string, body []byte) (responseBody []byte, statusCode int) {
 	var r io.Reader
 	if body != nil {
 		r = bytes.NewReader(body)
 	}
+	//nolint:gosec // The URL is built from GitHub Actions environment values for the GitHub API endpoint.
 	req, err := http.NewRequest(method, url, r)
 	if err != nil {
 		return nil, 0
@@ -411,7 +414,9 @@ func ghDo(method, url, token string, body []byte) ([]byte, int) {
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	client := &http.Client{Timeout: 15 * time.Second}
+	//nolint:gosec // GitHub API calls are limited to the trusted API host resolved above.
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, 0
 	}
