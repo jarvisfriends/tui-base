@@ -1,0 +1,36 @@
+name: Scorecards
+
+on:
+  branch_protection_rule:
+  push:
+    branches: [ "main", "master" ]
+  schedule:
+    - cron: '31 5 * * 1'
+
+# Top-level token is read-only; the analysis job elevates only what it needs
+# (Scorecard TokenPermissions).
+permissions: read-all
+
+jobs:
+  analysis:
+    name: OpenSSF Scorecards
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+      security-events: write # upload the SARIF results
+      id-token: write # publish results to the OpenSSF API
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Run analysis
+        uses: ossf/scorecard-action@05b42c624433fc40578a4040d5cf5e36ddca8cde # v2.4.2
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
+        with:
+          sarif_file: results.sarif

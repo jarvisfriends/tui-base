@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # SKIP_LINT=1 skips the lint pass — CI sets it in the coverage job because the
-# dedicated lint job has already run golangci-lint on the same commit (CI-7).
+# dedicated lint job has already run golangci-lint on the same commit.
 if [[ "${SKIP_LINT:-0}" != "1" ]]; then
   echo "Running golangci-lint..."
   golangci-lint run ./...

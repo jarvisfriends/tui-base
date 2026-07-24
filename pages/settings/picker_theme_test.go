@@ -12,7 +12,7 @@ import (
 )
 
 // TestThemedDatePickerStylesUseSelectionColors verifies the datepicker's
-// focused cell derives from the theme's semantic selection colors (A-3)
+// focused cell derives from the theme's semantic selection colors
 // instead of the component's hardcoded ANSI defaults.
 func TestThemedDatePickerStylesUseSelectionColors(t *testing.T) {
 	t.Parallel()
@@ -45,7 +45,7 @@ func TestTimePickerThemeUsesAccent(t *testing.T) {
 const hardcodedPink = "38;5;212"
 
 // TestEditorOverlaysUseThemeNotHardcodedColors renders the small editor
-// overlays and asserts the old hardcoded selection color is gone (A-3).
+// overlays and asserts the old hardcoded selection color is gone.
 func TestEditorOverlaysUseThemeNotHardcodedColors(t *testing.T) {
 	t.Parallel()
 

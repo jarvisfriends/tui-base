@@ -14,7 +14,7 @@ import (
 // Test that the settings page renders the huh form and that the router
 // correctly initializes with the persisted nav style.
 func TestSettingsNavToggleViaClick(t *testing.T) {
-	// ensure no leftover settings file
+	// verify no leftover settings file
 	tmpDir := t.TempDir()
 	m := NewWithOptions(Options{
 		ConfigDir: tmpDir,

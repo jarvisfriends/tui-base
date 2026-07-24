@@ -27,7 +27,7 @@ func (m mockPageModel) View() tea.View {
 
 // TestExtraPagesRegistration verifies construction-time page registration via
 // Options.ExtraPages — the explicit replacement for the removed global
-// RegisterPage()/init() registry (A-7/Q-5).
+// RegisterPage()/init() registry (Q-5).
 func TestExtraPagesRegistration(t *testing.T) {
 	t.Parallel()
 	m := NewWithOptions(Options{ExtraPages: []RegisteredPage{

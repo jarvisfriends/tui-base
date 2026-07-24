@@ -22,12 +22,24 @@ builds:
       - arm64
     ldflags:
       - -s -w -X github.com/jarvisfriends/tui-base/common.appVersion={{.Version}}
+  - id: multipage
+    binary: multipage
+    main: ./examples/multipage
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
 
 archives:
   - id: default
     formats:
       - tar.gz
-    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "{{ .ProjectName }}_{{ .Binary }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
         formats:

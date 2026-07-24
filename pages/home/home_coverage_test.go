@@ -208,7 +208,7 @@ func TestHomeLeftClickZones(t *testing.T) {
 		t.Error("clicking effects strip should cycle it")
 	}
 
-	// Theme strip returns a command via onClick; just ensure it doesn't panic.
+	// Theme strip returns a command via onClick; just verify it doesn't panic.
 	leftClickZone(zoneTheme)
 }
 

@@ -5,7 +5,7 @@ observability, and maintainability from day one.
 
 ## 1. Prerequisites
 
-- Go 1.26.4+ (1.26.3 and below contain a known CVE)
+- Go 1.26.5+ (1.26.4 and below contain a known CVE)
 - A terminal that supports Bubble Tea interaction
 - Optional: VS Code tasks from this workspace
 
@@ -74,7 +74,7 @@ remaining selectable in history.
 Checklist:
 
 1. Implement page model (`Init() tea.Cmd`, `Update(tea.Msg) (tea.Model, tea.Cmd)`, `View() tea.View`).
-   - **Note on Bubble Tea v2**: Ensure `Init` returns just `tea.Cmd` (not the model)
+   - **Note on Bubble Tea v2**: Verify `Init` returns just `tea.Cmd` (not the model)
    - and `View` returns `tea.View` (e.g. `tea.NewView("...")`).
 2. Support `SetColors` and use shared styles.
 3. Add keyboard bindings and mouse handling.

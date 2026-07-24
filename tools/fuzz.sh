@@ -6,6 +6,6 @@ set -euo pipefail
 FUZZTIME="${FUZZTIME:-10s}"
 
 echo "Running fuzzers (${FUZZTIME} each)..."
-echo "Not running any fuzzers yet."
+go test ./envpath -run '^$' -fuzz='^FuzzCollapseExpand$' -fuzztime="${FUZZTIME}"
 
 echo "Fuzz runs completed (timed)."

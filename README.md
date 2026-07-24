@@ -2,6 +2,10 @@
 
 ![tui-base — the bass-line for your charm apps](assets/banner.svg)
 
+[![CI](https://github.com/jarvisfriends/tui-base/actions/workflows/ci.yml/badge.svg)](https://github.com/jarvisfriends/tui-base/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/jarvisfriends/tui-base/badge)](https://scorecard.dev/viewer/?uri=github.com/jarvisfriends/tui-base)
+[![Go Reference](https://pkg.go.dev/badge/github.com/jarvisfriends/tui-base.svg)](https://pkg.go.dev/github.com/jarvisfriends/tui-base)
+
 A structured, production-minded foundation for building large Charm v2 terminal applications in Go.
 
 This project is designed for engineers who want more than a demo app: predictable architecture,
@@ -13,12 +17,11 @@ you understand message flow while you build.
 ## Sibling repos
 
 - [jarvisfriends/snap](https://github.com/jarvisfriends/snap) — "Jarvis Friends
-  Snap": the reusable components (keys, geometry, date/time pickers, and more
-  on the way — navigation, table, pickers). tui-base imports them back; snap is
-  the single source of truth. First packages moved 2026-07-09.
+  Snap": reusable Charm v2 components used by tui-base, including navigation,
+  status, notifications, pickers, table, styles, key bindings, geometry, and
+  date/time controls.
 - [jarvisfriends/inspector](https://github.com/jarvisfriends/inspector) — the
-  runtime debugger, being split out so any Charm-based app can use it (see
-  ROADMAP SP-12).
+  runtime debugger used for the Ctrl+D overlay and available to any Charm app.
 
 ## Why This Exists
 
@@ -55,14 +58,12 @@ The following milestone capabilities are already implemented:
 - `cmd/tui-base/`: runnable reference application.
 - `router/`: root model and message routing.
 - `pages/`: page models (`home`, `settings`); the Ctrl+D inspector now
-  lives in [inspector](https://github.com/jarvisfriends/inspector) and is
-  imported back.
-- `theme/`: compatibility alias shim over `snap/styles` (kept until downstream
-  apps migrate their imports).
+  comes from [inspector](https://github.com/jarvisfriends/inspector).
+- `theme/`: compatibility alias shim over `snap/styles`.
 - `logging/`: runtime logger + subscriber fanout.
 - the reusable components (navigation, status bar, notifications, table,
   styles, pickers, key bindings, geometry, date/time pickers, gates, winterm)
-  live in [snap](https://github.com/jarvisfriends/snap) and are imported back.
+  come from [snap](https://github.com/jarvisfriends/snap).
 - `common/`: shared public interfaces/types.
 
 ## Quick Start
@@ -113,7 +114,7 @@ The roadmap now tracks only open work. See [.github/ROADMAP.md](.github/ROADMAP.
 Install these once to match the full CI gate locally:
 
 ```bash
-# Go (1.26.4+; 1.26.3 has a known CVE) - https://go.dev/dl/
+# Go (1.26.5+; 1.26.4 has a known CVE) - https://go.dev/dl/
 
 # golangci-lint
 curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin

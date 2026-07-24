@@ -38,7 +38,7 @@ const wideBreakpoint = 84
 // names, hints) drop to keep every line on one row.
 const compactBreakpoint = 60
 
-const welcomeText = "Welcome to the V2 Terminal Hub\n\nUse Tab to switch pages.\nCtrl+B to toggle sidebar.\nCtrl+H to toggle full help."
+const welcomeText = "Welcome to the V2 Terminal Hub\n\nUse Tab to switch pages.\nCtrl+B to toggle sidebar.\nCtrl+H to toggle full help.\nHome showcase: t=theme, o=shape, p=bar, r=spark, f=fx."
 
 // Interactive zone IDs — registered from the same layers the View renders.
 const (
@@ -331,6 +331,21 @@ func (m *HomePageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		switch msg.String() {
+		case "t":
+			return m, m.cycleThemeCmd()
+		case "o":
+			m.shape = (m.shape + 1) % len(styles.PillShapes())
+			return m, nil
+		case "p":
+			return m, m.cycleProgressStyle()
+		case "r":
+			m.sparkStyle = charts.SparklineStyle((int(m.sparkStyle) + 1) % sparklineStyleCount)
+			return m, nil
+		case "f":
+			m.cycleEffects()
+			return m, nil
+		}
 		// The Disks table claims its navigation/sort/filter/open keys; anything
 		// else falls through to the viewport so it can still scroll.
 		if m.disksHandlesKey(msg) {
@@ -373,7 +388,8 @@ func (m *HomePageModel) pillStrip() string {
 		{Text: " live ", Bg: c.Success},
 	}, styles.PillStyles{Shape: shape})
 	hint := c.Styles.Subtitle.Render(
-		fmt.Sprintf("  click to cycle shape (%s)", shape.DisplayName()))
+		fmt.Sprintf("  click to cycle shape (%s)", shape.DisplayName()),
+	)
 	return pill + hint
 }
 
@@ -702,7 +718,8 @@ func openBrowserCmd(url string) tea.Cmd {
 func (m *HomePageModel) responsiveStrip() string {
 	c := m.Colors()
 	return c.Styles.Subtitle.Render(
-		fmt.Sprintf("viewport %dx%d  ·  %s layout  (try resizing the terminal)", m.Width(), m.Height(), m.breakpoint()))
+		fmt.Sprintf("viewport %dx%d  ·  %s layout  (try resizing the terminal)", m.Width(), m.Height(), m.breakpoint()),
+	)
 }
 
 // hoverWrap borders a block so hovering it (LevelHigh only, see onMotion)
@@ -985,7 +1002,8 @@ func (m *HomePageModel) contextItems(zone string) []menu.Item {
 		}
 	case zoneProgressStyle:
 		items := make([]menu.Item, 0, 3)
-		items = append(items,
+		items = append(
+			items,
 			menu.Item{Label: fmt.Sprintf("Bar style: %s", m.progStyle), Disabled: true},
 			menu.Item{ID: "cycle-progress-style", Label: "Cycle bar style"},
 		)
@@ -1110,7 +1128,8 @@ func (m *HomePageModel) View() tea.View {
 	if m.scrollbarNeeded() {
 		bar := scrollbar.Vertical(
 			m.vp.TotalLineCount(), m.vp.VisibleLineCount(),
-			m.vp.YOffset(), m.vp.VisibleLineCount(), styles.ScrollbarStyles(c))
+			m.vp.YOffset(), m.vp.VisibleLineCount(), styles.ScrollbarStyles(c),
+		)
 		body = lipgloss.NewCompositor(
 			lipgloss.NewLayer(body),
 			lipgloss.NewLayer(bar).X(max(m.Width()-1, 0)).Y(0).Z(1),

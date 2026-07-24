@@ -97,7 +97,7 @@ Decision:
   standard Bubbletea `help.KeyMap` integration in the status bar.
 
 Why:
-- Ensures consistent keyboard navigation across all applications.
+- Verifies consistent keyboard navigation across all applications.
 - Prevents memory allocations on every frame render when generating help menus.
 - Centralizes help rendering into a single predictable UI element.
 

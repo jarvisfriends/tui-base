@@ -7,7 +7,7 @@ patterns catalog in [.github/CHARM_ECOSYSTEM.md](.github/CHARM_ECOSYSTEM.md).
 
 ## Requirements
 
-- Go **1.26.4 or newer** (1.26.3 and below contain a known CVE).
+- Go **1.26.5 or newer** (1.26.4 and below contain a known CVE).
 - `golangci-lint` v2, `gofumpt`, `shellcheck` for the full local gate.
 
 ## Workflow

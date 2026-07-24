@@ -1,0 +1,31 @@
+# Codecov configuration.
+#
+# Coverage is measured on the root module only (tools/test_coverage.sh runs
+# `go test ./...` there), so nested tool modules under tools/ are never in the
+# profile. Example programs and command entrypoints are demo/wiring code that
+# is exercised by hand, not unit-tested. Excluding all of these keeps the
+# project and patch coverage focused on the library packages that tests can
+# meaningfully cover.
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+    patch:
+      default:
+        target: 60%
+        threshold: 5%
+
+ignore:
+  - "examples/**"
+  - "cmd/**"
+  - "tools/**"
+  - "testutil/**"
+  - "**/*_test.go"
+  - "**/doc.go"
+
+comment:
+  layout: "reach, diff, files"
+  behavior: default
+  require_changes: false
