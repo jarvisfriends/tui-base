@@ -388,7 +388,8 @@ func (m *HomePageModel) pillStrip() string {
 		{Text: " live ", Bg: c.Success},
 	}, styles.PillStyles{Shape: shape})
 	hint := c.Styles.Subtitle.Render(
-		fmt.Sprintf("  click to cycle shape (%s)", shape.DisplayName()))
+		fmt.Sprintf("  click to cycle shape (%s)", shape.DisplayName()),
+	)
 	return pill + hint
 }
 
@@ -717,7 +718,8 @@ func openBrowserCmd(url string) tea.Cmd {
 func (m *HomePageModel) responsiveStrip() string {
 	c := m.Colors()
 	return c.Styles.Subtitle.Render(
-		fmt.Sprintf("viewport %dx%d  ·  %s layout  (try resizing the terminal)", m.Width(), m.Height(), m.breakpoint()))
+		fmt.Sprintf("viewport %dx%d  ·  %s layout  (try resizing the terminal)", m.Width(), m.Height(), m.breakpoint()),
+	)
 }
 
 // hoverWrap borders a block so hovering it (LevelHigh only, see onMotion)
@@ -1000,7 +1002,8 @@ func (m *HomePageModel) contextItems(zone string) []menu.Item {
 		}
 	case zoneProgressStyle:
 		items := make([]menu.Item, 0, 3)
-		items = append(items,
+		items = append(
+			items,
 			menu.Item{Label: fmt.Sprintf("Bar style: %s", m.progStyle), Disabled: true},
 			menu.Item{ID: "cycle-progress-style", Label: "Cycle bar style"},
 		)
@@ -1125,7 +1128,8 @@ func (m *HomePageModel) View() tea.View {
 	if m.scrollbarNeeded() {
 		bar := scrollbar.Vertical(
 			m.vp.TotalLineCount(), m.vp.VisibleLineCount(),
-			m.vp.YOffset(), m.vp.VisibleLineCount(), styles.ScrollbarStyles(c))
+			m.vp.YOffset(), m.vp.VisibleLineCount(), styles.ScrollbarStyles(c),
+		)
 		body = lipgloss.NewCompositor(
 			lipgloss.NewLayer(body),
 			lipgloss.NewLayer(bar).X(max(m.Width()-1, 0)).Y(0).Z(1),

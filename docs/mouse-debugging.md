@@ -3,7 +3,7 @@
 This short checklist captures quick diagnostics and the exact steps we found useful when hunting down click routing issues.
 
 1) Does top-level `View.OnMouse` run?
-- Ensure the `tea.View` returned by your `Model.View()` has `OnMouse` set.
+- Verify the `tea.View` returned by your `Model.View()` has `OnMouse` set.
 	Bubble Tea calls only the top-level `OnMouse`.
 	Nested views are not routed automatically.
 

@@ -74,7 +74,7 @@ remaining selectable in history.
 Checklist:
 
 1. Implement page model (`Init() tea.Cmd`, `Update(tea.Msg) (tea.Model, tea.Cmd)`, `View() tea.View`).
-   - **Note on Bubble Tea v2**: Ensure `Init` returns just `tea.Cmd` (not the model)
+   - **Note on Bubble Tea v2**: Verify `Init` returns just `tea.Cmd` (not the model)
    - and `View` returns `tea.View` (e.g. `tea.NewView("...")`).
 2. Support `SetColors` and use shared styles.
 3. Add keyboard bindings and mouse handling.

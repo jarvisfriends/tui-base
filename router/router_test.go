@@ -242,7 +242,7 @@ func TestHandleResizeCmdProducesExpectedSizes(t *testing.T) {
 	m.height = 40
 	m.navigationVisible = true
 	m.keys = keys.DefaultKeyMap()
-	// Ensure status help view has the correct width so height is computed
+	// Verify status help view has the correct width so height is computed
 	m.status.SetKeys(m.keys)
 	m.status.SetWidth(m.width)
 
@@ -325,7 +325,7 @@ func TestWindowSizeMsgUpdatesRouterState(t *testing.T) {
 	if m.width != 80 || m.height != 24 {
 		t.Fatalf("router width/height not updated; got %d x %d", m.width, m.height)
 	}
-	// children should have been updated; ensure views are non-empty
+	// children should have been updated; verify views are non-empty
 	if m.nav == nil || m.nav.View().Content == "" {
 		t.Fatal("expected nav view content after WindowSizeMsg")
 	}
@@ -354,7 +354,7 @@ func TestQuitKeyEmitsCmd(t *testing.T) {
 	if cmd == nil {
 		t.Fatalf("expected non-nil cmd for quit key")
 	}
-	// Ensure invoking the cmd returns a message (Quit or similar)
+	// Verify invoking the cmd returns a message (Quit or similar)
 	if msg := cmd(); msg == nil {
 		t.Fatalf("expected cmd() to return a non-nil message")
 	}
@@ -363,7 +363,7 @@ func TestQuitKeyEmitsCmd(t *testing.T) {
 func TestTabWithNilNavCyclesPages(t *testing.T) {
 	t.Parallel()
 	m := New()
-	// ensure tab advances the active nav page
+	// verify tab advances the active nav page
 	if m.nav.GetPages()[m.nav.GetActiveIndex()].ID != navigation.PageIDHome {
 		t.Fatalf(
 			"expected initial active page 'home'; got %q",
@@ -607,7 +607,7 @@ func TestHistoryPanelDismissAllKey(t *testing.T) {
 	}
 }
 
-// TestHistoryPanelEnterDismissRemovesSelected ensures Enter dismisses the
+// TestHistoryPanelEnterDismissRemovesSelected verifies Enter dismisses the
 // selected active notification and removes it from the rendered history list.
 func TestHistoryPanelEnterDismissRemovesSelected(t *testing.T) {
 	t.Parallel()
@@ -639,7 +639,7 @@ func TestHistoryPanelEnterDismissRemovesSelected(t *testing.T) {
 	}
 }
 
-// TestHistoryPanelKeyboardScrollKeepsSelectionVisible ensures arrow-key
+// TestHistoryPanelKeyboardScrollKeepsSelectionVisible verifies arrow-key
 // scrolling keeps the selected item inside the panel viewport.
 func TestHistoryPanelKeyboardScrollKeepsSelectionVisible(t *testing.T) {
 	t.Parallel()
@@ -670,7 +670,7 @@ func TestHistoryPanelKeyboardScrollKeepsSelectionVisible(t *testing.T) {
 	}
 }
 
-// TestHistoryPanelWheelScrollKeepsSelectionVisible ensures mouse wheel
+// TestHistoryPanelWheelScrollKeepsSelectionVisible verifies mouse wheel
 // scrolling also keeps the selected item inside the rendered panel viewport.
 func TestHistoryPanelWheelScrollKeepsSelectionVisible(t *testing.T) {
 	t.Parallel()
@@ -717,7 +717,7 @@ func TestHistoryPanelWheelScrollKeepsSelectionVisible(t *testing.T) {
 	}
 }
 
-// TestDebugPageStillShowsStatusBar ensures the debug page does not push the
+// TestDebugPageStillShowsStatusBar verifies the debug page does not push the
 // bottom status line out of the viewport.
 func TestInspectorOverlayStillShowsStatusBar(t *testing.T) {
 	t.Parallel()
@@ -743,7 +743,7 @@ func TestInspectorOverlayStillShowsStatusBar(t *testing.T) {
 	}
 }
 
-// TestHiddenStatusBarDoesNotHandleClicks ensures hidden status content is not
+// TestHiddenStatusBarDoesNotHandleClicks verifies hidden status content is not
 // still hit-tested by router mouse routing.
 func TestHiddenStatusBarDoesNotHandleClicks(t *testing.T) {
 	t.Parallel()

@@ -21,7 +21,7 @@ toggle can't silently bleed into a user's saved config.
    tuibase.Run(tuibase.Options{AppName: "My App", Gates: gates})
    ```
 
-   The router always ensures a registry exists (creating one when the app
+   The router always verifies a registry exists (creating one when the app
    passes none) and registers its own built-in gates — currently
    `inspector.AccessibilityTabGate` ("Inspector Accessibility Tab",
    default **off**), which controls the Accessibility tab in the Ctrl+D

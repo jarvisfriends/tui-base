@@ -13,6 +13,8 @@ fi
 
 echo "==> local verify mode: $MODE"
 
+export GOWORK=off
+
 echo "==> gofumpt (check only)"
 if ! command -v gofumpt >/dev/null 2>&1; then
   echo "ERROR: 'gofumpt' not found. Install with:"

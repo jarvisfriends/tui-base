@@ -45,7 +45,7 @@ const pageOverview = "Overview"
 
 func main() {
 	// Ctrl+C / SIGTERM cancels the context; RunContext restores the terminal
-	// and returns (A-2).
+	// and returns ().
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
 	apiURL := "https://api.example.com"

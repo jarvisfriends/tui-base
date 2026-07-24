@@ -184,7 +184,8 @@ func renderTape(ctx context.Context, cli *client.Client, imageRef, root, relTape
 	id := created.ID
 	defer func() {
 		_, _ = cli.ContainerRemove(
-			context.WithoutCancel(ctx), id, client.ContainerRemoveOptions{Force: true})
+			context.WithoutCancel(ctx), id, client.ContainerRemoveOptions{Force: true},
+		)
 	}()
 
 	if _, err := cli.ContainerStart(ctx, id, client.ContainerStartOptions{}); err != nil {

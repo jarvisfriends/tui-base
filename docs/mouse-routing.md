@@ -17,7 +17,7 @@ Key points
   childY = globalY - childOffsetY
 
 - Use the same sizing logic at render-time and click-time.
-  If child width/height is computed in `Update` via `WindowSizeMsg`, ensure those
+  If child width/height is computed in `Update` via `WindowSizeMsg`, verify those
   `Update` calls have run before relying on `.Width()` or `.Height()` in routing.
 
 - Use `lipgloss.Width` and `lipgloss.Height` on rendered strings to compute
@@ -67,7 +67,7 @@ Common pitfalls
 Tests
 - Use a helper to execute `tea.Cmd` values and flatten `tea.BatchMsg`
   (see `execCmd` in `router/mouse_routing_test.go`).
-  This ensures tests see the same messages the runtime would dispatch.
+  This verifies tests see the same messages the runtime would dispatch.
 
 If something is still misrouted
 1. Log `mEvent.X/mEvent.Y`, `nav.Width()`, `nav.Height()`, `status.Height()`, and

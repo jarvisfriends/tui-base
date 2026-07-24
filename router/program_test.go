@@ -16,7 +16,7 @@ func (nullModel) Init() tea.Cmd                       { return nil }
 func (nullModel) Update(tea.Msg) (tea.Model, tea.Cmd) { return nullModel{}, nil }
 func (nullModel) View() tea.View                      { return tea.NewView("") }
 
-// TestNewProgramWithContextCancelsRun verifies the A-2 graceful-shutdown path:
+// TestNewProgramWithContextCancelsRun verifies the  graceful-shutdown path:
 // a canceled context terminates Run instead of blocking forever.
 func TestNewProgramWithContextCancelsRun(t *testing.T) {
 	t.Parallel()

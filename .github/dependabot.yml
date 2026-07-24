@@ -6,6 +6,24 @@ updates:
       interval: weekly
     open-pull-requests-limit: 10
 
+  - package-ecosystem: gomod
+    directory: "/tools/genicon"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: gomod
+    directory: "/tools/releasetag"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: gomod
+    directory: "/tools/rendertapes"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:

@@ -70,7 +70,7 @@ type RegisteredPage struct {
 // inactive pages still receive their command results; a high-frequency
 // message (ticker, progress stream) that implements TargetedMsg is delivered
 // only to the page whose navigation ID or title matches TargetPage, so the
-// rest of the app is not woken on every update (A-1).
+// rest of the app is not woken on every update ().
 type TargetedMsg interface {
 	// TargetPage returns the navigation ID or the title of the destination page.
 	TargetPage() string
@@ -372,7 +372,7 @@ func NewWithOptions(opts Options) *RouterModel {
 		// best-effort: print to stderr if log init fails
 		_ = err
 	}
-	// ensure the settings model reflects the currently-open log file and level
+	// verify the settings model reflects the currently-open log file and level
 	if p := log.CurrentLogFile(); p != "" {
 		settingsModel.LogPath = p
 	}
@@ -1277,7 +1277,7 @@ func (m *RouterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// still receive the results of their Init/Cmd-produced messages (e.g. a
 	// scan that finishes while the user is viewing a different page).
 	// TargetedMsg is the fast path: high-frequency messages that name their
-	// page skip the broadcast and wake only that page (A-1).
+	// page skip the broadcast and wake only that page ().
 	targeted, isTargeted := msg.(TargetedMsg)
 	if !isKey && !isMouse {
 		for i := range m.pages {

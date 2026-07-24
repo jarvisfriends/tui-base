@@ -2,6 +2,11 @@
 
 ![tui-base — the bass-line for your charm apps](assets/banner.svg)
 
+[![CI](https://github.com/jarvisfriends/tui-base/actions/workflows/ci.yml/badge.svg)](https://github.com/jarvisfriends/tui-base/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/jarvisfriends/tui-base/actions/workflows/codeql.yml/badge.svg)](https://github.com/jarvisfriends/tui-base/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/jarvisfriends/tui-base/badge)](https://scorecard.dev/viewer/?uri=github.com/jarvisfriends/tui-base)
+[![Go Reference](https://pkg.go.dev/badge/github.com/jarvisfriends/tui-base.svg)](https://pkg.go.dev/github.com/jarvisfriends/tui-base)
+
 A structured, production-minded foundation for building large Charm v2 terminal applications in Go.
 
 This project is designed for engineers who want more than a demo app: predictable architecture,

@@ -111,7 +111,7 @@ func InitFromSettings(logOutputMode, logPath string) (string, error) {
 		if logPath == "" {
 			return "", errors.New("log file path not provided")
 		}
-		// ensure parent dir exists
+		// verify parent dir exists
 		if err := os.MkdirAll(filepath.Dir(logPath), 0o750); err != nil {
 			return "", err
 		}

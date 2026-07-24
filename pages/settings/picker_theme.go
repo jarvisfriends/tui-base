@@ -10,7 +10,7 @@ import (
 
 // The datepicker and timepicker components ship theme-free (they are
 // extraction candidates and must not depend on this repo's theme package), so
-// the consumer maps the active theme onto their style hooks here (A-3).
+// the consumer maps the active theme onto their style hooks here ().
 
 // themedDatePickerStyles derives datepicker styles from the active theme: the
 // focused cell uses the semantic selection colors and plain cells use the
