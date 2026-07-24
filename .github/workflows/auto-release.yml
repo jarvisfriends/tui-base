@@ -57,6 +57,9 @@ jobs:
   ci:
     name: CI
     if: github.event_name == 'push'
+    permissions:
+      contents: read
+      pull-requests: read
     uses: ./.github/workflows/ci.yml
 
   tag:
