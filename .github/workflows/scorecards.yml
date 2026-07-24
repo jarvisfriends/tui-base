@@ -7,16 +7,19 @@ on:
   schedule:
     - cron: '31 5 * * 1'
 
-permissions:
-  actions: read
-  contents: read
-  security-events: write
-  id-token: write
+# Top-level token is read-only; the analysis job elevates only what it needs
+# (Scorecard TokenPermissions).
+permissions: read-all
 
 jobs:
   analysis:
     name: OpenSSF Scorecards
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+      security-events: write # upload the SARIF results
+      id-token: write # publish results to the OpenSSF API
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
