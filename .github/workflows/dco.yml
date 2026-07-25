@@ -1,0 +1,53 @@
+name: DCO
+
+# Developer Certificate of Origin check (OpenSSF Best Practices 'dco'
+# criterion): every commit in a PR must carry a Signed-off-by trailer
+# matching its author, certifying the contributor has the right to submit
+# the change under this project's license (developercertificate.org).
+#
+# A plain inline shell check (not a third-party Action) keeps this in the
+# same supply-chain posture as the rest of CI — nothing new to pin or trust.
+#
+# Not wired into required branch-protection checks yet: promote it once
+# existing in-flight PRs have been rebased with --signoff, so this doesn't
+# retroactively block work opened before the check existed.
+
+on:
+  pull_request:
+    branches: ["main", "master"]
+
+permissions:
+  contents: read
+
+jobs:
+  check-signoff:
+    name: Check commits are signed off
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Verify every commit has a matching Signed-off-by trailer
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for sha in $(git rev-list "$BASE_SHA..$HEAD_SHA"); do
+            email=$(git show -s --format='%ae' "$sha")
+            subject=$(git show -s --format='%s' "$sha")
+            if ! git show -s --format='%(trailers:key=Signed-off-by,valueonly)' "$sha" | grep -qiF "<${email}>"; then
+              echo "::error::commit ${sha:0:12} (\"$subject\") has no Signed-off-by trailer matching $email"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo ""
+            echo "Every commit must certify the Developer Certificate of Origin:"
+            echo "  git commit --signoff          # sign off a new commit"
+            echo "  git commit --amend --signoff  # sign off the last commit"
+            echo "  git rebase --signoff main     # sign off a whole branch"
+            echo "See CONTRIBUTING.md and https://developercertificate.org/"
+            exit 1
+          fi
