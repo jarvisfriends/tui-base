@@ -292,15 +292,16 @@ jobs:
           path: |
             coverage.out
             coverage.txt
-      - name: Upload coverage to Coveralls (goveralls)
-        # Non-fatal: no-op until the repo is connected on coveralls.io. Uses the
-        # workflow GITHUB_TOKEN via Coveralls' GitHub integration on public repos.
+      - name: Upload coverage to Coveralls
+        # Non-fatal: no-op until the repo is connected on coveralls.io. Pinned by
+        # commit SHA (Sonar S8545: no unpinned "go install"); uses the workflow
+        # GITHUB_TOKEN on public repos.
         continue-on-error: true
-        env:
-          COVERALLS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          go install github.com/mattn/goveralls@v0.0.12
-          goveralls -coverprofile=coverage.out -service=github
+        uses: coverallsapp/github-action@648a8eb78e6d50909eff900e4ec85cab4524a45b # v2.3.6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          file: coverage.out
+          format: golang
       - name: Upload coverage reports to Codecov
         # Requires the CODECOV_TOKEN secret; without it the action attempts a
         # tokenless upload on public repos and does not fail the build.
