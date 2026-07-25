@@ -23,7 +23,11 @@ patterns catalog in [.github/CHARM_ECOSYSTEM.md](.github/CHARM_ECOSYSTEM.md).
 
    which covers formatting, both-GOOS linting, docs/link lint, `go vet`, and
    the race-enabled test suite. The pre-commit hook runs the same gate.
-4. Open a PR against `main`. CI must pass (verify matrix on Linux, Windows,
+4. Sign off every commit (Developer Certificate of Origin —
+   <https://developercertificate.org/>): `git commit --signoff`, or
+   `git rebase --signoff main` to sign off a whole branch. CI checks this on
+   every PR.
+5. Open a PR against `main`. CI must pass (verify matrix on Linux, Windows,
    and macOS; lint; CodeQL; coverage floor of 55%; goreleaser snapshot).
 
 ## Code conventions
