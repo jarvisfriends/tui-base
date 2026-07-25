@@ -1,0 +1,42 @@
+name: SonarQube
+
+# CI-based SonarQube/SonarCloud scan (SONAR_TOKEN is an organization secret).
+#
+# NOTE: this project currently also has SonarCloud's "Automatic Analysis"
+# enabled (the GitHub App integration, zero in-repo config, shown as the
+# "SonarCloud Code Analysis" check). SonarCloud does not allow both analysis
+# methods on the same project at once — before this workflow's scan will
+# take effect, disable Automatic Analysis for this project at
+# https://sonarcloud.io/project/configuration?id=jarvisfriends_tui-base
+# (Administration > Analysis Method), or the scan below will be rejected.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sonarqube-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sonarqube:
+    name: SonarQube
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0 # full history for better blame/new-code relevancy
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.26.5'
+      - name: Run tests with coverage
+        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
