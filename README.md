@@ -3,6 +3,7 @@
 ![tui-base — the bass-line for your charm apps](assets/banner.svg)
 
 [![CI](https://github.com/jarvisfriends/tui-base/actions/workflows/ci.yml/badge.svg)](https://github.com/jarvisfriends/tui-base/actions/workflows/ci.yml)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13787/badge)](https://www.bestpractices.dev/projects/13787)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/jarvisfriends/tui-base/badge)](https://scorecard.dev/viewer/?uri=github.com/jarvisfriends/tui-base)
 [![Go Reference](https://pkg.go.dev/badge/github.com/jarvisfriends/tui-base.svg)](https://pkg.go.dev/github.com/jarvisfriends/tui-base)
 
