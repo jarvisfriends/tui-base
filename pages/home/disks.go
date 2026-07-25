@@ -8,6 +8,7 @@ import (
 	"runtime"
 
 	"github.com/jarvisfriends/inspector"
+	"github.com/jarvisfriends/snap/keys"
 	"github.com/jarvisfriends/snap/menu"
 	"github.com/jarvisfriends/snap/styles"
 	"github.com/jarvisfriends/snap/table"
@@ -176,7 +177,11 @@ func (m *HomePageModel) disksHandlesKey(msg tea.KeyPressMsg) bool {
 	if m.disksTbl.Filtering() {
 		return true
 	}
-	km := m.disksTbl.KeyMap
+	// The disks table is built with the default bindings (no WithKeyMap), so
+	// its active keymap is keys.DefaultKeyMap(). snap v0.2 unexported the
+	// table's keyMap field, so read the defaults directly rather than off the
+	// table.
+	km := keys.DefaultKeyMap()
 	for _, b := range []key.Binding{
 		km.Up, km.Down, km.PageUp, km.PageDown, km.Top, km.Bottom, km.Sort, km.Filter, km.Open,
 	} {
