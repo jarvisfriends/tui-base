@@ -7,8 +7,14 @@ before:
     - go mod tidy
     - go generate ./...
 
+# -s -w strips debug symbols (smaller release binaries) and -X injects the
+# release tag into common.appVersion — shared by the main binary AND every
+# example (they all import tui-base's router/common), so each distributed
+# binary reports the correct version consistently. Shape factored into
+# &example_build; each entry below only overrides id/binary/main.
 builds:
-  - id: tui-base
+  - &example_build
+    id: tui-base
     binary: tui-base
     main: ./cmd/tui-base
     env:
@@ -22,21 +28,28 @@ builds:
       - arm64
     ldflags:
       - -s -w -X github.com/jarvisfriends/tui-base/common.appVersion={{.Version}}
-  - id: multipage
+  - <<: *example_build
+    id: multipage
     binary: multipage
     main: ./examples/multipage
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
+  - <<: *example_build
+    id: minimal
+    binary: minimal
+    main: ./examples/minimal
+  - <<: *example_build
+    id: dashboard
+    binary: dashboard
+    main: ./examples/dashboard
 
+# One archive per binary (not one combined archive per OS/arch): each example
+# app is a standalone, runnable reference app (examples/USAGE.md explains what
+# each one demos), so it ships as its own tui-base_<binary>_<os>_<arch>
+# download instead of bundling every binary together under one name. Shape
+# factored into &example_archive; each entry below only overrides id/ids.
 archives:
-  - id: default
+  - &example_archive
+    id: tui-base
+    ids: [tui-base]
     formats:
       - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Binary }}_{{ .Os }}_{{ .Arch }}"
@@ -44,6 +57,20 @@ archives:
       - goos: windows
         formats:
           - zip
+    files:
+      - LICENSE
+      - CHANGELOG.md
+      - src: examples/USAGE.md
+        dst: USAGE.md
+  - <<: *example_archive
+    id: multipage
+    ids: [multipage]
+  - <<: *example_archive
+    id: minimal
+    ids: [minimal]
+  - <<: *example_archive
+    id: dashboard
+    ids: [dashboard]
 
 checksum:
   name_template: "checksums.txt"
