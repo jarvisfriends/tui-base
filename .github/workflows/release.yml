@@ -43,10 +43,10 @@ jobs:
         # I-8 (Q-17): keyless OIDC signing of the release checksum file.
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
-          # Pin the cosign tool: v2.5+/v3 default to the new bundle format, which
-          # ignores goreleaser's --output-signature/--output-certificate flags and
-          # breaks signing (empty bundle path). v2.4.x keeps the classic outputs.
-          cosign-release: 'v2.4.3'
+          # cosign-installer v4 only installs cosign >= v2.6, which default to the
+          # new Sigstore bundle format. The goreleaser signs block writes a single
+          # ${artifact}.sigstore.json bundle (--bundle) to match.
+          cosign-release: 'v3.0.6'
       - name: Install syft
         # I-8: SBOM generation for goreleaser's sboms section.
         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
