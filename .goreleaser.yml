@@ -60,7 +60,7 @@ sboms:
 signs:
   - cmd: cosign
     artifacts: checksum
-    output: true
+    output: false
     signature: "${artifact}.sigstore.json"
     args:
       - sign-blob
