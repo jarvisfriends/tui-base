@@ -80,6 +80,11 @@ in a synthetic snap example). Regenerate every gif with
 demo binaries, runs each `*.tape` in the official vhs container, and drops the
 gifs next to their tapes).
 
+Every app below also ships as its own signed, per-OS/arch prebuilt binary on
+the [Releases page](https://github.com/jarvisfriends/tui-base/releases) — no
+Go toolchain required to try one. See
+[`examples/USAGE.md`](examples/USAGE.md) for what each app demos.
+
 ### Reference app tour
 
 ![reference app tour](cmd/tui-base/demo.gif)

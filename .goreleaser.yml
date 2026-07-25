@@ -34,9 +34,38 @@ builds:
     goarch:
       - amd64
       - arm64
+  - id: minimal
+    binary: minimal
+    main: ./examples/minimal
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+  - id: dashboard
+    binary: dashboard
+    main: ./examples/dashboard
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
 
+# One archive per binary (not one combined archive per OS/arch): each example
+# app is a standalone, runnable reference app (examples/USAGE.md explains what
+# each one demos), so it ships as its own tui-base_<binary>_<os>_<arch>
+# download instead of bundling every binary together under one name.
 archives:
-  - id: default
+  - id: tui-base
+    ids: [tui-base]
     formats:
       - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Binary }}_{{ .Os }}_{{ .Arch }}"
@@ -44,6 +73,53 @@ archives:
       - goos: windows
         formats:
           - zip
+    files:
+      - LICENSE
+      - CHANGELOG.md
+      - src: examples/USAGE.md
+        dst: USAGE.md
+  - id: multipage
+    ids: [multipage]
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Binary }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE
+      - CHANGELOG.md
+      - src: examples/USAGE.md
+        dst: USAGE.md
+  - id: minimal
+    ids: [minimal]
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Binary }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE
+      - CHANGELOG.md
+      - src: examples/USAGE.md
+        dst: USAGE.md
+  - id: dashboard
+    ids: [dashboard]
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Binary }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE
+      - CHANGELOG.md
+      - src: examples/USAGE.md
+        dst: USAGE.md
 
 checksum:
   name_template: "checksums.txt"
