@@ -151,3 +151,9 @@ go install golang.org/x/vuln/cmd/govulncheck@latest
   - `GOOS=linux GOARCH=amd64 golangci-lint run ./...`
 - Run full local verification (hook-equivalent):
   - `bash tools/local_verify.sh`
+
+## Verifying releases
+
+Release archives are checksummed, ship SPDX SBOMs, and `checksums.txt` is signed with keyless cosign by the
+release workflow. See [docs/release-verification.md](docs/release-verification.md) for the two-command
+verification.

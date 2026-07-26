@@ -28,7 +28,7 @@ patterns catalog in [.github/CHARM_ECOSYSTEM.md](.github/CHARM_ECOSYSTEM.md).
    `git rebase --signoff main` to sign off a whole branch. CI checks this on
    every PR.
 5. Open a PR against `main`. CI must pass (verify matrix on Linux, Windows,
-   and macOS; lint; CodeQL; coverage floor of 55%; goreleaser snapshot).
+   and macOS; lint; CodeQL; coverage floor of 90% on library packages; goreleaser snapshot).
 
 ## Code conventions
 
@@ -49,3 +49,18 @@ Open work is tracked in [.github/ROADMAP.md](.github/ROADMAP.md). Stable
 decisions (and rejected alternatives) are recorded as ADRs in
 [docs/architecture-decisions.md](docs/architecture-decisions.md) — if your
 change reverses one, update the ADR in the same PR.
+
+## Testing policy
+
+Tests are required, not optional:
+
+- Every change that adds or modifies functionality must include tests exercising the new behavior.
+- Every bug fix must include a regression test that fails without the fix.
+- CI enforces a **90% statement-coverage gate** on the library packages (examples, `cmd/`, and tools are
+  demo/wiring code and excluded); PRs that drop below it fail.
+
+## Project policies
+
+Roles, code review rules, and the access policy live in [GOVERNANCE.md](GOVERNANCE.md); security reporting
+and vulnerability handling in [SECURITY.md](SECURITY.md); dependency rules in
+[docs/dependency-policy.md](docs/dependency-policy.md).
