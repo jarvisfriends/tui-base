@@ -5,7 +5,7 @@ on:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
-  workflow_call: # allow release.yml to require CI to pass before releasing
+  workflow_call: # release workflows require CI to pass first
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -42,8 +42,13 @@ jobs:
             ${{ runner.os }}-go-
       - name: Build
         run: go build ./...
+      - name: Test (race + coverage)
+        if: matrix.os == 'ubuntu-24.04'
+        # Single test run produces the coverage profile — no separate coverage job.
+        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
       - name: Test (race)
-        run: go test -race ./... -v
+        if: matrix.os != 'ubuntu-24.04'
+        run: go test -race ./...
       - name: Vet
         run: go vet ./...
       - name: gofmt check
@@ -59,16 +64,51 @@ jobs:
         if: matrix.os == 'ubuntu-24.04'
         run: |
           go mod tidy
-          if ! git diff --exit-code go.mod go.sum; then
+          if ! git diff --exit-code -- go.mod go.sum; then
             echo "go mod tidy would change files — run 'go mod tidy' and commit the result"
             exit 1
           fi
       - name: go mod verify
         if: matrix.os == 'ubuntu-24.04'
         run: go mod verify
+      - name: Coverage gate (library scope)
+        if: matrix.os == 'ubuntu-24.04'
+        env:
+          COVERAGE_THRESHOLD: "90.0"
+        # Library scope matches codecov.yml ignores: examples/, cmd/, tools/,
+        # and testutil/ are demo/wiring code exercised by hand.
+        run: |
+          awk 'NR==1 || ($0 !~ /\/examples\// && $0 !~ /\/cmd\// && $0 !~ /\/tools\// && $0 !~ /\/testutil\//)' coverage.out > coverage.lib.out
+          total=$(go tool cover -func=coverage.lib.out | awk '/^total:/ {sub(/%/,"",$3); print $3}')
+          echo "Library-scope statement coverage: ${total}%"
+          awk -v p="$total" -v t="$COVERAGE_THRESHOLD" 'BEGIN { if (p+0 < t+0) { printf "Coverage %s%% is below the %s%% gate\n", p, t; exit 1 } printf "Coverage %s%% meets the %s%% gate\n", p, t }'
+      - name: Upload coverage artifact
+        if: matrix.os == 'ubuntu-24.04'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: coverage
+          path: |
+            coverage.out
+            coverage.lib.out
+      - name: Upload coverage to Codecov
+        # Tokenless upload works on public repos; the action does not fail the
+        # build if the upload errors. Coverage scope/ignores are in codecov.yml.
+        if: matrix.os == 'ubuntu-24.04'
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: jarvisfriends/tui-base
+          files: ./coverage.out
+      - name: Upload coverage to Coveralls
+        # Non-fatal: no-op until the repo is connected on coveralls.io.
+        if: matrix.os == 'ubuntu-24.04'
+        continue-on-error: true
+        uses: shogo82148/actions-goveralls@9606dbc5ac5cf888a0e9ef901515c3cd516a2790 # v1.11.0
+        with:
+          path-to-profile: coverage.out
 
-  go-generate:
-    name: go generate drift
+  drift:
+    name: Drift (go generate, go fix)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -77,7 +117,7 @@ jobs:
         with:
           go-version: '1.26.5'
       - name: Install stringer
-        # Pinned (CI-1): bump alongside the golang.org/x/tools dependency.
+        # Pinned: bump alongside the golang.org/x/tools dependency.
         run: go install golang.org/x/tools/cmd/stringer@v0.47.0
       - name: Check for go generate drift
         run: |
@@ -86,16 +126,6 @@ jobs:
             echo "go generate produced changes — run 'go generate ./...' locally and commit the result"
             exit 1
           fi
-
-  go-fix:
-    name: go fix drift
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version: '1.26.5'
       - name: Check for go fix drift
         run: |
           if ! go fix -diff ./...; then
@@ -122,8 +152,7 @@ jobs:
       - name: Lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
-          # Pinned (CI-1): keep in sync with tools/local_verify.sh and the
-          # coverage job below.
+          # Pinned (CI-1): keep in sync with tools/local_verify.sh.
           version: v2.12.2
       - name: Lint releasetag (nested module)
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
@@ -136,19 +165,17 @@ jobs:
           version: v2.12.2
           working-directory: tools/rendertapes
 
-  workflow-lint:
-    name: Workflow Lint (actionlint)
+  static-checks:
+    name: Static checks (workflows, shell, docs, headers)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: actionlint
         uses: reviewdog/action-actionlint@50842263c20a7c46bd0065b9e624d3c569db061e # v1
-
-  docs:
-    name: Docs Lint and Links
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Shellcheck scripts
+        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
+        with:
+          scandir: './'
       - name: Markdown lint
         uses: DavidAnson/markdownlint-cli2-action@6bf21b07787794f89a243495939cd651942aeabe # v24
         with:
@@ -162,34 +189,28 @@ jobs:
         with:
           fail: true
           args: --no-progress --verbose --max-retries 3 --retry-wait-time 5 "./**/*.md"
+      - name: SPDX license header check
+        run: |
+          missing=0
+          while IFS= read -r f; do
+            if head -1 "$f" | grep -q "^// Code generated"; then continue; fi
+            if ! head -3 "$f" | grep -q "SPDX-License-Identifier:"; then
+              echo "::error file=$f::missing copyright/SPDX header"
+              missing=1
+            fi
+          done < <(git ls-files '*.go')
+          exit $missing
 
-  shellcheck:
-    name: Shellcheck
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Shellcheck scripts
-        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
-        with:
-          scandir: './'
-
-  dependency-review:
-    name: Dependency Review (PR)
-    if: github.event_name == 'pull_request'
+  security:
+    name: Security (govulncheck, gitleaks, dependency review)
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Dependency review
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5
-
-  govulncheck:
-    name: govulncheck
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0 # gitleaks scans full history
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
@@ -198,6 +219,18 @@ jobs:
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.5.0
       - name: Run govulncheck
         run: govulncheck ./...
+      - name: Run gitleaks (secret scan)
+        # Pinned by version + sha256 instead of a third-party action
+        # (gitleaks-action requires a license key for org repos).
+        run: |
+          curl -sSfL -o gitleaks.tgz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tgz" | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks
+          ./gitleaks git --no-banner --redact --verbose .
+      - name: Dependency review
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5
 
   fuzz-smoke:
     name: Fuzz smoke
@@ -208,7 +241,7 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: '1.26.5'
-      - name: Run fuzz targets (30s each)
+      - name: Run timed fuzz smoke
         # Short timed runs per target catch shallow regressions on every PR
         env:
           FUZZTIME: 30s
@@ -256,61 +289,3 @@ jobs:
           version: v2.16.0
           # sign/sbom skipped: cosign+syft only install in the release workflow (I-8)
           args: release --snapshot --clean --skip=publish,sign,sbom
-
-  coverage:
-    name: Coverage (ubuntu)
-    runs-on: ubuntu-24.04
-    needs: [verify, lint]
-    env:
-      COVERAGE_THRESHOLD: 62.0
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version: '1.26.5'
-      - name: Cache Go modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-      - name: Run coverage script
-        # SKIP_LINT: the lint job already ran golangci-lint on this commit,
-        # and the script's race-enabled test run produces the coverage profile
-        # itself — no separate test step needed (CI-7).
-        env:
-          SKIP_LINT: "1"
-        run: bash tools/test_coverage.sh
-      - name: Upload coverage artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: coverage
-          path: |
-            coverage.out
-            coverage.txt
-      - name: Upload coverage to Coveralls
-        # Non-fatal: no-op until the repo is connected on coveralls.io. Pinned by
-        # commit SHA (Sonar S8545: no unpinned "go install"); uses goveralls via
-        # the workflow GITHUB_TOKEN on public repos.
-        continue-on-error: true
-        uses: shogo82148/actions-goveralls@9606dbc5ac5cf888a0e9ef901515c3cd516a2790 # v1.11.0
-        with:
-          path-to-profile: coverage.out
-      - name: Upload coverage reports to Codecov
-        # Requires the CODECOV_TOKEN secret; without it the action attempts a
-        # tokenless upload on public repos and does not fail the build.
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          slug: jarvisfriends/tui-base
-          files: ./coverage.out
-      - name: Check coverage threshold
-        run: |
-          cov=$(cat coverage.txt)
-          echo "Coverage reported: $cov"
-          percent=$(echo "$cov" | tr -d '%')
-          awk -v p="$percent" -v t="${COVERAGE_THRESHOLD}" 'BEGIN { if (p+0 < t+0) { print "Coverage " p "% is below threshold " t "%"; exit 1 } else { print "Coverage " p "% meets threshold " t "%" } }'
