@@ -26,6 +26,10 @@ builds:
     goarch:
       - amd64
       - arm64
+    # Reproducible builds: strip host paths and pin the embedded mod time.
+    flags:
+      - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
     ldflags:
       - -s -w -X github.com/jarvisfriends/tui-base/common.appVersion={{.Version}}
   - <<: *example_build
