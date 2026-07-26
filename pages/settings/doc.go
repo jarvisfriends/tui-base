@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 // Package settings is the built-in three-pane settings page: a compact
 // overview of every setting with an edit overlay per item (huh forms for
 // selects/text/file pickers; custom overlays for directories, multi-file

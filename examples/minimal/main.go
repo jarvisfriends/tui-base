@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 // Command minimal is the smallest possible tui-base app: the built-in Home
 // and Settings pages, theming, notifications, and the Ctrl+D inspector — one
 // import, one call.

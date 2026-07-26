@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 // Package router provides the root tea.Model for tui-base applications: it
 // owns navigation, active-page selection, the status bar, the shared theme
 // pointer, the notification manager, and the Z-ordered overlay stack (toast,

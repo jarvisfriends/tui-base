@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 // Command releasetag turns gorelease's API-compatibility analysis into a
 // release decision for this module.
 //

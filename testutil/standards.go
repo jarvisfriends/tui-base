@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 // Package testutil holds tui-base's house-rule test helpers: architecture
 // layering (CheckNoImports) and descriptive type naming
 // (CheckDescriptiveStructNames). The render/layout checks moved to

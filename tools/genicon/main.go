@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 // Command genicon turns a source SVG into a multi-resolution Windows .ico and,
 // optionally, the embedded resource objects (.syso) that give a compiled Go
 // binary its file/taskbar icon.

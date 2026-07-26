@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 // Command rendertapes renders every demo tape to a gif by running the
 // official VHS container (ported from snap/tools/rendertapes): rendering
 // inside Docker produces consistent output across hosts, and Windows-native

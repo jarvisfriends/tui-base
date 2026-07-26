@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 package router
 
 // Regression test: a CLOSED inspector overlay must not act on its own

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 // Command dashboard shows a single custom page with themed widgets: a
 // bubbles table styled via theme.TableStyles, live status bar segments, and
 // a notification fired from a key press.

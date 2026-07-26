@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 // Package filewatch bridges fsnotify file-system events into Bubble Tea
 // messages so views can live-reload when files change on disk (FW-1).
 //

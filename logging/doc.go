@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 // Package logging is tui-base's runtime logger: leveled Debugf/Infof/Warnf/
 // Errorf functions writing to a rotating file (or the system temp directory),
 // with a subscriber fan-out that feeds the in-app inspector's Log tab.

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 // Package theme is tui-base's compatibility surface over the shared style
 // contract, which moved to github.com/jarvisfriends/snap/styles in the
 // wholesale component wave (ROADMAP SP-2 follow-up, 2026-07-10). Every

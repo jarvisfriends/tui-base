@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 package settings
 
 // selectItemForTest points the overview cursor at m.items[idx] regardless of

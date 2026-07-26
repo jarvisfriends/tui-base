@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 // Command multipage shows several app pages with custom settings sections
 // and graceful SIGINT/SIGTERM shutdown via RunContext.
 //

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 package main
 
 // Regenerate the tui-base app icon and the embedded Windows resource from the

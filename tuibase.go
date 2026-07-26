@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 // Package tuibase is the consumer-facing entry point for building multi-page
 // terminal applications on the tui-base framework.
 //

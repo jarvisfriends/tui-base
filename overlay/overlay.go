@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 // Package overlay provides shared overlay primitives used by the router's
 // built-in overlays and by page models (settings, dashboard) that manage their
 // own centered form dialogs.

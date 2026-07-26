@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 // Command tui-base runs the reference application showcasing the framework:
 // multi-page routing, theming, notifications, and the Ctrl+D inspector.
 package main

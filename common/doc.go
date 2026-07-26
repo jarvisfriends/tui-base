@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 // Package common holds small shared building blocks with no UI dependencies:
 // the Component interface contract for pages, build/version metadata baked in
 // via -ldflags (AppVersion, dependency info for the info modal), and

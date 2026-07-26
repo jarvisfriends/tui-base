@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Jarvis Friends contributors
+// SPDX-License-Identifier: MIT
+
 package settings
 
 import "github.com/jarvisfriends/snap/winterm"
