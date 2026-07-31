@@ -68,17 +68,20 @@ jobs:
     if: github.event_name == 'push'
     needs: [ci]
     runs-on: ubuntu-24.04
+    env:
+      # secrets can't be tested directly in step `if:`; hoist to env
+      HAS_RELEASE_PAT: ${{ secrets.RELEASE_PAT != '' }}
     permissions:
       contents: write # push the tag
     steps:
       - name: Checkout with PAT
-        if: ${{ secrets.RELEASE_PAT != '' }}
+        if: env.HAS_RELEASE_PAT == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PAT }}
       - name: Checkout with default token
-        if: ${{ secrets.RELEASE_PAT == '' }}
+        if: env.HAS_RELEASE_PAT != 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
