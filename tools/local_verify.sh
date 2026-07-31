@@ -18,7 +18,8 @@ export GOWORK=off
 echo "==> gofumpt (check only)"
 if ! command -v gofumpt >/dev/null 2>&1; then
   echo "ERROR: 'gofumpt' not found. Install with:"
-  echo "  go install mvdan.cc/gofumpt@latest"
+  # renovate: datasource=go depName=mvdan.cc/gofumpt
+  echo "  go install mvdan.cc/gofumpt@v0.11.0"
   echo "Ensure \$GOBIN or \$GOPATH/bin is on your PATH."
   exit 1
 fi
@@ -111,17 +112,23 @@ run_go_tool() {
 # not buried after a cryptic failure mid-run.
 echo "==> preflight: Go-version compatibility checks"
 check_go_tool_version "golangci-lint" \
-  "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest"
+  # renovate: datasource=go depName=github.com/golangci/golangci-lint/v2
+  "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2"
 check_go_tool_version "gofumpt" \
-  "go install mvdan.cc/gofumpt@latest"
+  # renovate: datasource=go depName=mvdan.cc/gofumpt
+  "go install mvdan.cc/gofumpt@v0.11.0"
 check_go_tool_version "govulncheck" \
-  "go install golang.org/x/vuln/cmd/govulncheck@latest"
+  # renovate: datasource=go depName=golang.org/x/vuln
+  "go install golang.org/x/vuln/cmd/govulncheck@v1.5.0"
 check_go_tool_version "gorelease" \
-  "go install golang.org/x/exp/cmd/gorelease@latest"
+  # renovate: datasource=go depName=golang.org/x/exp
+  "go install golang.org/x/exp/cmd/gorelease@v0.0.0-20260718201538-764159d718ef"
 check_go_tool_version "actionlint" \
-  "go install github.com/rhysd/actionlint/cmd/actionlint@latest"
+  # renovate: datasource=go depName=github.com/rhysd/actionlint
+  "go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12"
 check_go_tool_version "stringer" \
-  "go install golang.org/x/tools/cmd/stringer@latest"
+  # renovate: datasource=go depName=golang.org/x/tools
+  "go install golang.org/x/tools/cmd/stringer@v0.47.0"
 
 # ─── preflight: required generate tools ──────────────────────────────────────
 # stringer is used by //go:generate stringer directives in this repo.
@@ -129,7 +136,8 @@ check_go_tool_version "stringer" \
 if ! command -v stringer >/dev/null 2>&1; then
   echo "WARN: 'stringer' not found — go generate drift check will be skipped."
   echo "      Install with:"
-  echo "        go install golang.org/x/tools/cmd/stringer@latest"
+  # renovate: datasource=go depName=golang.org/x/tools
+  echo "        go install golang.org/x/tools/cmd/stringer@v0.47.0"
   echo "      Ensure \$GOBIN or \$GOPATH/bin is on your PATH."
   echo ""
 fi
@@ -142,7 +150,8 @@ echo "==> golangci-lint"
 check_golangci_lint() {
   if ! command -v golangci-lint >/dev/null 2>&1; then
     echo "ERROR: 'golangci-lint' not found. Install v2 with:"
-    echo "  go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest"
+    # renovate: datasource=go depName=github.com/golangci/golangci-lint/v2
+    echo "  go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2"
     echo "Ensure \$GOBIN or \$GOPATH/bin is on your PATH."
     exit 1
   fi
@@ -164,7 +173,8 @@ check_golangci_lint() {
     echo "  sudo apt remove golangci-lint"
     echo "or delete the golangci-lint binary from your PATH."
     printf "\nInstall v2 (recommended) with:"
-    echo "  go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest"
+    # renovate: datasource=go depName=github.com/golangci/golangci-lint/v2
+    echo "  go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2"
     echo "Then ensure \$GOBIN or \$GOPATH/bin is on your PATH."
     exit 1
   fi
@@ -181,7 +191,8 @@ if [[ "$MODE" == "full" ]]; then
   (
     export GOOS=windows GOARCH=amd64
     run_go_tool "golangci-lint" \
-      "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest" \
+      # renovate: datasource=go depName=github.com/golangci/golangci-lint/v2
+      "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2" \
       run ./...
   )
   echo "==> golangci-lint (GOOS=linux)"
@@ -189,7 +200,8 @@ if [[ "$MODE" == "full" ]]; then
   (
     export GOOS=linux GOARCH=amd64
     run_go_tool "golangci-lint" \
-      "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest" \
+      # renovate: datasource=go depName=github.com/golangci/golangci-lint/v2
+      "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2" \
       run ./...
   )
 else
@@ -203,7 +215,8 @@ else
   (
     export GOOS="$current_goos" GOARCH="$current_goarch"
     run_go_tool "golangci-lint" \
-      "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest" \
+      # renovate: datasource=go depName=github.com/golangci/golangci-lint/v2
+      "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2" \
       run ./...
   )
 fi
@@ -251,7 +264,8 @@ if command -v actionlint >/dev/null 2>&1; then
 else
   echo "WARN: 'actionlint' not found; skipping workflow lint (CI still enforces this)."
   echo "      Install with:"
-  echo "        go install github.com/rhysd/actionlint/cmd/actionlint@latest"
+  # renovate: datasource=go depName=github.com/rhysd/actionlint
+  echo "        go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12"
   echo "      Or use package managers:"
   echo "        macOS:   brew install actionlint"
   echo "        Windows: choco install actionlint  OR  scoop install actionlint"
@@ -284,7 +298,8 @@ echo "==> go generate (drift check)"
 if [[ "$MODE" == "full" ]]; then
   if ! command -v stringer >/dev/null 2>&1; then
     echo "WARN: 'stringer' not found; skipping go generate drift check."
-    echo "      Install with: go install golang.org/x/tools/cmd/stringer@latest"
+    # renovate: datasource=go depName=golang.org/x/tools
+    echo "      Install with: go install golang.org/x/tools/cmd/stringer@v0.47.0"
   else
     go generate ./...
     if ! git diff --exit-code; then
@@ -313,7 +328,8 @@ if command -v govulncheck >/dev/null 2>&1; then
   if [[ "$MODE" == "full" ]]; then
     echo "==> govulncheck"
     run_go_tool "govulncheck" \
-      "go install golang.org/x/vuln/cmd/govulncheck@latest" \
+      # renovate: datasource=go depName=golang.org/x/vuln
+      "go install golang.org/x/vuln/cmd/govulncheck@v1.5.0" \
       ./...
   else
     echo "==> govulncheck (fast mode): skipped"
@@ -321,7 +337,8 @@ if command -v govulncheck >/dev/null 2>&1; then
 else
   echo "WARN: 'govulncheck' not found; skipping vulnerability scan (CI still enforces this)."
   echo "      Install with:"
-  echo "        go install golang.org/x/vuln/cmd/govulncheck@latest"
+  # renovate: datasource=go depName=golang.org/x/vuln
+  echo "        go install golang.org/x/vuln/cmd/govulncheck@v1.5.0"
   echo "      Ensure \$GOBIN or \$GOPATH/bin is on your PATH."
 fi
 
@@ -383,7 +400,8 @@ if command -v govulncheck >/dev/null 2>&1; then
     pkgdir=$( (cd "$moddir" && go list -f '{{.Dir}}' ./... 2>/dev/null | head -1) || true)
     [[ -z "$pkgdir" ]] && pkgdir="$moddir"
     (cd "$pkgdir" && run_go_tool "govulncheck" \
-      "go install golang.org/x/vuln/cmd/govulncheck@latest" \
+      # renovate: datasource=go depName=golang.org/x/vuln
+      "go install golang.org/x/vuln/cmd/govulncheck@v1.5.0" \
       -scan module)
 
     echo "--- $moddir: OpenSSF Scorecards (direct deps, threshold $SCORECARD_THRESHOLD)"
@@ -423,12 +441,14 @@ if command -v gorelease >/dev/null 2>&1; then
   # gorelease compares the current public API against the latest tagged
   # release. Before the first tag, it reports "no base version" — that's OK.
   run_go_tool "gorelease" \
-    "go install golang.org/x/exp/cmd/gorelease@latest" \
+    # renovate: datasource=go depName=golang.org/x/exp
+    "go install golang.org/x/exp/cmd/gorelease@v0.0.0-20260718201538-764159d718ef" \
     2>&1 || true
 else
   echo "WARN: 'gorelease' not found; skipping API compatibility check."
   echo "      Install with:"
-  echo "        go install golang.org/x/exp/cmd/gorelease@latest"
+  # renovate: datasource=go depName=golang.org/x/exp
+  echo "        go install golang.org/x/exp/cmd/gorelease@v0.0.0-20260718201538-764159d718ef"
   echo "      Ensure \$GOBIN or \$GOPATH/bin is on your PATH."
 fi
 

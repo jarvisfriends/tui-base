@@ -138,7 +138,7 @@ No supported package manager was found to install gcc automatically.
 Install a 64-bit mingw-w64 toolchain by one of these means, then re-run:
 
   winget : winget install --id BrechtSanders.WinLibs.POSIX.UCRT -e
-  choco  : choco install mingw -y
+  choco  : choco install mingw --version=16.1.0 -y
   scoop  : scoop install gcc
   MSYS2  : winget install --id MSYS2.MSYS2 -e
            then in the MSYS2 shell: pacman -S --needed mingw-w64-x86_64-gcc
@@ -156,7 +156,7 @@ do_install() {
       winget install --id "${WINGET_ID}" -e --accept-source-agreements --accept-package-agreements
       ;;
     choco)
-      choco install mingw -y
+      choco install mingw --version=16.1.0 -y
       ;;
     scoop)
       scoop install gcc

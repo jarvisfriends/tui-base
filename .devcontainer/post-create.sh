@@ -4,10 +4,14 @@
 set -euo pipefail
 
 echo "→ installing Go tools..."
-go install golang.org/x/tools/cmd/stringer@latest
-go install golang.org/x/vuln/cmd/govulncheck@latest
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-go install github.com/goreleaser/goreleaser/v2@latest
+# renovate: datasource=go depName=golang.org/x/tools
+go install golang.org/x/tools/cmd/stringer@v0.47.0
+# renovate: datasource=go depName=golang.org/x/vuln
+go install golang.org/x/vuln/cmd/govulncheck@v1.5.0
+# renovate: datasource=go depName=github.com/golangci/golangci-lint/v2
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+# renovate: datasource=go depName=github.com/goreleaser/goreleaser/v2
+go install github.com/goreleaser/goreleaser/v2@v2.16.0
 
 echo "→ pre-fetching module dependencies..."
 go mod download

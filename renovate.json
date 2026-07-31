@@ -1,0 +1,17 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Renovate only bumps version pins annotated with '# renovate:' in shell scripts and workflow run lines. Dependabot owns go.mod and GitHub Actions updates, so all other managers are disabled to avoid duplicate PRs.",
+  "extends": [":dependencyDashboard"],
+  "enabledManagers": ["custom.regex"],
+  "labels": ["dependencies"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "go install <pkg>@<version> lines annotated with a renovate comment",
+      "managerFilePatterns": ["/\\.sh$/", "/^\\.github/workflows/[^/]+\\.ya?ml$/", "/^\\.devcontainer/[^/]+\\.sh$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>\\S+)\\n[^\\n]*@(?<currentValue>v[0-9][^\\s\"']*)"
+      ]
+    }
+  ]
+}

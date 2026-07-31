@@ -1,0 +1,36 @@
+name: OSV-Scanner
+
+# Free Google OSV vulnerability scanning for OSS: scans go.mod/go.sum (and
+# other lockfiles) against the OSV.dev database, uploading SARIF to the
+# repo's code-scanning tab. Complements govulncheck (which is call-graph
+# aware but Go-only) with ecosystem-wide coverage.
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  schedule:
+    - cron: '37 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scan (push/schedule)
+    if: ${{ github.event_name != 'pull_request' }}
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+    permissions:
+      actions: read
+      contents: read
+      security-events: write # upload SARIF results
+
+  scan-pr:
+    name: Scan (PR diff)
+    if: ${{ github.event_name == 'pull_request' }}
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+    permissions:
+      actions: read
+      contents: read
+      security-events: write # upload SARIF results
