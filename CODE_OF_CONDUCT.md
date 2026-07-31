@@ -7,5 +7,7 @@ discussions about the code. Harassment, personal attacks, and discriminatory
 language are not tolerated anywhere in the project's spaces (issues, PRs,
 discussions, commits).
 
-Violations can be reported privately to the maintainers at
-`amarcum@gmail.com`; reports are handled confidentially.
+Violations can be reported confidentially through GitHub's built-in tools:
+use [Report content](https://docs.github.com/en/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam)
+on the specific issue, pull request, or comment, or the
+[Report abuse](https://github.com/contact/report-abuse) form for broader concerns.

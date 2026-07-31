@@ -10,8 +10,7 @@ policy for each release is therefore: supported until superseded.
 
 Please use
 [GitHub's private vulnerability reporting](https://github.com/jarvisfriends/tui-base/security)
-for this repository rather than opening a public issue. If that is unavailable, email <amarcum@gmail.com>
-with `[SECURITY]` in the subject.
+for this repository rather than opening a public issue.
 
 Our coordinated disclosure process:
 

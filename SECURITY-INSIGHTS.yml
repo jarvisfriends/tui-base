@@ -15,7 +15,6 @@ project:
   administrators:
     - name: Alex
       affiliation: jarvisfriends
-      email: amarcum@gmail.com
       social: https://github.com/amarcum
       primary: true
   repositories:
@@ -27,7 +26,6 @@ project:
     bug-bounty-available: false
     contact:
       name: Alex
-      email: amarcum@gmail.com
       primary: true
     security-policy: https://github.com/jarvisfriends/tui-base/blob/main/SECURITY.md
     private-vulnerability-reporting: https://github.com/jarvisfriends/tui-base/security/advisories/new
@@ -44,7 +42,6 @@ repository:
   core-team:
     - name: Alex
       affiliation: jarvisfriends
-      email: amarcum@gmail.com
       social: https://github.com/amarcum
       primary: true
   license:
@@ -60,7 +57,6 @@ repository:
         date: '2026-07-25'
     champions:
       - name: Alex
-        email: amarcum@gmail.com
         primary: true
     tools:
       - name: govulncheck
