@@ -64,8 +64,6 @@ __debug_bin.exe
 user.config
 .agent
 
-# BEGIN copilot-team-baseline
-# Shared local-only artifacts (safe to ignore in OSS repos)
 .DS_Store
 Thumbs.db
 *.swp
@@ -88,4 +86,3 @@ dist/
 *.test
 *.prof
 *.pprof
-# END copilot-team-baseline
