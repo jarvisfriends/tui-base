@@ -90,3 +90,8 @@ dist/
 # demo binaries built for tape rendering (deleted after; never commit)
 cmd/*/demo-bin
 examples/*/demo-bin
+
+# demo gifs are published to Charm hosting (vhs publish); not committed
+cmd/*/*.gif
+examples/*/*.gif
+!**/*.gif.url

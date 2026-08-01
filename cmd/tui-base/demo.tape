@@ -1,3 +1,4 @@
+# Publish after rendering: docker run --rm -v "$PWD:/vhs" ghcr.io/charmbracelet/vhs publish <gif>; put the URL in README (gifs are not committed).
 # VHS tour of the tui-base reference app: home-page component gallery,
 # table interactions, settings, inspector, and page navigation.
 # Regenerate from the repo root:

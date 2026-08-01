@@ -1,3 +1,4 @@
+# Publish after rendering: docker run --rm -v "$PWD:/vhs" ghcr.io/charmbracelet/vhs publish <gif>; put the URL in README (gifs are not committed).
 # VHS demo of snap/navigation hosted by the multipage example (the snap
 # ROADMAP wants the navigation demo in a router+pages host, not a synthetic
 # example): Tab page cycling, sidebar focus with live arrow-key switching,
