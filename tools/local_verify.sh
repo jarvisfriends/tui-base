@@ -128,7 +128,7 @@ check_go_tool_version "actionlint" \
   "go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12"
 check_go_tool_version "stringer" \
   # renovate: datasource=go depName=golang.org/x/tools
-  "go install golang.org/x/tools/cmd/stringer@v0.47.0"
+  "go install golang.org/x/tools/cmd/stringer@v0.48.0"
 
 # ─── preflight: required generate tools ──────────────────────────────────────
 # stringer is used by //go:generate stringer directives in this repo.
@@ -137,7 +137,7 @@ if ! command -v stringer >/dev/null 2>&1; then
   echo "WARN: 'stringer' not found — go generate drift check will be skipped."
   echo "      Install with:"
   # renovate: datasource=go depName=golang.org/x/tools
-  echo "        go install golang.org/x/tools/cmd/stringer@v0.47.0"
+  echo "        go install golang.org/x/tools/cmd/stringer@v0.48.0"
   echo "      Ensure \$GOBIN or \$GOPATH/bin is on your PATH."
   echo ""
 fi
@@ -299,7 +299,7 @@ if [[ "$MODE" == "full" ]]; then
   if ! command -v stringer >/dev/null 2>&1; then
     echo "WARN: 'stringer' not found; skipping go generate drift check."
     # renovate: datasource=go depName=golang.org/x/tools
-    echo "      Install with: go install golang.org/x/tools/cmd/stringer@v0.47.0"
+    echo "      Install with: go install golang.org/x/tools/cmd/stringer@v0.48.0"
   else
     go generate ./...
     if ! git diff --exit-code; then

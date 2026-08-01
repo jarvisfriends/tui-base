@@ -5,7 +5,7 @@ set -euo pipefail
 
 echo "→ installing Go tools..."
 # renovate: datasource=go depName=golang.org/x/tools
-go install golang.org/x/tools/cmd/stringer@v0.47.0
+go install golang.org/x/tools/cmd/stringer@v0.48.0
 # renovate: datasource=go depName=golang.org/x/vuln
 go install golang.org/x/vuln/cmd/govulncheck@v1.5.0
 # renovate: datasource=go depName=github.com/golangci/golangci-lint/v2
