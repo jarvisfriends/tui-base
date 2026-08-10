@@ -58,10 +58,10 @@ github.com/fsnotify/fsnotify v1.10.1 h1:b0/UzAf9yR5rhf3RPm9gf3ehBPpf0oZKIjtpKrx5
 github.com/fsnotify/fsnotify v1.10.1/go.mod h1:TLheqan6HD6GBK6PrDWyDPBaEV8LspOxvPSjC+bVfgo=
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
-github.com/jarvisfriends/inspector v0.0.4 h1:fq4u/HsvCbtqUZnf+5D7R/n9ZgnN0TadYIb9BNxK49E=
-github.com/jarvisfriends/inspector v0.0.4/go.mod h1:mFRlm9VW681HmmMHLqLk5hKIwaLrXQWhlZqn1SM1R6o=
-github.com/jarvisfriends/snap v0.2.6 h1:MiG9GnoAzw3Twab1pjLZbytOP0vZlrOH+N5287z1DZY=
-github.com/jarvisfriends/snap v0.2.6/go.mod h1:W3IKyqu7HDLYEGiO4MRYEZpZL+8ryDFzp0dGZrNQxLA=
+github.com/jarvisfriends/inspector v0.0.10 h1:DJQpcWjRO4LK7gbseGUby7AatF1yyBSbEYAWJE1Ldv4=
+github.com/jarvisfriends/inspector v0.0.10/go.mod h1:0s32/FXIbQNW2u2Yly9wJq9X1+kJ9uSWtUG1Ce3LZxc=
+github.com/jarvisfriends/snap v0.2.8 h1:tqI6a/wBmhLHODyCU7TnB5HS1QD0vbYojAnx+ouTGfU=
+github.com/jarvisfriends/snap v0.2.8/go.mod h1:W3IKyqu7HDLYEGiO4MRYEZpZL+8ryDFzp0dGZrNQxLA=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/lrstanley/bubbletint/v2 v2.0.2 h1:JvLHMf7qI/UE47AyNsD9jVI7h2VQvq+4AYcHNe8DwSQ=
