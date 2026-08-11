@@ -1,2 +1,13 @@
 # Default owners for everything in the repository.
-* @jarvisfriends
+#
+# Owners must be a user (@name), a team (@org/team), or an email — a bare
+# organization is not a valid owner. This previously read "@jarvisfriends",
+# which is the org, so GitHub rejected it with "Unknown owner" and no
+# code-owner review could ever be satisfied. Verify any change here with:
+#
+#   gh api repos/jarvisfriends/tui-base/codeowners/errors
+#
+# All three names below have write access, so any of them can approve a pull
+# request from another — which is what makes a required code-owner review
+# workable when the lead maintainer is also the usual author.
+* @amarcum @DevKyleS @kennethpaskett
