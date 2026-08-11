@@ -1,0 +1,117 @@
+# SECURITY-INSIGHTS.yml — machine-readable security metadata
+# Spec: https://github.com/ossf/security-insights-spec (v2.0.0)
+header:
+  schema-version: 2.0.0
+  last-updated: '2026-07-25'
+  last-reviewed: '2026-07-25'
+  url: https://github.com/jarvisfriends/tui-base/blob/main/SECURITY-INSIGHTS.yml
+  comment: |
+    Security metadata for tui-base, an application framework for Bubble Tea v2 (routing, theming, settings, logging, overlays).
+
+project:
+  name: tui-base
+  homepage: https://github.com/jarvisfriends/tui-base
+  roadmap: https://github.com/jarvisfriends/tui-base/blob/main/.github/ROADMAP.md
+  administrators:
+    - name: Alex
+      affiliation: jarvisfriends
+      social: https://github.com/amarcum
+      primary: true
+  repositories:
+    - name: tui-base
+      url: https://github.com/jarvisfriends/tui-base
+      comment: Primary repository.
+  vulnerability-reporting:
+    reports-accepted: true
+    bug-bounty-available: false
+    contact:
+      name: Alex
+      primary: true
+    security-policy: https://github.com/jarvisfriends/tui-base/blob/main/SECURITY.md
+    private-vulnerability-reporting: https://github.com/jarvisfriends/tui-base/security/advisories/new
+    comment: |
+      Please use GitHub private vulnerability reporting. Acknowledgement within 7 days,
+      triage within 14 days, coordinated disclosure target of 90 days.
+
+repository:
+  url: https://github.com/jarvisfriends/tui-base
+  status: active
+  accepts-change-request: true
+  accepts-automated-change-request: true
+  no-third-party-packages: false
+  core-team:
+    - name: Alex
+      affiliation: jarvisfriends
+      social: https://github.com/amarcum
+      primary: true
+  license:
+    url: https://github.com/jarvisfriends/tui-base/blob/main/LICENSE
+    expression: MIT
+  security:
+    assessments:
+      self:
+        comment: |
+          Threat model and attack-surface notes are maintained in docs/threat-model.md;
+          architecture and external interfaces in docs/architecture.md.
+        evidence: https://github.com/jarvisfriends/tui-base/blob/main/docs/threat-model.md
+        date: '2026-07-25'
+    champions:
+      - name: Alex
+        primary: true
+    tools:
+      - name: govulncheck
+        type: SCA
+        version: latest
+        rulesets:
+          - default
+        integration:
+          ad-hoc: false
+          ci: true
+          before-release: true
+        results:
+          ci:
+            name: CI govulncheck job
+            predicate-uri: https://github.com/jarvisfriends/tui-base/actions/workflows/ci.yml
+            comment: Runs on every push and pull request.
+      - name: CodeQL
+        type: SAST
+        version: latest
+        rulesets:
+          - default
+        integration:
+          ad-hoc: false
+          ci: true
+          before-release: true
+        results:
+          ci:
+            name: CodeQL workflow
+            predicate-uri: https://github.com/jarvisfriends/tui-base/actions/workflows/codeql.yml
+            comment: Runs on pushes, pull requests, and a weekly schedule.
+      - name: gitleaks
+        type: secret-scanning
+        version: latest
+        rulesets:
+          - default
+        integration:
+          ad-hoc: false
+          ci: true
+          before-release: true
+        results:
+          ci:
+            name: CI secrets job
+            predicate-uri: https://github.com/jarvisfriends/tui-base/actions/workflows/ci.yml
+            comment: Scans the full history on every push and pull request.
+      - name: OpenSSF Scorecard
+        type: other
+        version: latest
+        rulesets:
+          - default
+        integration:
+          ad-hoc: false
+          ci: true
+          before-release: false
+        results:
+          ci:
+            name: Scorecards workflow
+            predicate-uri: https://github.com/jarvisfriends/tui-base/actions/workflows/scorecards.yml
+            comment: Weekly and on pushes to main; results published to the OpenSSF API.
