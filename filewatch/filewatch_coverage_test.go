@@ -36,10 +36,15 @@ func TestWatcherErrorDeliversErrorMsg(t *testing.T) {
 	}
 	defer func() { _ = w.Stop() }()
 
+	// Drive the failure path through the watcher's own injection channel, not
+	// fw.Errors. fsnotify owns that channel and closes it during shutdown, so
+	// sending there races the close — the kqueue backend on macOS reported it
+	// as a data race, and a send landing after the close would panic outright.
+	w.injectErr = make(chan error)
+
 	ch := runNext(w)
-	// Injecting into the fsnotify error channel simulates a dead OS watch;
-	// the unbuffered send completes exactly when Next's awaitMatch receives.
-	w.fw.Errors <- errors.New("watch backend failed")
+	// The unbuffered send completes exactly when Next's awaitMatch receives.
+	w.injectErr <- errors.New("watch backend failed")
 
 	msg := waitMsg(t, ch)
 	em, ok := msg.(ErrorMsg)
