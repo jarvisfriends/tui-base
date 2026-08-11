@@ -70,6 +70,13 @@ type Watcher struct {
 	path     string // cleaned absolute target
 	filter   string // exact file path to match; "" = deliver everything in dir
 	debounce time.Duration
+
+	// injectErr lets a test drive the watcher-failure path without writing
+	// into fw.Errors, which fsnotify owns and closes on shutdown — sending
+	// there races that close (and can panic on a closed channel). It stays
+	// nil in production, and a receive on a nil channel blocks forever, so
+	// its case in awaitMatch's select is never selected and costs nothing.
+	injectErr chan error
 }
 
 // New creates a watcher for path. The path may be a file (existing or not —
@@ -147,6 +154,12 @@ func (w *Watcher) awaitMatch() (any, bool) {
 				return ev, true
 			}
 		case err, ok := <-w.fw.Errors:
+			if !ok {
+				return nil, false
+			}
+			return err, true
+		case err, ok := <-w.injectErr:
+			// nil in production: this case can never fire. See Watcher.
 			if !ok {
 				return nil, false
 			}
