@@ -14,7 +14,7 @@ observability, and maintainability from day one.
 Run these before making changes:
 
 ```bash
-go build ./... && go run ./cmd/tui-base
+go build ./... && go run .
 go test ./... -v
 ```
 
@@ -22,7 +22,7 @@ go test ./... -v
 
 High-level flow:
 
-1. `cmd/tui-base/main.go` starts the router model (or call `tuibase.Run` from
+1. The root `main.go` starts the router model (or call `tuibase.Run` from
    the root package in your own app).
 2. `router/` owns global wiring (pages, nav, status, colors, notifications).
 3. Each page is a `tea.Model` with `Init`, `Update`, `View`.

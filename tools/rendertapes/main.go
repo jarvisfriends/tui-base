@@ -243,8 +243,15 @@ func buildDemoBinaries(root string) error {
 		if err != nil || !st.IsDir() {
 			continue
 		}
+		// The reference app's main package moved to the module root; its tape
+		// and gifs stayed in cmd/tui-base. A tape dir with no Go files gets
+		// the root build, so those tapes keep running the real app.
+		pkg := "./" + filepath.ToSlash(mustRel(root, dir))
+		if gofiles, _ := filepath.Glob(filepath.Join(dir, "*.go")); len(gofiles) == 0 {
+			pkg = "."
+		}
 		out := filepath.Join(dir, "demo-bin")
-		cmd := exec.Command("go", "build", "-o", out, "./"+filepath.ToSlash(mustRel(root, dir)))
+		cmd := exec.Command("go", "build", "-o", out, pkg)
 		cmd.Dir = root
 		cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH=amd64", "CGO_ENABLED=0")
 		if outb, err := cmd.CombinedOutput(); err != nil {

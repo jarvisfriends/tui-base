@@ -7,7 +7,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/jarvisfriends/inspector"
+	"github.com/jarvisfriends/inspector/inspector"
 
 	tea "charm.land/bubbletea/v2"
 )

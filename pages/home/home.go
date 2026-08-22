@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jarvisfriends/inspector"
+	"github.com/jarvisfriends/inspector/inspector"
 	"github.com/jarvisfriends/snap/charts"
 	"github.com/jarvisfriends/snap/menu"
 	"github.com/jarvisfriends/snap/page"

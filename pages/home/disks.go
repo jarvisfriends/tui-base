@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/jarvisfriends/inspector"
+	"github.com/jarvisfriends/inspector/inspector"
 	"github.com/jarvisfriends/snap/keys"
 	"github.com/jarvisfriends/snap/menu"
 	"github.com/jarvisfriends/snap/styles"

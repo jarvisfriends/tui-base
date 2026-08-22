@@ -136,6 +136,14 @@ linters:
           - cyclop
         text: "for function Update"
         path: router/router.go
+      # SA4023 fires only on non-Windows builds, where the launch stub
+      # unconditionally errors — and the goos gate above the call makes that
+      # path unreachable. An inline nolint would trip nolintlint on the
+      # Windows lint pass, so the exclusion lives here instead.
+      - linters:
+          - staticcheck
+        text: "SA4023"
+        path: router/terminal.go
       # G204 (subprocess with variable): the pprof browser-opener and
       # 'go tool pprof' launcher use controlled internal URLs/paths, not
       # external user input.
@@ -166,7 +174,10 @@ formatters:
   settings:
     gofumpt:
       module-path: github.com/jarvisfriends/tui-base
-      extra-rules: true
+      # gofumpt 0.11 split extra-rules into granular options; group-params is
+      # the parameter-grouping rewrite the old flag was used for here.
+      extra:
+        group-params: true
 
 issues:
   # Show every finding rather than capping per-linter/per-message.

@@ -6,7 +6,7 @@
 | `icon.ico` | Generated multi-resolution Windows icon (256/128/64/48/32/16 px). Do not edit by hand. |
 
 The icon that a compiled binary shows in Explorer, the taskbar, and shortcuts
-comes from a Windows resource (`cmd/tui-base/resource_windows_*.syso`) that is
+comes from a Windows resource (`resource_windows_*.syso` at the repo root) that is
 generated from `icon.ico`. Everything downstream of `icon.svg` is produced by
 the [`tools/genicon`](../tools/genicon) generator.
 
@@ -18,7 +18,7 @@ go -C tools/genicon generate .   # from the repo root
 ```
 
 That rasterizes `icon.svg`, rewrites `icon.ico`, and re-emits the `.syso`
-resources under `cmd/tui-base`. Commit the regenerated `.ico` and `.syso` files
+resources at the repo root. Commit the regenerated `.ico` and `.syso` files
 so a plain `go build` still ships the icon.
 
 Generation is intentionally **not** part of the repo-root `go generate ./...`,

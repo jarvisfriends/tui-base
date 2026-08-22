@@ -56,7 +56,7 @@ The following milestone capabilities are already implemented:
 ## Project Layout
 
 - `tuibase.go`: root consumer package — `tuibase.Run(tuibase.Options{...})` bootstraps a full app.
-- `cmd/tui-base/`: runnable reference application.
+- `main.go` (root): runnable reference application; `cmd/tui-base/` keeps its demo tapes and gifs.
 - `router/`: root model and message routing.
 - `pages/`: page models (`home`, `settings`); the Ctrl+D inspector now
   comes from [inspector](https://github.com/jarvisfriends/inspector).

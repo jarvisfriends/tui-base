@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/colorprofile"
-	"github.com/jarvisfriends/inspector"
+	"github.com/jarvisfriends/inspector/inspector"
 	"github.com/jarvisfriends/snap/gate"
 	"github.com/jarvisfriends/snap/keys"
 	"github.com/jarvisfriends/snap/navigation"
@@ -1625,79 +1625,80 @@ func (m *RouterModel) View() tea.View {
 		BackgroundColor: m.colorProfile.Convert(m.colors.Styles.TextOnBg.GetBackground()),
 		ForegroundColor: m.colorProfile.Convert(m.colors.Styles.TextOnBg.GetForeground()),
 		WindowTitle:     m.activeWindowTitle(),
-	}
-	// Dispatch mouse events into child views by converting global mouse
-	// coordinates into child-relative coordinates and then calling the
-	// child's OnMouse handler. Bubble Tea only calls the top-level view's
-	// OnMouse, so we must route manually here.
-	v.OnMouse = func(mm tea.MouseMsg) tea.Cmd {
-		// A visible modal overlay intercepts the mouse: events inside its bounds
-		// route to the overlay, a release outside closes it, and everything else
-		// is consumed. Passive overlays (the toast) are transparent and fall
-		// through to the page routing below.
-		if cmd, ok := m.overlayHandleMouse(mm); ok {
-			return cmd
-		}
 
-		// helper to route a mouse message into a child view with offsets.
-		// Always emit a MouseHighlightMsg so the inspector can visualize where
-		// the router considered the event to be, even if the child has no
-		// OnMouse handler.
-		route := func(child tea.View, offX, offY int, childName string) tea.Cmd {
-			switch ev := mm.(type) {
-			case tea.MouseClickMsg, tea.MouseReleaseMsg, tea.MouseMotionMsg, tea.MouseWheelMsg:
-				mEvent := ev.Mouse()
-				nm := tea.Mouse{
-					X:      mEvent.X - offX,
-					Y:      mEvent.Y - offY,
-					Button: mEvent.Button,
-					Mod:    mEvent.Mod,
-				}
-				var childCmd tea.Cmd
-				if child.OnMouse != nil {
-					switch ev.(type) {
-					case tea.MouseClickMsg:
-						childCmd = child.OnMouse(tea.MouseClickMsg(nm))
-					case tea.MouseReleaseMsg:
-						childCmd = child.OnMouse(tea.MouseReleaseMsg(nm))
-					case tea.MouseMotionMsg:
-						childCmd = child.OnMouse(tea.MouseMotionMsg(nm))
-					case tea.MouseWheelMsg:
-						childCmd = child.OnMouse(tea.MouseWheelMsg(nm))
-					}
-				}
-				return tea.Batch(childCmd, func() tea.Msg {
-					return inspector.MouseHighlightMsg{
-						GlobalX: mEvent.X,
-						GlobalY: mEvent.Y,
-						Child:   childName,
-						OffX:    offX,
-						OffY:    offY,
-					}
-				})
-			default:
-				return nil
+		// Dispatch mouse events into child views by converting global mouse
+		// coordinates into child-relative coordinates and then calling the
+		// child's OnMouse handler. Bubble Tea only calls the top-level view's
+		// OnMouse, so we must route manually here.
+		OnMouse: func(mm tea.MouseMsg) tea.Cmd {
+			// A visible modal overlay intercepts the mouse: events inside its bounds
+			// route to the overlay, a release outside closes it, and everything else
+			// is consumed. Passive overlays (the toast) are transparent and fall
+			// through to the page routing below.
+			if cmd, ok := m.overlayHandleMouse(mm); ok {
+				return cmd
 			}
-		}
 
-		// compute status height and main layout height
-		mainHeight := max(m.height-statusHeight, 0)
+			// helper to route a mouse message into a child view with offsets.
+			// Always emit a MouseHighlightMsg so the inspector can visualize where
+			// the router considered the event to be, even if the child has no
+			// OnMouse handler.
+			route := func(child tea.View, offX, offY int, childName string) tea.Cmd {
+				switch ev := mm.(type) {
+				case tea.MouseClickMsg, tea.MouseReleaseMsg, tea.MouseMotionMsg, tea.MouseWheelMsg:
+					mEvent := ev.Mouse()
+					nm := tea.Mouse{
+						X:      mEvent.X - offX,
+						Y:      mEvent.Y - offY,
+						Button: mEvent.Button,
+						Mod:    mEvent.Mod,
+					}
+					var childCmd tea.Cmd
+					if child.OnMouse != nil {
+						switch ev.(type) {
+						case tea.MouseClickMsg:
+							childCmd = child.OnMouse(tea.MouseClickMsg(nm))
+						case tea.MouseReleaseMsg:
+							childCmd = child.OnMouse(tea.MouseReleaseMsg(nm))
+						case tea.MouseMotionMsg:
+							childCmd = child.OnMouse(tea.MouseMotionMsg(nm))
+						case tea.MouseWheelMsg:
+							childCmd = child.OnMouse(tea.MouseWheelMsg(nm))
+						}
+					}
+					return tea.Batch(childCmd, func() tea.Msg {
+						return inspector.MouseHighlightMsg{
+							GlobalX: mEvent.X,
+							GlobalY: mEvent.Y,
+							Child:   childName,
+							OffX:    offX,
+							OffY:    offY,
+						}
+					})
+				default:
+					return nil
+				}
+			}
 
-		// route based on nav layout
-		if cmd := m.routeMouseToNav(mm, mainHeight, navView, activePageView, route); cmd != nil {
-			return cmd
-		}
+			// compute status height and main layout height
+			mainHeight := max(m.height-statusHeight, 0)
 
-		// status area (at bottom) — delegate entirely to the status view's own
-		// OnMouse handler which uses pre-computed lipgloss.Width regions and the
-		// correct row index. Avoids parsing ANSI-encoded rendered strings with
-		// strings.Index which is unreliable when lipgloss injects resets mid-glyph.
-		mmPos := mm.Mouse()
-		if mmPos.Y >= mainHeight && mmPos.Y < mainHeight+statusHeight {
-			return route(statusView, 0, mainHeight, "status")
-		}
+			// route based on nav layout
+			if cmd := m.routeMouseToNav(mm, mainHeight, navView, activePageView, route); cmd != nil {
+				return cmd
+			}
 
-		return nil
+			// status area (at bottom) — delegate entirely to the status view's own
+			// OnMouse handler which uses pre-computed lipgloss.Width regions and the
+			// correct row index. Avoids parsing ANSI-encoded rendered strings with
+			// strings.Index which is unreliable when lipgloss injects resets mid-glyph.
+			mmPos := mm.Mouse()
+			if mmPos.Y >= mainHeight && mmPos.Y < mainHeight+statusHeight {
+				return route(statusView, 0, mainHeight, "status")
+			}
+
+			return nil
+		},
 	}
 	return v
 }

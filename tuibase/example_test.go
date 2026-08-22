@@ -1,7 +1,7 @@
 package tuibase_test
 
 import (
-	tuibase "github.com/jarvisfriends/tui-base"
+	tuibase "github.com/jarvisfriends/tui-base/tuibase"
 )
 
 // ExampleRun shows the minimal bootstrap for an application built on

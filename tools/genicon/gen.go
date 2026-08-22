@@ -9,7 +9,7 @@ package main
 // It is deliberately scoped to this module rather than the repo-root
 // `go generate ./...`, so the always-run CI drift check and goreleaser build
 // never depend on the SVG toolchain — the committed assets/icon.ico and
-// cmd/tui-base/resource_windows_*.syso are the source of truth. Rerun this only
+// resource_windows_*.syso are the source of truth. Rerun this only
 // when assets/icon.svg changes, and commit the regenerated files.
 //
-//go:generate go run . -svg ../../assets/icon.svg -ico ../../assets/icon.ico -png ../../cmd/tui-base/tabicon.png -syso ../../cmd/tui-base -name "TUI Base" -desc "tui-base reference application"
+//go:generate go run . -svg ../../assets/icon.svg -ico ../../assets/icon.ico -png ../../tabicon.png -syso ../.. -name "TUI Base" -desc "tui-base reference application"

@@ -5,7 +5,7 @@ go 1.26.5
 require (
 	cogentcore.org/core v0.3.39
 	github.com/josephspurrier/goversioninfo v1.7.0
-	golang.org/x/image v0.44.0
+	golang.org/x/image v0.45.0
 )
 
 require (
@@ -20,5 +20,5 @@ require (
 	github.com/tdewolff/parse/v2 v2.8.15 // indirect
 	golang.org/x/exp v0.0.0-20260810151157-a8b543ca52da // indirect
 	golang.org/x/net v0.57.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 )
