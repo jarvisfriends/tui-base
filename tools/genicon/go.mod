@@ -3,7 +3,7 @@ module github.com/jarvisfriends/tui-base/tools/genicon
 go 1.26.5
 
 require (
-	cogentcore.org/core v0.3.39
+	cogentcore.org/core v0.3.41
 	github.com/josephspurrier/goversioninfo v1.7.0
 	golang.org/x/image v0.45.0
 )
