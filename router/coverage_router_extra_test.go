@@ -15,7 +15,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
 
-	"github.com/jarvisfriends/inspector"
+	"github.com/jarvisfriends/inspector/inspector"
 	"github.com/jarvisfriends/snap/navigation"
 	"github.com/jarvisfriends/snap/notifications"
 	"github.com/jarvisfriends/snap/status"

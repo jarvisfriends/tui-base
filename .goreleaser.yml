@@ -16,7 +16,7 @@ builds:
   - &example_build
     id: tui-base
     binary: tui-base
-    main: ./cmd/tui-base
+    main: .
     env:
       - CGO_ENABLED=0
     goos:

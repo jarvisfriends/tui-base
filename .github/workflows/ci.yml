@@ -30,7 +30,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.x'
       - name: Cache Go modules
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
@@ -75,7 +75,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.x'
       - name: Install stringer
         # Pinned (CI-1): bump alongside the golang.org/x/tools dependency.
         run: go install golang.org/x/tools/cmd/stringer@v0.47.0
@@ -95,7 +95,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.x'
       - name: Check for go fix drift
         run: |
           if ! go fix -diff ./...; then
@@ -118,22 +118,22 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.x'
       - name: Lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           # Pinned (CI-1): keep in sync with tools/local_verify.sh and the
           # coverage job below.
-          version: v2.12.2
+          version: v2.13.1
       - name: Lint releasetag (nested module)
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
-          version: v2.12.2
+          version: v2.13.1
           working-directory: tools/releasetag
       - name: Lint rendertapes (nested module)
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
-          version: v2.12.2
+          version: v2.13.1
           working-directory: tools/rendertapes
 
   workflow-lint:
@@ -193,7 +193,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.x'
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.5.0
       - name: Run govulncheck
@@ -207,7 +207,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.x'
       - name: Run fuzz targets (30s each)
         # Short timed runs per target catch shallow regressions on every PR
         env:
@@ -222,7 +222,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.x'
       - name: Run benchmarks
         # results are uploaded for trend comparison
         # (e.g. benchstat old.txt new.txt locally); no thresholds enforced —
@@ -244,7 +244,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.x'
       - name: Install stringer
         # needed by the goreleaser before-hook (go generate).
         run: go install golang.org/x/tools/cmd/stringer@v0.47.0
@@ -268,7 +268,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.x'
       - name: Cache Go modules
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:

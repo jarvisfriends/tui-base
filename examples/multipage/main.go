@@ -14,8 +14,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/jarvisfriends/snap/page"
-	tuibase "github.com/jarvisfriends/tui-base"
 	"github.com/jarvisfriends/tui-base/config"
+	tuibase "github.com/jarvisfriends/tui-base/tuibase"
 )
 
 // textPage is a trivial page rendering a fixed body.

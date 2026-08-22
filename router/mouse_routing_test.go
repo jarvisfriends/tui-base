@@ -3,7 +3,7 @@ package router
 import (
 	"testing"
 
-	"github.com/jarvisfriends/inspector"
+	"github.com/jarvisfriends/inspector/inspector"
 
 	tea "charm.land/bubbletea/v2"
 )

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"os"
 
-	tuibase "github.com/jarvisfriends/tui-base"
+	tuibase "github.com/jarvisfriends/tui-base/tuibase"
 )
 
 func main() {
