@@ -1,6 +1,6 @@
 module github.com/jarvisfriends/tui-base
 
-go 1.27.0
+go 1.27
 
 require (
 	charm.land/bubbles/v2 v2.2.0
@@ -12,8 +12,8 @@ require (
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/dustin/go-humanize v1.0.1
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/jarvisfriends/inspector v0.1.0
-	github.com/jarvisfriends/snap v0.2.25
+	github.com/jarvisfriends/inspector v0.1.3
+	github.com/jarvisfriends/snap v0.2.27
 	github.com/lrstanley/bubbletint/v2 v2.0.2
 	golang.org/x/sys v0.47.0
 	golang.org/x/tools v0.49.0
