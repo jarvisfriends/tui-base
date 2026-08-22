@@ -1,0 +1,5 @@
+# Coveralls serves 403 Forbidden to unauthenticated link checkers, so the
+# README badge fails lychee even though the page renders in a browser (and
+# the repo's Coveralls upload is currently broken anyway — LAUNCH_CHECKLIST
+# tracks fixing the token). Remove once the badge resolves for lychee.
+https://coveralls.io/github/jarvisfriends/tui-base
