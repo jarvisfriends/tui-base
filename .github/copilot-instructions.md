@@ -13,7 +13,7 @@ We are using Go 1.26.5+ (never lower the `go.mod` directive below 1.26.5 — 1.2
 3. Run race tests: `go test -race ./... -v`
 4. Run lint: `golangci-lint run ./...`
 5. Run local verify script: `bash tools/local_verify.sh`
-6. TUI code lives under `navigation/`, `pages/`, `router/`, `status/`, `theme/`, `logging/`, `keys/`; the root `tuibase` package is the thin consumer API and `cmd/tui-base/` is the reference app.
+6. TUI code lives under `navigation/`, `pages/`, `router/`, `status/`, `theme/`, `logging/`, `keys/`; the `tuibase/` package is the thin consumer API and the root `main.go` is the reference app.
 7. Check [`.github/ROADMAP.md`](ROADMAP.md) for current tasks and status.
 8. Check [`.github/CHARM_ECOSYSTEM.md`](CHARM_ECOSYSTEM.md) for established patterns before writing any UI code.
 
@@ -35,7 +35,7 @@ We are using Go 1.26.5+ (never lower the `go.mod` directive below 1.26.5 — 1.2
 
 ```
 tuibase.go           — root consumer package: Options/RegisteredPage aliases + Run()
-cmd/tui-base/        — reference app entry point; creates router, runs tea.Program
+main.go              — reference app entry point (root); creates router, runs tea.Program
 router/              — root model; owns nav, pages, status, colors; dispatches all messages
 navigation/          — Navigator interface + Sidebar and Tabs implementations
 pages/

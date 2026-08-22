@@ -19,8 +19,8 @@ automatically. tui-base generates that resource from a single source of truth:
 ```
 assets/icon.svg                      the master vector (edit this)
   └─ tools/genicon ──────────────────▶ assets/icon.ico            (multi-size icon)
-                                       cmd/tui-base/resource_windows_amd64.syso
-                                       cmd/tui-base/resource_windows_arm64.syso
+                                       resource_windows_amd64.syso
+                                       resource_windows_arm64.syso
 ```
 
 The `.syso` files are named `resource_windows_<arch>.syso`, so the toolchain
@@ -41,7 +41,7 @@ After editing `assets/icon.svg`:
 go -C tools/genicon generate .   # from the repo root
 ```
 
-Commit the regenerated `assets/icon.ico` and `cmd/tui-base/resource_windows_*.syso`.
+Commit the regenerated `assets/icon.ico` and `resource_windows_*.syso`.
 This is deliberately *not* wired into `go generate ./...`, so the CI drift check
 and the release build never depend on the icon toolchain.
 
@@ -144,7 +144,7 @@ router.MaybeRelaunchInWindowsTerminal(router.TerminalRelaunchConfig{
 })
 ```
 
-The reference app wires this up: `cmd/tui-base` embeds the generated
+The reference app wires this up: the root `main.go` embeds the generated
 `tabicon.png`, installs it with the fragment on `-install-terminal-profile`, and
 passes `ProfileName` on relaunch — so after a one-time install, relaunched tabs
 carry the icon.
