@@ -5,7 +5,7 @@
 # Regenerate from the repo root:
 #   go -C tools/rendertapes run .
 Set WindowBar Colorful
-Output cmd/tui-base/notifications.gif
+Output ./dist/notifications.gif
 Set FontSize 20
 Set Width 1600
 Set Height 1000

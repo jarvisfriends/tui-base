@@ -8,6 +8,13 @@ project adheres to semantic versioning (breaking changes allowed before v1.0).
 
 ### Changed
 
+- Demo gifs are no longer committed sources: the release workflow renders
+  every tape and goreleaser attaches the gifs to the tag
+  (`release.extra_files`), so the README gallery now points at
+  `releases/latest/download/<name>.gif` (tour, multipage, notifications) —
+  the same flow snap and inspector use. `.lycheeignore` skips those URLs
+  until the first release carries the assets; drop the three lines then.
+
 - The Home page grew from a static welcome box into a small snap
   showcase with first-class mouse support: a live sparkline + load bar
   fed by ID-routed chart messages (the stream starts on the page's

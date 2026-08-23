@@ -102,6 +102,12 @@ release:
   github:
     owner: jarvisfriends
     name: tui-base
+  # The README gallery points at releases/latest/download/<name>.gif.
+  # release.yml renders the tapes and moves the gifs to demo-gifs/ before
+  # goreleaser starts (they cannot stay in dist/: --clean wipes it, and a
+  # before hook runs too early to survive the dist check).
+  extra_files:
+    - glob: demo-gifs/*.gif
 
 changelog:
   sort: asc

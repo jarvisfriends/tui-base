@@ -161,7 +161,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           fail: true
-          args: --no-progress --verbose --max-retries 3 --retry-wait-time 5 "./**/*.md"
+          # Retry/UA/accept policy lives in lychee.toml (browser user agent so
+          # bot-blocking hosts don't TCP-reset the check; redirects followed,
+          # final status must be 2xx).
+          args: --no-progress --verbose --config lychee.toml "./**/*.md"
 
   shellcheck:
     name: Shellcheck

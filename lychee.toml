@@ -1,0 +1,19 @@
+# Config for lychee, the CI link checker (see .github/workflows/ci.yml and
+# .lycheeignore for per-URL exclusions).
+#
+# Policy: a link that redirects is fine — lychee follows the chain and judges
+# the FINAL status — but a link that does not resolve fails CI.
+#
+# Some hosts TCP-reset (curl/hyper "os error 104") or bot-block requests that
+# carry lychee's default `lychee/x.y` user agent, especially from GitHub
+# runner IPs. A browser user agent plus patient retries keeps those hosts from
+# failing the build while a genuinely dead link still does.
+user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+max_retries = 3
+retry_wait_time = 5
+timeout = 30
+max_redirects = 10
+
+# Only success is success: 1xx handshakes and 2xx. Redirects are followed,
+# never accepted blind — a chain must still land on a 2xx.
+accept = ["100..=103", "200..=299"]

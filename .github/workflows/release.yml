@@ -50,6 +50,35 @@ jobs:
       - name: Install syft
         # I-8: SBOM generation for goreleaser's sboms section.
         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+      # The README gallery links releases/latest/download/<name>.gif, so the
+      # tag has to carry the gifs. Immutable releases can only attach assets
+      # while the release is created — goreleaser does that via
+      # release.extra_files, and this renders them for it. (Flow ported from
+      # snap's release.yml.)
+      - name: Render demo gifs
+        run: go -C tools/rendertapes run .
+      - name: Stage gifs for the release
+        # Out of dist/ before goreleaser runs: --clean empties dist/, and a
+        # before hook cannot write there either (it runs ahead of the
+        # "ensuring distribution directory" step, which then refuses a
+        # non-empty dist). demo-gifs/ is gitignored so the tree stays clean
+        # for goreleaser's dirty check.
+        run: |
+          set -euo pipefail
+          mkdir -p demo-gifs
+          mv dist/*.gif demo-gifs/
+          rm -rf dist
+          # Fail here rather than trusting goreleaser to notice: an
+          # extra_files glob is only resolved at publish time, and a release
+          # that ships without gifs leaves the README gallery 404ing for good
+          # — immutable releases mean it cannot be patched afterwards.
+          staged=$(find demo-gifs -maxdepth 1 -name '*.gif' | wc -l)
+          tapes=$(find . -name '*.tape' -not -path './tools/*' -not -path './.git/*' | wc -l)
+          if [ "$staged" -ne "$tapes" ]; then
+            echo "::error::staged $staged gif(s) for $tapes tape(s); refusing to release a broken gallery"
+            exit 1
+          fi
+          echo "staged $staged gif(s) for the release"
       - name: Run goreleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:
