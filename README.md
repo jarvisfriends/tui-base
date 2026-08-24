@@ -56,7 +56,7 @@ The following milestone capabilities are already implemented:
 ## Project Layout
 
 - `tuibase.go`: root consumer package — `tuibase.Run(tuibase.Options{...})` bootstraps a full app.
-- `main.go` (root): runnable reference application; `cmd/tui-base/` keeps its demo tapes and gifs.
+- `main.go` (root): runnable reference application; `cmd/tui-base/` keeps its demo tapes.
 - `router/`: root model and message routing.
 - `pages/`: page models (`home`, `settings`); the Ctrl+D inspector now
   comes from [inspector](https://github.com/jarvisfriends/inspector).
@@ -75,10 +75,13 @@ For a practical walkthrough, see [docs/getting-started.md](docs/getting-started.
 
 The snap components that need a router+pages host — navigation, status bar,
 notifications — are demoed here, in the reference app (their tapes can't live
-in a synthetic snap example). Regenerate every gif with
-`go -C tools/rendertapes run .` (Docker or Podman; the tool cross-compiles the
-demo binaries, runs each `*.tape` in the official vhs container, and drops the
-gifs next to their tapes).
+in a synthetic snap example). Gifs are build artifacts, not committed
+sources: the release workflow renders every `*.tape` and attaches the gifs to
+the tag, so the gallery below points at fixed
+`releases/latest/download/<name>.gif` URLs. Render locally with
+`go -C tools/rendertapes run .` (Docker or Podman; the tool cross-compiles
+the demo binaries, runs each tape in the official vhs container, and drops
+the gifs in `dist/`).
 
 Every app below also ships as its own signed, per-OS/arch prebuilt binary on
 the [Releases page](https://github.com/jarvisfriends/tui-base/releases) — no
@@ -87,20 +90,20 @@ Go toolchain required to try one. See
 
 ### Reference app tour
 
-![reference app tour](cmd/tui-base/demo.gif)
+![reference app tour](https://github.com/jarvisfriends/tui-base/releases/latest/download/tour.gif)
 
 Pages, the settings overlay editor, and the Ctrl+D inspector.
 
 ### Navigation
 
-![navigation demo](examples/multipage/demo.gif)
+![navigation demo](https://github.com/jarvisfriends/tui-base/releases/latest/download/multipage.gif)
 
 The multipage example cycling pages with Tab, focusing the sidebar with
 Ctrl+B for live arrow-key switching, and hiding/showing the nav chrome.
 
 ### Notifications + status bar
 
-![notifications demo](cmd/tui-base/notifications.gif)
+![notifications demo](https://github.com/jarvisfriends/tui-base/releases/latest/download/notifications.gif)
 
 Info/warning/error toasts fired from the inspector's test keys, TTL expiry,
 the status bar's notification count, full help, and hiding/showing the bar.

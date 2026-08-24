@@ -3,3 +3,18 @@
 # the repo's Coveralls upload is currently broken anyway — LAUNCH_CHECKLIST
 # tracks fixing the token). Remove once the badge resolves for lychee.
 https://coveralls.io/github/jarvisfriends/tui-base
+
+# The README gallery gifs are release assets attached by goreleaser
+# (release.extra_files), so these URLs 404 until the first tag cut AFTER the
+# demo-pipeline port ships them. Remove these three lines once that release
+# exists, so a broken gallery link fails CI again — snap went through the
+# same dance.
+https://github.com/jarvisfriends/tui-base/releases/latest/download/tour.gif
+https://github.com/jarvisfriends/tui-base/releases/latest/download/multipage.gif
+https://github.com/jarvisfriends/tui-base/releases/latest/download/notifications.gif
+
+# contributor-covenant.org TCP-resets link checkers run from GitHub-hosted
+# runners (curl/hyper "connection reset by peer", os error 104) no matter the
+# user agent; the canonical Code of Conduct URL renders fine in a browser.
+# Re-check occasionally and drop this line when the host stops blocking.
+https://www.contributor-covenant.org/version/2/1/code_of_conduct/

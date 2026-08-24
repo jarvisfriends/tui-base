@@ -5,7 +5,7 @@
 # Regenerate from the repo root:
 #   go -C tools/rendertapes run .
 Set WindowBar Colorful
-Output examples/multipage/demo.gif
+Output ./dist/multipage.gif
 Set FontSize 20
 Set Width 1600
 Set Height 1000

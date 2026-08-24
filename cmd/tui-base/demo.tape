@@ -5,7 +5,7 @@
 # (rendertapes cross-compiles the linux demo binary and runs this tape in the
 # official vhs container; gifs are build artifacts, not diffable sources)
 Set WindowBar Colorful
-Output cmd/tui-base/demo.gif
+Output ./dist/tour.gif
 Set FontSize 20
 Set Width 1600
 Set Height 1000
