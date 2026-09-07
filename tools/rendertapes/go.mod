@@ -3,7 +3,7 @@ module github.com/jarvisfriends/tui-base/tools/rendertapes
 go 1.27
 
 require (
-	github.com/moby/moby/api v1.55.0
+	github.com/moby/moby/api v1.56.0
 	github.com/moby/moby/client v0.5.1
 )
 
