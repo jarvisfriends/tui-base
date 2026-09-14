@@ -15,7 +15,7 @@ require (
 	github.com/jarvisfriends/inspector v0.1.3
 	github.com/jarvisfriends/snap v0.2.27
 	github.com/lrstanley/bubbletint/v2 v2.0.2
-	golang.org/x/sys v0.47.0
+	golang.org/x/sys v0.48.0
 	golang.org/x/tools v0.49.0
 )
 
