@@ -49,7 +49,7 @@ jobs:
           cosign-release: 'v3.0.6'
       - name: Install syft
         # I-8: SBOM generation for goreleaser's sboms section.
-        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
       # The README gallery links releases/latest/download/<name>.gif, so the
       # tag has to carry the gifs. Immutable releases can only attach assets
       # while the release is created — goreleaser does that via
