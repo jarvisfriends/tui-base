@@ -3,9 +3,9 @@ module github.com/jarvisfriends/tui-base/tools/genicon
 go 1.27
 
 require (
-	cogentcore.org/core v0.3.41
+	cogentcore.org/core v0.3.42
 	github.com/josephspurrier/goversioninfo v1.7.0
-	golang.org/x/image v0.45.0
+	golang.org/x/image v0.46.0
 )
 
 require (
@@ -20,5 +20,5 @@ require (
 	github.com/tdewolff/parse/v2 v2.8.16 // indirect
 	golang.org/x/exp v0.0.0-20260820142414-ca536658362e // indirect
 	golang.org/x/net v0.58.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 )

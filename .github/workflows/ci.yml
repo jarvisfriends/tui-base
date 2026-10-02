@@ -142,7 +142,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: actionlint
-        uses: reviewdog/action-actionlint@d63ba7532e0942965320cd8d73cbae4c7b3c5283 # v1
+        uses: reviewdog/action-actionlint@2085657ab2c7f48c58edcc767fba576f63bea76b # v1
 
   docs:
     name: Docs Lint and Links
@@ -300,13 +300,13 @@ jobs:
         # commit SHA (Sonar S8545: no unpinned "go install"); uses goveralls via
         # the workflow GITHUB_TOKEN on public repos.
         continue-on-error: true
-        uses: shogo82148/actions-goveralls@8781f5dd05b691c4dd042d5e859c11c73e0104fa # v1.11.1
+        uses: shogo82148/actions-goveralls@77a1912dca42260ee3e97f61bd13ea7ef40baa93 # v1.11.2
         with:
           path-to-profile: coverage.out
       - name: Upload coverage reports to Codecov
         # Requires the CODECOV_TOKEN secret; without it the action attempts a
         # tokenless upload on public repos and does not fail the build.
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: jarvisfriends/tui-base
