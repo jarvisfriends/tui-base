@@ -16,7 +16,7 @@ require (
 	github.com/jarvisfriends/snap v0.2.30
 	github.com/lrstanley/bubbletint/v2 v2.0.2
 	golang.org/x/sys v0.48.0
-	golang.org/x/tools v0.50.0
+	golang.org/x/tools v0.51.0
 )
 
 require (
