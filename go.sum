@@ -62,8 +62,8 @@ github.com/jarvisfriends/snap v0.2.30 h1:OCfh0nYhUuKLI9CB39FS5d+6PesdqtIZ6EbfSNx
 github.com/jarvisfriends/snap v0.2.30/go.mod h1:R5OAdKh5ND7PFv4uz+hZc1R7lbDbEMwviu64l5pSSus=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
-github.com/lrstanley/bubbletint/v2 v2.0.2 h1:JvLHMf7qI/UE47AyNsD9jVI7h2VQvq+4AYcHNe8DwSQ=
-github.com/lrstanley/bubbletint/v2 v2.0.2/go.mod h1:HaBq3Yc6pcCrQDuW8huE+Bs1adVFUmg/O1B9Zu/kab4=
+github.com/lrstanley/bubbletint/v2 v2.0.4 h1:WZd1tEA3SgeYgSkaBlWLXOg1H56qpeiO7necuFapkK4=
+github.com/lrstanley/bubbletint/v2 v2.0.4/go.mod h1:HaBq3Yc6pcCrQDuW8huE+Bs1adVFUmg/O1B9Zu/kab4=
 github.com/lrstanley/bubblezone/v2 v2.0.0 h1:pMb9fHKs0slJF6OrzQ2hEgWusqyl9VU/S0UZ5hyh7ZA=
 github.com/lrstanley/bubblezone/v2 v2.0.0/go.mod h1:yV/QTjcm4Zu5cqvGvdHi7xVUfnB36w/SafOuDp57dgY=
 github.com/lucasb-eyer/go-colorful v1.4.1 h1:1EO+WB73+EH8EVbzlrG3KLAfEypQWVHIBqlTf+2hNss=
