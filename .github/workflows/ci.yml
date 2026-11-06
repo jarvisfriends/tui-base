@@ -254,7 +254,7 @@ jobs:
       - name: GoReleaser snapshot build
         # Catches packaging failures (bad main path, ldflags, matrix) on every
         # PR. Nothing is published.
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7
         with:
           version: v2.16.0
           # sign/sbom skipped: cosign+syft only install in the release workflow (I-8)
